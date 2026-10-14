@@ -5,7 +5,10 @@
     <span class="navbar-brand fw-bold"><i class="bi bi-building me-2"></i>埼玉県の困りごと管理システム（ダッシュボード）</span>
     <div class="ms-auto d-flex align-items-center text-white">
         <span class="me-3 small"><i class="bi bi-person-badge me-1"></i>{{ current_user.name }} さん</span>
-        <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light btn-sm">ログアウト</a>
+        <!-- モーダル呼び出しボタン -->
+        <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#adminLogoutModal">
+            ログアウト
+        </button>
     </div>
 
 </nav>
@@ -101,6 +104,25 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 行政職員用 ログアウト確認モーダル -->
+<div class="modal fade" id="adminLogoutModal" tabindex="-1" aria-labelledby="adminLogoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold text-dark" id="adminLogoutModalLabel">ログアウト確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6 text-dark">
+                ログアウトしますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
             </div>
         </div>
     </div>

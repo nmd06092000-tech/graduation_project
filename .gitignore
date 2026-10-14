@@ -13,3 +13,10 @@ instance/*
 !instance/uploads/
 instance/uploads/*
 !instance/uploads/.gitkeep
+
+
+# Deploy
+deploy.ps1
+
+# Doc
+docs/
