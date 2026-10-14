@@ -1,0 +1,41 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-secondary px-4">
+    <span class="navbar-brand fw-bold"><i class="bi bi-gear-fill me-2"></i>システム管理ポータル</span>
+    <div class="ms-auto d-flex align-items-center text-white">
+        <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light btn-sm">ログアウト</a>
+    </div>
+
+</nav>
+
+<div class="container py-4">
+    <h4 class="fw-bold mb-4">システム設定・管理</h4>
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold">ユーザー・職員アカウント管理</div>
+                <div class="card-body">
+                    <button class="btn btn-primary btn-sm mb-3">+ 新規職員アカウント登録</button>
+                    <ul class="list-group list-group-flush small">
+                        <li class="list-group-item d-flex justify-content-between"><span>鈴木 健一 (道路維持課)</span><span class="badge bg-success">有効</span></li>
+                        <li class="list-group-item d-flex justify-content-between"><span>佐藤 花子 (都市公園課)</span><span class="badge bg-success">有効</span></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm border-0">
+                <div class="card-header bg-white fw-bold">部署・カテゴリー・AI判定設定</div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">報告カテゴリと自動割り当て部署のマッピング設定</p>
+                    <ul class="list-group list-group-flush small">
+                        <li class="list-group-item d-flex justify-content-between"><span>道路の破損・陥没</span><strong>→ 道路維持課</strong></li>
+                        <li class="list-group-item d-flex justify-content-between"><span>公園の設備故障</span><strong>→ 都市公園課</strong></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

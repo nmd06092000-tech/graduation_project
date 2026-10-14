@@ -1,0 +1,63 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<div class="container my-5">
+    <div class="row justify-content-center">
+        <div class="col-md-5">
+            <div class="text-center mb-3">
+                <div class="bg-primary text-white rounded-circle d-inline-flex p-3 mb-2">
+                    <i class="bi bi-person-plus-fill fs-1"></i>
+                </div>
+                <h3 class="fw-bold">アカウント作成画面</h3>
+                <p class="text-muted small">必要情報を入力してアカウントを作成してください。</p>
+            </div>
+            {% include 'components/_flash.html' %}
+            <div class="card shadow-sm border-0">
+                <div class="card-body p-4">
+                    <form action="{{ url_for('auth.register') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">お名前</label>
+                            <input type="text" name="name" class="form-control" placeholder="例) 埼玉 太郎" value="{{ name or '' }}" maxlength="100" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">メールアドレス</label>
+                            <input type="email" name="email" class="form-control" placeholder="example@saitama.jp" value="{{ email or '' }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">パスワード</label>
+                            <input type="password" id="password" name="password" class="form-control" placeholder="8文字以上のパスワード" minlength="8" required>
+                            <div class="form-text text-muted small">※8文字以上で設定してください</div>
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label small fw-bold">パスワード（確認用）</label>
+                            <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="もう一度入力してください" minlength="8" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">アカウントを作成する</button>
+                    </form>
+                </div>
+            </div>
+            <div class="text-center mt-3">
+                <a href="{{ url_for('public.index') }}" class="small text-muted text-decoration-none">← トップページに戻る</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const passwordInput = document.getElementById('password');
+    const confirmInput = document.getElementById('confirm_password');
+
+    function checkPasswordMatch() {
+      if (confirmInput.value && passwordInput.value !== confirmInput.value) {
+        confirmInput.setCustomValidity('パスワードが一致しません。');
+      } else {
+        confirmInput.setCustomValidity('');
+      }
+    }
+
+    passwordInput.addEventListener('input', checkPasswordMatch);
+    confirmInput.addEventListener('input', checkPasswordMatch);
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,86 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<!-- ヘッダー -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4">
+    <span class="navbar-brand fw-bold text-primary"><i class="bi bi-geo-alt-fill me-1"></i>埼玉県の困りごと報告システム</span>
+    <div class="ms-auto d-flex align-items-center">
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-secondary btn-sm">ログアウト</a>
+    </div>
+
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="{{ url_for('citizen.mypage') }}" class="active"><i class="bi bi-speedometer2 me-2"></i>マイページ</a>
+            <a href="{{ url_for('citizen.report_new') }}"><i class="bi bi-plus-circle me-2"></i>新規報告</a>
+            <a href="#"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="#"><i class="bi bi-gear me-2"></i>プロフィール設定</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-md-10 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <h4 class="fw-bold">マイページ</h4>
+                    <p class="text-muted small mb-0">ようこそ、山田 太郎 さん。あなたが報告した内容の一覧を確認できます。</p>
+                </div>
+                <a href="{{ url_for('citizen.report_new') }}" class="btn btn-primary fw-bold">+ 新しい困りごとを報告</a>
+            </div>
+
+            <!-- サマリーカード -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3 text-center">
+                        <small class="text-muted">報告した件数</small>
+                        <h2 class="fw-bold text-primary mb-0">5<span class="fs-6">件</span></h2>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3 text-center">
+                        <small class="text-muted">対応中</small>
+                        <h2 class="fw-bold text-warning mb-0">2<span class="fs-6">件</span></h2>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3 text-center">
+                        <small class="text-muted">対応済み</small>
+                        <h2 class="fw-bold text-success mb-0">3<span class="fs-6">件</span></h2>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 最近の報告一覧 -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white fw-bold py-3">最近の報告</div>
+                <div class="list-group list-group-flush">
+                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="fw-bold mb-1">道路の穴</h6>
+                            <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇町1丁目付近 | 2026/10/01 10:23</small>
+                        </div>
+                        <span class="badge bg-warning text-dark px-3 py-2">対応中</span>
+                    </div>
+                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="fw-bold mb-1">公園の遊具の破損</h6>
+                            <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇公園 | 2026/09/28 15:40</small>
+                        </div>
+                        <span class="badge bg-danger px-3 py-2">未対応</span>
+                    </div>
+                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                        <div>
+                            <h6 class="fw-bold mb-1">街灯の故障</h6>
+                            <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇町3丁目 | 2026/09/20 09:15</small>
+                        </div>
+                        <span class="badge bg-success px-3 py-2">対応済み</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

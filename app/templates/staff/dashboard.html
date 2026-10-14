@@ -1,0 +1,126 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4">
+    <span class="navbar-brand fw-bold"><i class="bi bi-building me-2"></i>埼玉県の困りごと管理システム（ダッシュボード）</span>
+    <div class="ms-auto d-flex align-items-center text-white">
+        <span class="me-3 small"><i class="bi bi-person-badge me-1"></i>{{ current_user.name }} さん</span>
+        <a href="{{ url_for('auth.logout') }}" class="btn btn-outline-light btn-sm">ログアウト</a>
+    </div>
+
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="#" class="active"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
+            <a href="#"><i class="bi bi-table me-2"></i>報告一覧</a>
+            <a href="#"><i class="bi bi-map me-2"></i>地図表示</a>
+            <a href="#"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
+            <a href="#"><i class="bi bi-check-circle me-2"></i>対応管理・重複確認</a>
+            <a href="#"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
+        </div>
+
+        <!-- メインダッシュボード -->
+        <div class="col-md-10 p-4">
+            <h4 class="fw-bold mb-4">ダッシュボード</h4>
+
+            <!-- 上部サマリー -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3 border-start border-danger border-4">
+                        <small class="text-muted">未対応案件</small>
+                        <h2 class="fw-bold text-danger mb-0">12<span class="fs-6">件</span></h2>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3 border-start border-warning border-4">
+                        <small class="text-muted">対応中案件</small>
+                        <h2 class="fw-bold text-warning mb-0">8<span class="fs-6">件</span></h2>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3 border-start border-success border-4">
+                        <small class="text-muted">対応済み案件</small>
+                        <h2 class="fw-bold text-success mb-0">56<span class="fs-6">件</span></h2>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 中段：カテゴリ＆緊急度チャート -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm p-3">
+                        <h6 class="fw-bold mb-3">カテゴリ別件数（AI分類結果）</h6>
+                        <div style="height: 200px;">
+                            <canvas id="categoryChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm p-3">
+                        <h6 class="fw-bold mb-3">緊急度別件数（AI判定結果）</h6>
+                        <div class="mt-2">
+                            <div class="d-flex justify-content-between mb-1"><span>高（即時対応）</span><span class="fw-bold text-danger">3件</span></div>
+                            <div class="progress mb-3" style="height: 10px;"><div class="progress-bar bg-danger" style="width: 15%"></div></div>
+                            
+                            <div class="d-flex justify-content-between mb-1"><span>中（優先対応）</span><span class="fw-bold text-warning">7件</span></div>
+                            <div class="progress mb-3" style="height: 10px;"><div class="progress-bar bg-warning" style="width: 35%"></div></div>
+                            
+                            <div class="d-flex justify-content-between mb-1"><span>低（通常対応）</span><span class="fw-bold text-success">66件</span></div>
+                            <div class="progress" style="height: 10px;"><div class="progress-bar bg-success" style="width: 80%"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 下段：本日の優先対応 & 地域マップ -->
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm p-3">
+                        <h6 class="fw-bold mb-3">本日の優先対応案件</h6>
+                        <ul class="list-group list-group-flush small">
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div><span class="badge bg-danger me-2">高</span>道路の大きな穴（〇〇市1丁目）</div>
+                                <button class="btn btn-sm btn-outline-primary py-0">確認</button>
+                            </li>
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <div><span class="badge bg-danger me-2">高</span>公園の遊具破損（〇〇公園）</div>
+                                <button class="btn btn-sm btn-outline-primary py-0">確認</button>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm p-3">
+                        <h6 class="fw-bold mb-2">地域の問題マップ</h6>
+                        <div class="bg-secondary text-white rounded text-center py-4" style="height: 120px;">
+                            <i class="bi bi-map fs-1"></i>
+                            <p class="small mb-0">［GISマップ表示エリア：ピン色で緊急度を区別］</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Chart.jsで円グラフ描画
+    const ctx = document.getElementById('categoryChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['道路', '公園', 'ごみ', '街灯', 'その他'],
+            datasets: [{
+                data: [25, 14, 12, 9, 16],
+                backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#0dcaf0', '#6c757d']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+    });
+</script>
+{% endblock %}

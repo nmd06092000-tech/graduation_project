@@ -1,0 +1,15 @@
+# 秘密情報
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# 住民がアップロードした写真（個人情報を含む可能性があるため commit しない）
+instance/*
+!instance/uploads/
+instance/uploads/*
+!instance/uploads/.gitkeep

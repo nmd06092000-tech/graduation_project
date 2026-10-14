@@ -1,0 +1,129 @@
+{# 未使用のモックアップ（ルートなし）。staff/report_list・report_detail を作るときの参考。完成後に削除する #}
+{% extends 'layouts/base.html' %}
+
+{% block title %}職員ダッシュボード | 埼玉県困りごとレポート{% endblock %}
+
+{% block content %}
+<!-- ヘッダー＆フィルターバー -->
+<div class="card mb-3 shadow-sm">
+    <div class="card-body py-2 bg-light">
+        <div class="row g-2 align-items-center">
+            <div class="col-md-3">
+                <span class="fw-bold me-2"><i class="bi bi-building"></i>さいたま県土整備事務所</span>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm"><option>管轄: すべて</option><option>県道管轄</option><option>市道管轄</option></select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm"><option>ステータス: 未対応</option><option>対応中</option><option>対応済み</option></select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select form-select-sm"><option>緊急度: すべて</option><option>高（優先）</option></select>
+            </div>
+            <div class="col-md-3 text-end">
+                <button class="btn btn-primary btn-sm w-100"><i class="bi bi-search"></i> フィルター適用</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 左画面: 報告一覧 -->
+    <div class="col-md-5">
+        <div class="card shadow-sm mb-3">
+            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center">
+                <span>📋 未処理報告一覧 (AI解析済み)</span>
+                <span class="badge bg-danger">未対応: 3件</span>
+            </div>
+            <div class="list-group list-group-flush" style="max-height: 650px; overflow-y: auto;">
+                <!-- 案件1 (選択状態) -->
+                <a href="#" class="list-group-item list-group-item-action active p-3">
+                    <div class="d-flex w-100 justify-content-between">
+                        <span class="badge bg-danger mb-1">緊急度: 高</span>
+                        <small>10分前</small>
+                    </div>
+                    <h6 class="mb-1 fw-bold">🚨 道路の大きな陥没</h6>
+                    <small class="d-block"><i class="bi bi-geo-alt"></i> さいたま市大宮区高鼻町1丁目</small>
+                    <small class="text-warning-50">AI推定: 道路維持課 / <strong>重複疑い 92%</strong></small>
+                </a>
+                <!-- 案件2 -->
+                <a href="#" class="list-group-item list-group-item-action p-3">
+                    <div class="d-flex w-100 justify-content-between">
+                        <span class="badge bg-warning text-dark mb-1">緊急度: 中</span>
+                        <small>1時間前</small>
+                    </div>
+                    <h6 class="mb-1 fw-bold">💡 街灯の不点灯</h6>
+                    <small class="d-block text-muted"><i class="bi bi-geo-alt"></i> さいたま市見沼区</small>
+                    <small class="text-muted">AI推定: 都市公園課 / 重複なし</small>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- 右画面: 詳細・重複判定・割り当てフォーム -->
+    <div class="col-md-7">
+        <!-- マップ表示エリア -->
+        <div class="card shadow-sm mb-3">
+            <div class="card-body bg-dark text-white text-center py-4 rounded-top" style="height: 150px;">
+                <i class="bi bi-map fs-2"></i>
+                <p class="small mb-0">さいたま市大宮区高鼻町1丁目 付近（📍赤ピン: 対象案件）</p>
+            </div>
+            <div class="card-body">
+                <!-- AI重複比較 -->
+                <div class="alert alert-warning p-2 mb-3">
+                    <strong class="small"><i class="bi bi-exclamation-triangle-fill me-1"></i>AI重複判定結果: 類似度 92%（近接100m以内）</strong>
+                </div>
+                <div class="row text-center mb-3 g-2">
+                    <div class="col-6">
+                        <div class="border rounded p-2 bg-light">
+                            <small class="d-block text-muted mb-1">［今回の新規報告］</small>
+                            <div class="bg-secondary text-white py-3 rounded mb-1"><i class="bi bi-image"></i></div>
+                            <small class="d-block fw-bold">道路凹み画像 A</small>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="border rounded p-2 bg-light">
+                            <small class="d-block text-muted mb-1">［過去の類似報告］</small>
+                            <div class="bg-secondary text-white py-3 rounded mb-1"><i class="bi bi-image"></i></div>
+                            <small class="d-block fw-bold">道路凹み画像 B</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2 mb-4">
+                    <button class="btn btn-outline-danger btn-sm w-50"><i class="bi bi-link-45deg"></i> 代表案件へ統合する</button>
+                    <button class="btn btn-outline-secondary btn-sm w-50"><i class="bi bi-scissors"></i> 別案件として分離</button>
+                </div>
+
+                <hr>
+
+                <!-- 確定フォーム -->
+                <h6 class="fw-bold mb-3"><i class="bi bi-check2-square me-1"></i>担当・ステータス確定処理</h6>
+                <form>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <label class="form-label small">確定担当部署</label>
+                            <select class="form-select form-select-sm">
+                                <option selected>道路維持課</option>
+                                <option>都市公園課</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small">対応ステータス</label>
+                            <select class="form-select form-select-sm">
+                                <option>未対応</option>
+                                <option selected>対応中（現場確認へ）</option>
+                                <option>対応完了</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small">市民向け返信メッセージ</label>
+                        <textarea class="form-control form-control-sm" rows="2">現場確認および補修の手配を行っています。</textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary w-100 fw-bold">設定内容を保存して更新</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,30 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
+            <div class="card border-0 shadow">
+                <div class="card-body p-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-pencil-square me-2"></i>困りごとを報告する</h4>
+                    <form action="{{ url_for('citizen.report_new') }}" method="POST">
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">写真添付</label>
+                            <input type="file" class="form-control">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">位置情報</label>
+                            <input type="text" class="form-control" value="埼玉県さいたま市大宮区高鼻町1丁目 付近" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label small fw-bold">詳細内容</label>
+                            <textarea class="form-control" rows="3" placeholder="状況を入力してください"></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100 fw-bold">送信する</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
