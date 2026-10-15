@@ -20,8 +20,8 @@
         <div class="col-md-2 sidebar p-3">
             <a href="{{ url_for('citizen.mypage') }}" class="active"><i class="bi bi-speedometer2 me-2"></i>マイページ</a>
             <a href="{{ url_for('citizen.report_new') }}"><i class="bi bi-plus-circle me-2"></i>新規報告</a>
-            <a href="#"><i class="bi bi-list-task me-2"></i>報告一覧</a>
-            <a href="#"><i class="bi bi-gear me-2"></i>プロフィール設定</a>
+            <a href="{{ url_for('citizen.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('citizen.profile') }}"><i class="bi bi-gear me-2"></i>プロフィール設定</a>
         </div>
 
         <!-- メイン領域 -->

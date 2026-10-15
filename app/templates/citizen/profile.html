@@ -1,0 +1,93 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<!-- ヘッダー -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4">
+    <span class="navbar-brand fw-bold text-primary"><i class="bi bi-geo-alt-fill me-1"></i>埼玉県の困りごと報告システム</span>
+    <div class="ms-auto d-flex align-items-center">
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            ログアウト
+        </button>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="{{ url_for('citizen.mypage') }}"><i class="bi bi-speedometer2 me-2"></i>マイページ</a>
+            <a href="{{ url_for('citizen.report_new') }}"><i class="bi bi-plus-circle me-2"></i>新規報告</a>
+            <a href="{{ url_for('citizen.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('citizen.profile') }}" class="active"><i class="bi bi-gear me-2"></i>プロフィール設定</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-md-10 p-4">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-4">
+                            <h4 class="fw-bold mb-4"><i class="bi bi-gear me-2"></i>プロフィール設定</h4>
+
+                            <!-- アイコン設定画面からのメッセージを表示する -->
+                            {% include 'components/_flash.html' %}
+
+                            <form>
+                                <div class="mb-4 text-center">
+                                    <label class="form-label small fw-bold d-block text-start">プロフィールアイコン</label>
+                                    <div class="mb-2">
+                                        <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px; font-size: 2rem;">
+                                            <i class="bi bi-person-fill"></i>
+                                        </div>
+                                    </div>
+                                    <a href="{{ url_for('citizen.profile_icon') }}" class="btn btn-outline-secondary btn-sm">
+                                        <i class="bi bi-camera me-1"></i>アイコンを変更する
+                                    </a>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">お名前</label>
+                                    <input type="text" class="form-control" value="{{ current_user.name }}">
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label small fw-bold">メールアドレス</label>
+                                    <input type="email" class="form-control" value="{{ current_user.login_id }}">
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label small fw-bold">パスワード</label>
+                                    <div>
+                                        <a href="{{ url_for('auth.reset_password') }}" class="btn btn-outline-primary btn-sm">パスワードを変更する</a>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-primary w-100 py-2 fw-bold" onclick="alert('プロフィールを更新しました（サンプル）');">変更を保存する</button>
+                            </form>
+                        </div>
+                    </div>
+                    <div class="text-center mt-3">
+                        <a href="{{ url_for('citizen.mypage') }}" class="small text-muted text-decoration-none">← マイページに戻る</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ログアウト確認モーダル -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="logoutModalLabel">ログアウト確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                ログアウトしますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

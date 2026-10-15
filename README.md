@@ -201,10 +201,12 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 市民 | マイページ | `/citizen/mypage` | ✅ `citizen.mypage` | report_service |
 | 市民 | 報告する | `/citizen/report` | ✅ `citizen.report_new` | report_service |
 | 市民 | 報告完了画面 | `/citizen/reports/<id>/complete` | ⬜ | report_service |
-| 市民 | 履歴を表示する | `/citizen/reports` | ⬜ | report_service |
+| 市民 | 履歴を表示する | `/citizen/reports` | ✅ `citizen.report_list` | report_service |
 | 市民 | 対応状況を表示する | `/citizen/reports/<id>` | ⬜ | report_service |
 | 市民 | 報告を取り消す | `POST /citizen/reports/<id>/cancel` | ⬜ | status_service |
 | 市民 | パスワード変更 | `/citizen/password` | ⬜ | auth_service |
+| 市民 | プロフィール設定 | `/citizen/profile` | ✅ `citizen.profile` | user_service |
+| 市民 | アイコン設定 | `/citizen/profile/icon` | ✅ `citizen.profile_icon` | user_service, storage_service |
 | 職員 | ダッシュボード | `/staff/dashboard` | ✅ `staff.dashboard` | stats_service |
 | 職員 | 報告一覧 | `/staff/reports` | ⬜ | report_service |
 | 職員 | 報告内容, 対応状況, 対応履歴 | `/staff/reports/<id>` | ⬜ | report_service, status_service |
@@ -273,3 +275,5 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 - **Chưa có CSRF.** Xem bước 3.
 - **Form báo cáo chưa gửi dữ liệu.** Ô ảnh và ô nội dung chưa có `name`, form thiếu `enctype="multipart/form-data"`, vị trí đang là chuỗi cố định.
 - **Dashboard nhân viên** đang hiển thị số liệu và biểu đồ hard-code.
+- **Danh sách báo cáo của người dân** lấy dữ liệu mẫu từ `report_service.list_by_citizen()`, chưa đọc DB. Khi có model `Report` và `constants.py`, chỉ cần sửa hàm này, route không đổi.
+- **Màn hình プロフィール設定 chưa lưu gì.** Nút 変更を保存する chỉ hiện `alert` mẫu, nút パスワードを変更する đang trỏ tới trang reset công khai `auth.reset_password` (sẽ đổi sang `/citizen/password`). Màn hình アイコン設定 chưa lưu ảnh: ô file chưa có `name`, form thiếu `enctype`, `users` chưa có cột ảnh đại diện.
