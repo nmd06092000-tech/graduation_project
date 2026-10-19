@@ -20,9 +20,16 @@ def mypage():
 @role_required(User.ROLE_CITIZEN)
 def report_new():
     if request.method == 'POST':
-        flash('困りごとの報告を送信しました。AIによる分類・緊急度判定を開始します。', 'success')
-        return redirect(url_for('citizen.mypage'))
+        return redirect(url_for('citizen.report_complete'))
     return render_template('citizen/report_new.html')
+
+
+# 市民新規報告完了画面
+# TODO: Report モデルができたら /citizen/reports/<id>/complete にして、作成した報告を表示する
+@citizen_bp.route('/report/complete')
+@role_required(User.ROLE_CITIZEN)
+def report_complete():
+    return render_template('citizen/report_complete.html')
 
 
 # 市民報告一覧画面

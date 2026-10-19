@@ -1,1 +1,107 @@
-{# 報告一覧（ステータス・緊急度・カテゴリ・部署で絞り込み） #}
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<!-- ヘッダー -->
+<nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
+    <span class="navbar-brand fw-bold fs-6"><i class="bi bi-building me-1"></i>埼玉県の困りごと管理システム（ダッシュボード）</span>
+    <div class="ms-auto d-flex align-items-center text-white">
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            ログアウト
+        </button>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="{{ url_for('staff.dashboard') }}"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
+            <a href="{{ url_for('staff.report_list') }}" class="active"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('staff.report_map') }}"><i class="bi bi-map me-2"></i>地図表示</a>
+            <a href="{{ url_for('staff.ai_analysis') }}"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
+            <a href="{{ url_for('staff.duplicates') }}"><i class="bi bi-check2-square me-2"></i>対応管理・重複確認</a>
+            <a href="{{ url_for('staff.stats') }}"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-md-10 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="fw-bold">報告一覧（行政職員用）</h4>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="py-3 ps-3">ID</th>
+                                    <th class="py-3">タイトル</th>
+                                    <th class="py-3">カテゴリ</th>
+                                    <th class="py-3">場所</th>
+                                    <th class="py-3">緊急度</th>
+                                    <th class="py-3">ステータス</th>
+                                    <th class="py-3">報告日時</th>
+                                    <th class="py-3 text-end pe-3">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for report in reports %}
+                                <tr>
+                                    <td class="ps-3 fw-bold">#{{ report.id }}</td>
+                                    <td>{{ report.title }}</td>
+                                    <td><span class="badge bg-secondary">{{ report.category }}</span></td>
+                                    <td><small class="text-muted"><i class="bi bi-geo-alt"></i> {{ report.location }}</small></td>
+                                    <td>
+                                        {% if report.urgency == '高' %}
+                                            <span class="badge bg-danger">高 (即時)</span>
+                                        {% elif report.urgency == '中' %}
+                                            <span class="badge bg-warning text-dark">中</span>
+                                        {% else %}
+                                            <span class="badge bg-success">低</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if report.status == '未対応' %}
+                                            <span class="badge bg-danger">未対応</span>
+                                        {% elif report.status == '対応中' %}
+                                            <span class="badge bg-warning text-dark">対応中</span>
+                                        {% else %}
+                                            <span class="badge bg-success">対応済み</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><small class="text-muted">{{ report.date }}</small></td>
+                                    <td class="text-end pe-3">
+                                        <button class="btn btn-outline-primary btn-sm">詳細・対応</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ログアウト確認モーダル -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="logoutModalLabel">ログアウト確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                ログアウトしますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

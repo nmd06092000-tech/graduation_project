@@ -29,6 +29,11 @@ def _handle_login(role):
         password = request.form.get('password', '')
         remember = request.form.get('remember') == 'on'
 
+        # 未入力チェック
+        if not login_id or not password:
+            flash(f"{setting['label']}またはパスワードを入力してください", 'danger')
+            return render_template(setting['template'])
+
         if role == User.ROLE_CITIZEN:
             # メールアドレスは大文字・小文字を区別しない
             login_id = login_id.lower()
@@ -90,8 +95,8 @@ def register():
         confirm_password = request.form.get('confirm_password', '')
 
         error = None
-        if not name or not email:
-            error = 'お名前とメールアドレスを入力してください。'
+        if not name or not email or not password or not confirm_password:
+            error = 'お名前、メールアドレス、パスワードのいずれかが未入力です。'
         elif len(name) > 100:
             error = 'お名前は100文字以内で入力してください。'
         elif len(password) < 8:

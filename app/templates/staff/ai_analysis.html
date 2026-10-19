@@ -1,0 +1,135 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<!-- ヘッダー -->
+<nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
+    <span class="navbar-brand fw-bold fs-6"><i class="bi bi-building me-1"></i>埼玉県の困りごと管理システム（ダッシュボード）</span>
+    <div class="ms-auto d-flex align-items-center text-white">
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            ログアウト
+        </button>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="{{ url_for('staff.dashboard') }}"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
+            <a href="{{ url_for('staff.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('staff.report_map') }}"><i class="bi bi-map me-2"></i>地図表示</a>
+            <a href="{{ url_for('staff.ai_analysis') }}" class="active"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
+            <a href="{{ url_for('staff.duplicates') }}"><i class="bi bi-check2-square me-2"></i>対応管理・重複確認</a>
+            <a href="{{ url_for('staff.stats') }}"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-md-10 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="fw-bold"><i class="bi bi-robot me-2"></i>AI分析・自動判定ログ</h4>
+                <button class="btn btn-success btn-sm"><i class="bi bi-arrow-clockwise me-1"></i>AIモデル再実行</button>
+            </div>
+
+            <!-- 上部サマリーカード -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3">
+                        <div class="text-muted small">本日のAI判定処理件数</div>
+                        <div class="fs-4 fw-bold text-primary">24 件</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3">
+                        <div class="text-muted small">平均分類信頼度</div>
+                        <div class="fs-4 fw-bold text-success">93.5 %</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-sm p-3">
+                        <div class="text-muted small">要人間チェック（低信頼度）</div>
+                        <div class="fs-4 fw-bold text-warning">2 件</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI判定ログ一覧テーブル -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-3">
+                    <h5 class="card-title fs-6 fw-bold mb-0">直近のAI自動判定結果</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="py-3 ps-3">ID</th>
+                                    <th class="py-3">報告タイトル</th>
+                                    <th class="py-3">AI分類カテゴリ</th>
+                                    <th class="py-3">AI判定緊急度</th>
+                                    <th class="py-3">担当部署</th>
+                                    <th class="py-3">信頼度 (Confidence)</th>
+                                    <th class="py-3">判定ステータス</th>
+                                    <th class="py-3">処理日時</th>
+                                    <th class="py-3 text-end pe-3">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for log in ai_logs %}
+                                <tr>
+                                    <td class="ps-3 fw-bold">#{{ log.id }}</td>
+                                    <td>{{ log.title }}</td>
+                                    <td><span class="badge bg-secondary">{{ log.category }}</span></td>
+                                    <td>
+                                        {% if log.urgency == '高' %}
+                                            <span class="badge bg-danger">高 (即時対応)</span>
+                                        {% elif log.urgency == '中' %}
+                                            <span class="badge bg-warning text-dark">中</span>
+                                        {% else %}
+                                            <span class="badge bg-success">低</span>
+                                        {% endif %}
+                                    </td>
+                                    <td><span class="text-secondary fw-bold small"><i class="bi bi-building me-1"></i>{{ log.department }}</span></td>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <span class="me-2 fw-bold text-success">{{ log.confidence }}</span>
+                                            <div class="progress w-50" style="height: 6px;">
+                                                <div class="progress-bar bg-success" style="width: {{ log.confidence }};"></div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="badge bg-info text-dark">{{ log.status }}</span></td>
+                                    <td><small class="text-muted">{{ log.date }}</small></td>
+                                    <td class="text-end pe-3">
+                                        <button class="btn btn-outline-primary btn-sm">詳細確認</button>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ログアウト確認モーダル -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="logoutModalLabel">ログアウト確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                ログアウトしますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

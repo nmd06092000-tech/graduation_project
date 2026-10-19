@@ -17,12 +17,12 @@
     <div class="row">
         <!-- 左サイドバー -->
         <div class="col-md-2 sidebar p-3">
-            <a href="#" class="active"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
-            <a href="#"><i class="bi bi-table me-2"></i>報告一覧</a>
-            <a href="#"><i class="bi bi-map me-2"></i>地図表示</a>
-            <a href="#"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
-            <a href="#"><i class="bi bi-check-circle me-2"></i>対応管理・重複確認</a>
-            <a href="#"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
+            <a href="{{ url_for('staff.dashboard') }}" class="active"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
+            <a href="{{ url_for('staff.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('staff.report_map') }}"><i class="bi bi-map me-2"></i>地図表示</a>
+            <a href="{{ url_for('staff.ai_analysis') }}"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
+            <a href="{{ url_for('staff.duplicates') }}"><i class="bi bi-check2-square me-2"></i>対応管理・重複確認</a>
+            <a href="{{ url_for('staff.stats') }}"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
         </div>
 
         <!-- メインダッシュボード -->

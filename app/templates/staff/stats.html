@@ -1,1 +1,125 @@
-{# 統計・レポート画面 #}
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<!-- ヘッダー -->
+<nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
+    <span class="navbar-brand fw-bold fs-6"><i class="bi bi-building me-1"></i>埼玉県の困りごと管理システム（ダッシュボード）</span>
+    <div class="ms-auto d-flex align-items-center text-white">
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            ログアウト
+        </button>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="{{ url_for('staff.dashboard') }}"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
+            <a href="{{ url_for('staff.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('staff.report_map') }}"><i class="bi bi-map me-2"></i>地図表示</a>
+            <a href="{{ url_for('staff.ai_analysis') }}"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
+            <a href="{{ url_for('staff.duplicates') }}"><i class="bi bi-check2-square me-2"></i>対応管理・重複確認</a>
+            <a href="{{ url_for('staff.stats') }}" class="active"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-md-10 p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h4 class="fw-bold"><i class="bi bi-bar-chart me-2"></i>統計・レポート分析</h4>
+                <button class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>レポート出力 (PDF/CSV)</button>
+            </div>
+
+            <!-- サマリーカード行 -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-3">
+                    <div class="card border-0 shadow-sm p-3">
+                        <div class="text-muted small">総報告件数</div>
+                        <div class="fs-3 fw-bold text-dark">{{ stats_summary.total_reports }} <span class="fs-6 fw-normal text-muted">件</span></div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 shadow-sm p-3">
+                        <div class="text-muted small">解決済み件数</div>
+                        <div class="fs-3 fw-bold text-success">{{ stats_summary.resolved_reports }} <span class="fs-6 fw-normal text-muted">件</span></div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 shadow-sm p-3">
+                        <div class="text-muted small">対応完了率</div>
+                        <div class="fs-3 fw-bold text-primary">{{ stats_summary.resolution_rate }}</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card border-0 shadow-sm p-3">
+                        <div class="text-muted small">平均対応日数</div>
+                        <div class="fs-3 fw-bold text-warning text-dark">{{ stats_summary.avg_response_days }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- グラフ・内訳セクション -->
+            <div class="row g-4">
+                <!-- カテゴリ別発生割合 -->
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-white py-3">
+                            <h5 class="card-title fs-6 fw-bold mb-0">カテゴリ別トラブル発生割合</h5>
+                        </div>
+                        <div class="card-body">
+                            {# バーの色は表示側で決める（行の順番に割り当て） #}
+                            {% set bar_colors = ['bg-primary', 'bg-success', 'bg-warning text-dark', 'bg-info text-dark', 'bg-secondary'] %}
+                            {% for cat in category_stats %}
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between small fw-bold mb-1">
+                                    <span>{{ cat.category }}</span>
+                                    <span>{{ cat.count }}件 ({{ cat.percentage }})</span>
+                                </div>
+                                <div class="progress" style="height: 10px;">
+                                    <div class="progress-bar {{ bar_colors[loop.index0 % bar_colors|length] }}" style="width: {{ cat.percentage }};"></div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 月別推移サマリー（ダミーカード） -->
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-white py-3">
+                            <h5 class="card-title fs-6 fw-bold mb-0">月別報告件数トレンド</h5>
+                        </div>
+                        <div class="card-body d-flex flex-column justify-content-center align-items-center text-muted py-5">
+                            <i class="bi bi-graph-up display-4 text-secondary opacity-50 mb-3"></i>
+                            <p class="fw-bold mb-1">2026年度上半期 報告推移グラフ</p>
+                            <small class="text-muted">（4月〜9月にかけてインフラ関連の報告が安定して処理されています）</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ログアウト確認モーダル -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="logoutModalLabel">ログアウト確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                ログアウトしますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
