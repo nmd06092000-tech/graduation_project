@@ -209,13 +209,15 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 市民 | アイコン設定 | `/citizen/profile/icon` | ✅ `citizen.profile_icon` | user_service, storage_service |
 | 職員 | ダッシュボード | `/staff/dashboard` | ✅ `staff.dashboard` | stats_service |
 | 職員 | 報告一覧 | `/staff/reports` | ✅ `staff.report_list` | report_service |
-| 職員 | 報告内容, 対応状況, 対応履歴 | `/staff/reports/<id>` | ⬜ | report_service, status_service |
-| 職員 | 対応状況を更新する | `POST /staff/reports/<id>/status` | ⬜ | status_service |
+| 職員 | 報告内容, 対応状況, 対応履歴 | `/staff/reports/<id>` | ✅ `staff.report_detail` | report_service, status_service |
+| 職員 | 対応状況を更新する | `POST /staff/reports/<id>/status` | ✅ `staff.report_status_update` | status_service |
 | 職員 | 担当部署を設定する | `POST /staff/reports/<id>/department` | ⬜ | assignment_service |
 | 職員 | AI 分類, 緊急度判定 | tự động khi tạo, `POST /staff/reports/<id>/reanalyze` | ⬜ | ai |
 | 職員 | AI分析・自動判定ログ | `/staff/ai-analysis` | ✅ `staff.ai_analysis` | report_service |
 | 職員 | 地図表示 | `/staff/map` ✅, `/api/reports/map` ⬜ | ✅ `staff.report_map` | stats_service |
 | 職員 | 対応管理・重複確認 | `/staff/duplicates` | ✅ `staff.duplicates` | duplicate_service |
+| 職員 | 代表案件に統合する | `/staff/duplicates/<group_id>/merge` | ✅ `staff.duplicate_merge` | duplicate_service |
+| 職員 | 一括対応ステータス変更 | `/staff/duplicates/<group_id>/status` | ✅ `staff.duplicate_batch_status` | status_service |
 | 職員 | 統計 | `/staff/stats` ✅, `/api/stats` ⬜ | ✅ `staff.stats` | stats_service |
 | 管理者 | ポータル | `/admin/portal` | ✅ `admin.portal` | |
 | 管理者 | ユーザー一覧 | `/admin/users` | ⬜ | user_service |
@@ -276,7 +278,11 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 - **Chưa có CSRF.** Xem bước 3.
 - **Form báo cáo chưa gửi dữ liệu.** Ô ảnh và ô nội dung chưa có `name`, form thiếu `enctype="multipart/form-data"`, vị trí đang là chuỗi cố định.
 - **Dashboard nhân viên** đang hiển thị số liệu và biểu đồ hard-code.
-- **Các màn hình nhân viên** 報告一覧, 地図表示, AI分析・自動判定, 対応管理・重複確認, 統計 lấy dữ liệu mẫu từ `report_service`, `stats_service`, `duplicate_service`, chưa đọc DB. Thẻ tổng hợp trên màn hình AI分析 vẫn hard-code. Các nút 詳細・対応, 詳細確認, AIモデル再実行, 代表案件に統合する, 一括対応ステータス変更, レポート出力 chưa hoạt động; 詳細を確認する và 個別確認 tạm trỏ về `staff.report_list`.
-- **Bản đồ** đang là ảnh tĩnh `static/images/fit=cover,w=800,h=800.avif` với ghim đặt theo `top`/`left` (%). Sẽ thay bằng Leaflet (`map.js`) dùng vĩ độ, kinh độ.
+- **Các màn hình nhân viên** 報告一覧, 報告詳細, 地図表示, AI分析・自動判定, 対応管理・重複確認, 案件統合, 一括ステータス変更, 統計 lấy dữ liệu mẫu từ `report_service`, `stats_service`, `duplicate_service`, chưa đọc DB. Tìm kiếm, lọc theo ID và lọc bản đồ đang lọc trên dữ liệu mẫu trong service. Thẻ tổng hợp trên màn hình AI分析 vẫn hard-code. Nút AIモデル再実行 chưa hoạt động.
+- **Các thao tác cập nhật của nhân viên chưa lưu gì.** Cập nhật trạng thái ở 報告詳細, 統合 và 一括ステータス変更 chỉ `flash` rồi quay lại trang. Khi có model, trạng thái phải đổi qua `status_service`, còn 統合 đặt `duplicate_of_id` qua `duplicate_service`. Cột ghi chú ở 報告詳細 chưa được dùng.
+- **Trạng thái 保留 và 対象外 trong bản thiết kế chưa có trong luồng trạng thái.** Bản thiết kế có thêm 保留・他部署へ引継ぎ, 保留・経過観察, 対象外・対応不要. Màn hình hiện chỉ dùng 未対応, 対応中, 対応済み theo mục 4. Nếu cần các trạng thái này, phải sửa luồng trạng thái trong README trước.
+- **Cờ `ai_detected` trong dữ liệu mẫu của `duplicate_service`** quyết định nút AI確認 hay 個別確認. Cách xác định "báo cáo do AI phát hiện" cần được định nghĩa lại khi có model `Report` và `AiAnalysis`.
+- **レポート出力 chỉ là giao diện.** Modal chọn PDF/CSV chỉ hiện thông báo hoàn tất trên trình duyệt, chưa tạo file.
+- **Bản đồ** đang là ảnh tĩnh `static/images/map.avif` với ghim đặt theo `top`/`left` (%). Sẽ thay bằng Leaflet (`map.js`) dùng vĩ độ, kinh độ.
 - **Danh sách báo cáo của người dân** lấy dữ liệu mẫu từ `report_service.list_by_citizen()`, chưa đọc DB. Khi có model `Report` và `constants.py`, chỉ cần sửa hàm này, route không đổi.
 - **Màn hình プロフィール設定 chưa lưu gì.** Nút 変更を保存する chỉ hiện `alert` mẫu, nút パスワードを変更する đang trỏ tới trang reset công khai `auth.reset_password` (sẽ đổi sang `/citizen/password`). Màn hình アイコン設定 chưa lưu ảnh: ô file chưa có `name`, form thiếu `enctype`, `users` chưa có cột ảnh đại diện.

@@ -3,7 +3,7 @@
 {% block layout %}
 <!-- ヘッダー -->
 <nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
-    <span class="navbar-brand fw-bold fs-6"><i class="bi bi-building me-1"></i>埼玉県の困りごと管理システム（ダッシュボード）</span>
+    <span class="navbar-brand fw-bold"><i class="bi bi-building me-2"></i>埼玉県の困りごと管理システム（統計・レポート）</span>
     <div class="ms-auto d-flex align-items-center text-white">
         <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
         <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
@@ -28,7 +28,9 @@
         <div class="col-md-10 p-4">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h4 class="fw-bold"><i class="bi bi-bar-chart me-2"></i>統計・レポート分析</h4>
-                <button class="btn btn-outline-secondary btn-sm"><i class="bi bi-download me-1"></i>レポート出力 (PDF/CSV)</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#reportExportModal">
+                    <i class="bi bi-download me-1"></i>レポート出力 (PDF/CSV)
+                </button>
             </div>
 
             <!-- サマリーカード行 -->
@@ -104,6 +106,63 @@
     </div>
 </div>
 
+<!-- レポート出力形式の選択モーダル -->
+<div class="modal fade" id="reportExportModal" tabindex="-1" aria-labelledby="reportExportModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fs-6 fw-bold" id="reportExportModalLabel"><i class="bi bi-file-earmark-arrow-down me-2 text-success"></i>レポート出力形式の選択</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <p class="text-muted mb-4 small">統計レポートのデータをどの形式で出力するか選択してください。</p>
+                <div class="d-grid gap-3 col-10 mx-auto">
+                    <!-- PDF選択ボタン -->
+                    <button type="button" class="btn btn-outline-danger py-3 fw-bold" onclick="confirmExport('PDF')">
+                        <i class="bi bi-file-earmark-pdf-fill me-2 fs-5"></i>PDF形式で出力
+                    </button>
+                    <!-- CSV選択ボタン -->
+                    <button type="button" class="btn btn-outline-success py-3 fw-bold" onclick="confirmExport('CSV')">
+                        <i class="bi bi-file-earmark-spreadsheet-fill me-2 fs-5"></i>CSV形式で出力
+                    </button>
+                </div>
+            </div>
+            <div class="modal-footer bg-light">
+                <button type="button" class="btn btn-secondary px-4 btn-sm" data-bs-dismiss="modal">キャンセル</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 出力方法の確認モーダル -->
+<div class="modal fade" id="exportConfirmModal" tabindex="-1" aria-labelledby="exportConfirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header bg-dark text-white">
+                <h5 class="modal-title fw-bold" id="exportConfirmModalLabel"><i class="bi bi-question-circle me-2"></i>出力確認</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body text-center py-5">
+                <i class="bi bi-file-earmark-check text-primary" style="font-size: 3rem;"></i>
+                <p class="fs-5 fw-bold mt-3 mb-2">この印刷方法でよろしいですか？</p>
+                <p class="text-muted mb-0">
+                    選択した形式：<span id="selectedExportFormat" class="fw-bold text-primary"></span>
+                </p>
+                <!-- 出力成功メッセージ -->
+                <div id="exportSuccessMessage" class="alert alert-success mt-4 mb-0 d-none" role="alert">
+                    <i class="bi bi-check-circle-fill me-2"></i><span id="exportSuccessText">レポートを出力しました。</span>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-center bg-light">
+                <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">キャンセル</button>
+                <button type="button" class="btn btn-primary px-4" onclick="executeExport()">
+                    <i class="bi bi-check-lg me-1"></i>確定
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ログアウト確認モーダル -->
 <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -122,4 +181,37 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 選択された出力形式を保存
+    // TODO: 現状は画面上にメッセージを表示するだけで、実際のファイル出力は未実装
+    let selectedFormat = '';
+
+    // PDF・CSV の選択時に確認モーダルを表示する
+    function confirmExport(format) {
+        selectedFormat = format;
+        document.getElementById('selectedExportFormat').textContent = format;
+
+        // 出力形式選択モーダルを閉じ、閉じ終わってから確認モーダルを開く
+        const exportModalElement = document.getElementById('reportExportModal');
+        exportModalElement.addEventListener('hidden.bs.modal', function () {
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('exportConfirmModal')).show();
+        }, { once: true });
+        bootstrap.Modal.getOrCreateInstance(exportModalElement).hide();
+    }
+
+    // 確定ボタンを押したときに、選択した形式に応じた完了メッセージを表示する
+    function executeExport() {
+        document.getElementById('exportSuccessText').textContent = selectedFormat + '形式での出力が完了しました。';
+        document.getElementById('exportSuccessMessage').classList.remove('d-none');
+    }
+
+    // 出力形式選択モーダルを開く前に、前回の完了メッセージと選択形式をリセットする
+    document.getElementById('reportExportModal').addEventListener('show.bs.modal', function () {
+        document.getElementById('exportSuccessMessage').classList.add('d-none');
+        selectedFormat = '';
+    });
+</script>
 {% endblock %}

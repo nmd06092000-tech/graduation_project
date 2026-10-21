@@ -1,0 +1,79 @@
+{# 重複グループの代表（親）案件を選び、他の報告を子案件として統合する #}
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<!-- ヘッダー -->
+<nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
+    <span class="navbar-brand fw-bold"><i class="bi bi-building me-2"></i>埼玉県の困りごと管理システム（案件統合）</span>
+    <div class="ms-auto d-flex align-items-center text-white">
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="{{ url_for('staff.dashboard') }}"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
+            <a href="{{ url_for('staff.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('staff.report_map') }}"><i class="bi bi-map me-2"></i>地図表示</a>
+            <a href="{{ url_for('staff.ai_analysis') }}"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
+            <a href="{{ url_for('staff.duplicates') }}" class="active"><i class="bi bi-check2-square me-2"></i>対応管理・重複確認</a>
+            <a href="{{ url_for('staff.stats') }}"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-md-10 p-5">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+
+                    {% include 'components/_flash.html' %}
+
+                    <div class="d-flex align-items-center mb-4">
+                        <a href="{{ url_for('staff.duplicates') }}" class="btn btn-outline-secondary btn-sm me-3">
+                            <i class="bi bi-arrow-left me-1"></i>戻る
+                        </a>
+                        <h3 class="fw-bold mb-0"><i class="bi bi-intersect me-2 text-success"></i>重複グループ #{{ group.group_id }} の案件統合</h3>
+                    </div>
+
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-success text-white py-3">
+                            <h5 class="mb-0 fs-6 fw-bold"><i class="bi bi-info-circle me-2"></i>代表（親）案件の選択</h5>
+                        </div>
+                        <div class="card-body p-4">
+                            <p class="text-muted small mb-4">
+                                同一場所・類似内容と判定された以下の報告から、代表となる親案件を選択してください。統合すると、他の報告は子案件として紐付けられ、対応ステータスが一括管理されます。
+                            </p>
+
+                            <form method="POST" action="{{ url_for('staff.duplicate_merge', group_id=group.group_id) }}">
+                                <div class="mb-4">
+                                    {% for r in group.reports %}
+                                    <div class="form-check p-3 border rounded mb-3 bg-light">
+                                        <input class="form-check-input ms-1 mt-2" type="radio" name="primary_report_id" id="reportRadio{{ r.id }}" value="{{ r.id }}" {% if loop.first %}checked{% endif %}>
+                                        <label class="form-check-label ms-3 d-block" for="reportRadio{{ r.id }}">
+                                            <div class="d-flex align-items-center mb-1">
+                                                <span class="fw-bold fs-6 text-dark me-2">#{{ r.id }} {{ r.title }}</span>
+                                                <span class="badge bg-secondary">{{ r.reporter }}</span>
+                                            </div>
+                                            <div class="small text-muted"><i class="bi bi-clock me-1"></i>報告日時: {{ r.date }}</div>
+                                        </label>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="d-flex justify-content-end gap-2">
+                                    <a href="{{ url_for('staff.duplicates') }}" class="btn btn-secondary px-4">キャンセル</a>
+                                    <button type="submit" class="btn btn-success px-5">
+                                        <i class="bi bi-check-lg me-1"></i>この代表案件に統合実行
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

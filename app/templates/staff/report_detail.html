@@ -1,1 +1,180 @@
 {# 報告内容・AI判定・対応状況の更新・担当部署設定・対応履歴 #}
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<!-- ヘッダー -->
+<nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
+    <span class="navbar-brand fw-bold"><i class="bi bi-building me-2"></i>埼玉県の困りごと管理システム（報告詳細・対応更新）</span>
+    <div class="ms-auto d-flex align-items-center text-white">
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            ログアウト
+        </button>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="{{ url_for('staff.dashboard') }}"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
+            <a href="{{ url_for('staff.report_list') }}" class="active"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('staff.report_map') }}"><i class="bi bi-map me-2"></i>地図表示</a>
+            <a href="{{ url_for('staff.ai_analysis') }}"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
+            <a href="{{ url_for('staff.duplicates') }}"><i class="bi bi-check2-square me-2"></i>対応管理・重複確認</a>
+            <a href="{{ url_for('staff.stats') }}"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-md-10 p-4">
+            <!-- 戻るボタン＆タイトル -->
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div>
+                    <a href="{{ url_for('staff.report_list') }}" class="btn btn-outline-secondary btn-sm mb-2">
+                        <i class="bi bi-arrow-left me-1"></i>報告一覧へ戻る
+                    </a>
+                    <h3 class="fw-bold mb-0">報告詳細・対応更新（#{{ report.id }}）</h3>
+                </div>
+                <div>
+                    <span class="badge bg-secondary fs-6 me-2">{{ report.category }}</span>
+                    {% if report.urgency == '高' %}
+                        <span class="badge bg-danger fs-6">緊急度：高</span>
+                    {% elif report.urgency == '中' %}
+                        <span class="badge bg-warning text-dark fs-6">緊急度：中</span>
+                    {% else %}
+                        <span class="badge bg-success fs-6">緊急度：低</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            {% include 'components/_flash.html' %}
+
+            <div class="row g-4">
+                <!-- 左側：報告詳細コンテンツ -->
+                <div class="col-md-7">
+                    <!-- 基本情報カード -->
+                    <div class="card border-0 shadow-sm mb-4">
+                        <div class="card-header bg-white py-3">
+                            <h5 class="card-title fs-6 fw-bold mb-0"><i class="bi bi-file-text me-2"></i>報告内容</h5>
+                        </div>
+                        <div class="card-body">
+                            <h5 class="fw-bold text-primary mb-3">{{ report.title }}</h5>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">発生場所</small>
+                                    <span class="fw-bold"><i class="bi bi-geo-alt me-1 text-danger"></i>{{ report.address }}</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">報告日時</small>
+                                    <span><i class="bi bi-clock me-1"></i>{{ report.date }}</span>
+                                </div>
+                            </div>
+
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">AI判定担当部署</small>
+                                    <span class="fw-bold text-dark"><i class="bi bi-building me-1"></i>{{ report.department or '未設定' }}</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">AI判定信頼度</small>
+                                    <span class="badge bg-success">{{ report.ai_confidence or '未判定' }}</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-3">
+                                <small class="text-muted d-block mb-1">詳細説明</small>
+                                <div class="p-3 bg-light rounded text-secondary">
+                                    {{ report.description }}
+                                </div>
+                            </div>
+
+                            {% if report.image_url %}
+                            <div>
+                                <small class="text-muted d-block mb-1">添付写真</small>
+                                <div class="border rounded p-2 text-center bg-light">
+                                    <img src="{{ report.image_url }}" class="img-fluid rounded" alt="現場写真" style="max-height: 300px;">
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <!-- 対応履歴カード -->
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-white py-3">
+                            <h5 class="card-title fs-6 fw-bold mb-0"><i class="bi bi-clock-history me-2"></i>対応・更新履歴</h5>
+                        </div>
+                        <div class="card-body">
+                            <ul class="list-group list-group-flush small">
+                                {% for item in report.history %}
+                                <li class="list-group-item px-0 py-2 d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <span class="fw-bold me-2">{{ item.user }}</span>
+                                        <span class="text-secondary">{{ item.action }}</span>
+                                    </div>
+                                    <small class="text-muted">{{ item.date }}</small>
+                                </li>
+                                {% else %}
+                                <li class="list-group-item px-0 py-2 text-muted">履歴はまだありません。</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：ステータス変更フォーム -->
+                <div class="col-md-5">
+                    <div class="card border-0 shadow-sm sticky-top" style="top: 20px;">
+                        <div class="card-header bg-white py-3">
+                            <h5 class="card-title fs-6 fw-bold mb-0"><i class="bi bi-pencil-square me-2"></i>対応状況の更新</h5>
+                        </div>
+                        <div class="card-body">
+                            <form action="{{ url_for('staff.report_status_update', report_id=report.id) }}" method="POST">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold small">現在のステータス</label>
+                                    {# 選択肢は README の状態遷移（未対応 → 対応中 → 対応済み）に合わせる #}
+                                    <select name="status" class="form-select fw-bold">
+                                        <option value="未対応" {% if report.status == '未対応' %}selected{% endif %}>未対応</option>
+                                        <option value="対応中" {% if report.status == '対応中' %}selected{% endif %}>対応中</option>
+                                        <option value="対応済み" {% if report.status == '対応済み' %}selected{% endif %}>対応済み</option>
+                                    </select>
+                                </div>
+
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold small">担当者メモ・進捗コメント</label>
+                                    <textarea name="comment" class="form-control" rows="4" placeholder="例: 現地調査完了。道路修繕業者へ本日手配を実施しました。"></textarea>
+                                </div>
+
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">
+                                    <i class="bi bi-check-circle me-1"></i>更新を保存する
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<!-- ログアウト確認モーダル -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="logoutModalLabel">ログアウト確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                ログアウトしますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

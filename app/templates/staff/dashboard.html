@@ -4,7 +4,7 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark px-4">
     <span class="navbar-brand fw-bold"><i class="bi bi-building me-2"></i>埼玉県の困りごと管理システム（ダッシュボード）</span>
     <div class="ms-auto d-flex align-items-center text-white">
-        <span class="me-3 small"><i class="bi bi-person-badge me-1"></i>{{ current_user.name }} さん</span>
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
         <!-- モーダル呼び出しボタン -->
         <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#adminLogoutModal">
             ログアウト
@@ -84,13 +84,15 @@
                     <div class="card border-0 shadow-sm p-3">
                         <h6 class="fw-bold mb-3">本日の優先対応案件</h6>
                         <ul class="list-group list-group-flush small">
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
                                 <div><span class="badge bg-danger me-2">高</span>道路の大きな穴（〇〇市1丁目）</div>
-                                <button class="btn btn-sm btn-outline-primary py-0">確認</button>
+                                <!-- 詳細画面（report_id=1）へ画面遷移 -->
+                                <a href="{{ url_for('staff.report_detail', report_id=1) }}" class="btn btn-sm btn-outline-primary px-3 py-1">確認</a>
                             </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                            <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
                                 <div><span class="badge bg-danger me-2">高</span>公園の遊具破損（〇〇公園）</div>
-                                <button class="btn btn-sm btn-outline-primary py-0">確認</button>
+                                <!-- 詳細画面（report_id=2）へ画面遷移 -->
+                                <a href="{{ url_for('staff.report_detail', report_id=2) }}" class="btn btn-sm btn-outline-primary px-3 py-1">確認</a>
                             </li>
                         </ul>
                     </div>

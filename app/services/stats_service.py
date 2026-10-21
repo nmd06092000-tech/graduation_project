@@ -1,15 +1,20 @@
 # ダッシュボード・統計・地図用の集計
 
 
-# 地図に表示する報告（緊急度と地図画像上の配置位置 top/left）
+# 地図に表示する報告（緊急度と地図画像上の配置位置 top/left）。'all' 以外を指定するとカテゴリ・緊急度で絞り込む
 # TODO: Report モデルができたら緯度・経度を返し、map.js（Leaflet）で描画する
-def map_points():
-    return [
-        {'id': 1, 'title': '道路の大きな穴', 'location': 'さいたま市大宮区', 'urgency': '高', 'top': '40%', 'left': '45%'},
-        {'id': 2, 'title': '公園の遊具破損', 'location': '川口市', 'urgency': '中', 'top': '65%', 'left': '55%'},
-        {'id': 3, 'title': '街灯の球切れ', 'location': '所沢市', 'urgency': '低', 'top': '50%', 'left': '30%'},
-        {'id': 4, 'title': 'ガードレールの歪み', 'location': '熊谷市', 'urgency': '高', 'top': '20%', 'left': '25%'},
+def map_points(category='all', urgency='all'):
+    points = [
+        {'id': 1, 'title': '道路の大きな穴', 'category': '道路', 'location': 'さいたま市大宮区', 'urgency': '高', 'top': '40%', 'left': '65%'},
+        {'id': 2, 'title': '公園の遊具破損', 'category': '公園', 'location': '川越市', 'urgency': '高', 'top': '55%', 'left': '45%'},
+        {'id': 3, 'title': '街灯の球切れ', 'category': '街灯', 'location': '所沢市', 'urgency': '中', 'top': '70%', 'left': '35%'},
+        {'id': 4, 'title': 'ゴミの不法投棄', 'category': 'その他', 'location': '秩父市', 'urgency': '低', 'top': '60%', 'left': '20%'},
     ]
+    if category != 'all':
+        points = [p for p in points if p['category'] == category]
+    if urgency != 'all':
+        points = [p for p in points if p['urgency'] == urgency]
+    return points
 
 
 # 統計画面のサマリー（総件数・解決済み件数・対応完了率・平均対応日数）

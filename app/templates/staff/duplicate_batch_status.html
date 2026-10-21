@@ -1,0 +1,87 @@
+{# 重複グループ内のすべての報告に、同じ対応ステータスを一括で適用する #}
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<!-- ヘッダー -->
+<nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
+    <span class="navbar-brand fw-bold"><i class="bi bi-building me-2"></i>埼玉県の困りごと管理システム（一括ステータス変更）</span>
+    <div class="ms-auto d-flex align-items-center text-white">
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-md-2 sidebar p-3">
+            <a href="{{ url_for('staff.dashboard') }}"><i class="bi bi-speedometer2 me-2"></i>ダッシュボード</a>
+            <a href="{{ url_for('staff.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('staff.report_map') }}"><i class="bi bi-map me-2"></i>地図表示</a>
+            <a href="{{ url_for('staff.ai_analysis') }}"><i class="bi bi-robot me-2"></i>AI分析・自動判定</a>
+            <a href="{{ url_for('staff.duplicates') }}" class="active"><i class="bi bi-check2-square me-2"></i>対応管理・重複確認</a>
+            <a href="{{ url_for('staff.stats') }}"><i class="bi bi-bar-chart me-2"></i>統計・レポート</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-md-10 p-5">
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+
+                    <div class="d-flex align-items-center mb-4">
+                        <a href="{{ url_for('staff.duplicates') }}" class="btn btn-outline-secondary btn-sm me-3">
+                            <i class="bi bi-arrow-left me-1"></i>戻る
+                        </a>
+                        <h3 class="fw-bold mb-0"><i class="bi bi-scissors me-2 text-primary"></i>重複グループ #{{ group.group_id }} の一括対応ステータス変更</h3>
+                    </div>
+
+                    {% include 'components/_flash.html' %}
+
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-primary text-white py-3">
+                            <h5 class="mb-0 fs-6 fw-bold"><i class="bi bi-gear-fill me-2"></i>変更対象の報告と新しいステータスの選択</h5>
+                        </div>
+                        <div class="card-body p-4">
+                            <p class="text-muted small mb-4">
+                                グループ内のすべての報告に対して、新しい対応ステータスを一括で適用します。
+                            </p>
+
+                            <form method="POST" action="{{ url_for('staff.duplicate_batch_status', group_id=group.group_id) }}">
+                                <!-- ステータス選択（README の状態遷移 対応中 → 対応済み に合わせる） -->
+                                <div class="mb-4 p-3 border rounded bg-light">
+                                    <label class="form-label fw-bold text-dark mb-2">変更後の対応ステータス</label>
+                                    <select name="status" class="form-select form-select-lg border-primary">
+                                        <option value="対応中">🔵 対応中（現地確認・手配中）</option>
+                                        <option value="対応済み">🟢 対応済み（補修・復旧済み）</option>
+                                    </select>
+                                </div>
+
+                                <!-- 対象報告の一覧確認領域 -->
+                                <div class="mb-4">
+                                    <label class="form-label fw-bold small text-muted mb-2">一括適用される報告案件（計 {{ group.reports|length }} 件）</label>
+                                    {% for r in group.reports %}
+                                    <div class="p-3 border rounded mb-2 bg-white d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <span class="fw-bold text-dark me-2">#{{ r.id }} {{ r.title }}</span>
+                                            <span class="badge bg-secondary">{{ r.reporter }}</span>
+                                        </div>
+                                        <div class="small text-muted"><i class="bi bi-clock me-1"></i>{{ r.date }}</div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+
+                                <div class="d-flex justify-content-end gap-2">
+                                    <a href="{{ url_for('staff.duplicates') }}" class="btn btn-secondary px-4">キャンセル</a>
+                                    <button type="submit" class="btn btn-primary px-5">
+                                        <i class="bi bi-check-lg me-1"></i>一括ステータス変更を実行
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
