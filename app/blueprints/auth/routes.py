@@ -29,9 +29,21 @@ def _handle_login(role):
         password = request.form.get('password', '')
         remember = request.form.get('remember') == 'on'
 
-        # 未入力チェック
-        if not login_id or not password:
-            flash(f"{setting['label']}またはパスワードを入力してください", 'danger')
+        # 未入力チェック（両方未入力の場合は1つのメッセージにまとめる）
+        errors = []
+        if not login_id and not password:
+            errors.append(f"{setting['label']}またはパスワードを入力してください")
+        else:
+            if not login_id:
+                errors.append(f"{setting['label']}を入力してください。")
+            if not password:
+                errors.append('パスワードを入力してください。')
+            elif len(password) < 8:
+                # パスワード文字数チェック（8文字未満はエラー）
+                errors.append(f'このテキストは8文字以上で指定してください（現在は{len(password)}文字です）。')
+        if errors:
+            for error in errors:
+                flash(error, 'danger')
             return render_template(setting['template'])
 
         if role == User.ROLE_CITIZEN:

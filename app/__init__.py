@@ -1,7 +1,7 @@
 from flask import Flask
 
 from config import Config
-from app.extensions import db, login_manager
+from app.extensions import db, login_manager, migrate
 
 
 def create_app(config_class=Config):
@@ -11,6 +11,8 @@ def create_app(config_class=Config):
 
     db.init_app(app)
     login_manager.init_app(app)
+    # マイグレーション（flask db migrate / upgrade）
+    migrate.init_app(app, db)
 
     # モデルを読み込み、user_loader を登録する
     from app import models  # noqa: F401

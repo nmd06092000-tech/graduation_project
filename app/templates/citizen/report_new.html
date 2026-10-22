@@ -7,18 +7,29 @@
             <div class="card border-0 shadow">
                 <div class="card-body p-4">
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-pencil-square me-2"></i>困りごとを報告する</h4>
-                    <form action="{{ url_for('citizen.report_new') }}" method="POST">
+                    {# 入力項目は reports（title・address・latitude・longitude・description）と report_photos に対応する #}
+                    <form action="{{ url_for('citizen.report_new') }}" method="POST" enctype="multipart/form-data">
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">写真添付</label>
-                            <input type="file" class="form-control">
+                            <label for="title" class="form-label small fw-bold">件名 <span class="text-danger">*</span></label>
+                            <input type="text" id="title" name="title" class="form-control" maxlength="100" required
+                                   placeholder="例) 道路に大きな穴が開いている">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">位置情報</label>
-                            <input type="text" class="form-control" value="埼玉県さいたま市大宮区高鼻町1丁目 付近" readonly>
+                            <label for="photos" class="form-label small fw-bold">写真添付（3枚まで）</label>
+                            <input type="file" id="photos" name="photos" class="form-control" accept="image/*" multiple>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">詳細内容</label>
-                            <textarea class="form-control" rows="3" placeholder="状況を入力してください"></textarea>
+                            <label for="address" class="form-label small fw-bold">発生場所 <span class="text-danger">*</span></label>
+                            <input type="text" id="address" name="address" class="form-control" maxlength="255" required
+                                   placeholder="例) 埼玉県さいたま市大宮区高鼻町1丁目 付近">
+                            {# 緯度・経度は位置情報の取得（report_form.js）で設定する #}
+                            <input type="hidden" id="latitude" name="latitude">
+                            <input type="hidden" id="longitude" name="longitude">
+                        </div>
+                        <div class="mb-3">
+                            <label for="description" class="form-label small fw-bold">詳細内容 <span class="text-danger">*</span></label>
+                            <textarea id="description" name="description" class="form-control" rows="4" maxlength="1000" required
+                                      placeholder="状況を入力してください（いつから・大きさ・危険の有無など）"></textarea>
                         </div>
                         <button type="submit" class="btn btn-primary w-100 fw-bold">送信する</button>
                     </form>

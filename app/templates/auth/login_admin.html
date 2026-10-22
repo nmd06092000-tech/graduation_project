@@ -14,9 +14,12 @@
 
             <!-- エラーメッセージ表示エリア -->
             {% include 'components/_flash.html' %}
+            <!-- 画面側の入力チェックのエラー表示エリア -->
+            <div id="login-errors"></div>
 
             <div class="card shadow-sm border-0">
                 <div class="card-body p-4">
+                    <!-- 未入力・文字数チェックは画面側（下の script）で行い、エラー時は送信しない（履歴に残さないため）。サーバー側でも同じチェックを行う -->
                     <form action="{{ url_for('auth.login_admin') }}" method="POST">
                         <div class="mb-3">
                             <label class="form-label small fw-bold">管理者ID</label>
@@ -27,10 +30,9 @@
                                        class="form-control" 
                                        placeholder="例) admin01" 
                                        pattern="[^@]*" 
-                                       title="管理者IDに @ は使用できません" 
+                                       title="管理者IDに @ は使用できません"
                                        oninput="this.setCustomValidity('')"
-                                       oninvalid="if(this.value.includes('@')) this.setCustomValidity('管理者IDに @ は使用できません。')"
-                                       required>
+                                       oninvalid="if(this.value.includes('@')) this.setCustomValidity('管理者IDに @ は使用できません。')">
                             </div>
                         </div>
                         <div class="mb-4">
@@ -41,8 +43,7 @@
                                        name="password" 
                                        class="form-control" 
                                        placeholder="パスワードを入力してください" 
-                                       minlength="8" 
-                                       required>
+                                       minlength="8">
                             </div>
                         </div>
                         <button type="submit" class="btn btn-secondary w-100 py-2 fw-bold">ログイン</button>
@@ -55,4 +56,38 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 未入力・文字数チェック（エラーは送信せずに、すべて画面上部にまとめて表示する）
+    document.querySelector('form button[type="submit"]').addEventListener('click', function (event) {
+        const form = this.form;
+        const loginId = form.elements['admin_id'].value.trim();
+        const password = form.elements['password'].value;
+        const errors = [];
+        // 両方未入力の場合は1つのメッセージにまとめる
+        if (!loginId && !password) errors.push('管理者IDまたはパスワードを入力してください');
+        else {
+            if (!loginId) errors.push('管理者IDを入力してください。');
+            if (!password) errors.push('パスワードを入力してください。');
+            else if (password.length < 8) errors.push('このテキストは8文字以上で指定してください（現在は' + password.length + '文字です）。');
+        }
+        if (errors.length === 0) return;
+
+        event.preventDefault();
+        // 前回のエラー（サーバー側の flash を含む）を消してから表示する
+        document.querySelectorAll('.alert').forEach(function (alert) { alert.remove(); });
+        const area = document.getElementById('login-errors');
+        errors.forEach(function (message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show mb-3';
+            alert.setAttribute('role', 'alert');
+            alert.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><span></span>'
+                + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+            alert.querySelector('span').textContent = message;
+            area.appendChild(alert);
+        });
+    });
+</script>
 {% endblock %}

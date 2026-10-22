@@ -14,22 +14,25 @@
 
             <!-- エラーメッセージ表示エリア -->
             {% include 'components/_flash.html' %}
+            <!-- 画面側の入力チェックのエラー表示エリア -->
+            <div id="login-errors"></div>
 
             <div class="card shadow-sm border-0">
                 <div class="card-body p-4">
+                    <!-- 未入力・文字数チェックは画面側（下の script）で行い、エラー時は送信しない（履歴に残さないため）。サーバー側でも同じチェックを行う -->
                     <form action="{{ url_for('auth.login_citizen') }}" method="POST">
                         <div class="mb-3">
                             <label class="form-label small fw-bold">メールアドレス</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-light"><i class="bi bi-envelope"></i></span>
-                                <input type="email" name="email" class="form-control" placeholder="例) taro@example.com" required>
+                                <input type="email" name="email" class="form-control" placeholder="例) taro@example.com">
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label small fw-bold">パスワード</label>
                             <div class="input-group">
                                 <span class="input-group-text bg-light"><i class="bi bi-lock"></i></span>
-                                <input type="password" name="password" class="form-control" placeholder="パスワードを入力してください" minlength="8" required>
+                                <input type="password" name="password" class="form-control" placeholder="パスワードを入力してください" minlength="8">
                             </div>
                         </div>
                         <div class="mb-4 form-check">
@@ -49,4 +52,38 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // 未入力・文字数チェック（エラーは送信せずに、すべて画面上部にまとめて表示する）
+    document.querySelector('form button[type="submit"]').addEventListener('click', function (event) {
+        const form = this.form;
+        const loginId = form.elements['email'].value.trim();
+        const password = form.elements['password'].value;
+        const errors = [];
+        // 両方未入力の場合は1つのメッセージにまとめる
+        if (!loginId && !password) errors.push('メールアドレスまたはパスワードを入力してください');
+        else {
+            if (!loginId) errors.push('メールアドレスを入力してください。');
+            if (!password) errors.push('パスワードを入力してください。');
+            else if (password.length < 8) errors.push('このテキストは8文字以上で指定してください（現在は' + password.length + '文字です）。');
+        }
+        if (errors.length === 0) return;
+
+        event.preventDefault();
+        // 前回のエラー（サーバー側の flash を含む）を消してから表示する
+        document.querySelectorAll('.alert').forEach(function (alert) { alert.remove(); });
+        const area = document.getElementById('login-errors');
+        errors.forEach(function (message) {
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show mb-3';
+            alert.setAttribute('role', 'alert');
+            alert.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><span></span>'
+                + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+            alert.querySelector('span').textContent = message;
+            area.appendChild(alert);
+        });
+    });
+</script>
 {% endblock %}

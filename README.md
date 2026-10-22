@@ -15,12 +15,24 @@ pip install -r requirements.txt
 # 2. Tạo file .env từ mẫu rồi điền SECRET_KEY và DATABASE_URL
 cp .env.example .env
 
-# 3. Tạo bảng và tài khoản test (chạy ở thư mục task-app)
+# 3. Tạo hoặc cập nhật bảng bằng migration (chạy ở thư mục task-app)
+flask --app run db upgrade
+
+# 4. Thêm dữ liệu master (部署, カテゴリ) và tài khoản test. Chạy lại nhiều lần cũng không bị trùng
 python -m scripts.seed
 
-# 4. Chạy server: http://localhost:5000
+# 5. Chạy server: http://localhost:5000
 python run.py
 ```
+
+**Đổi schema.** Sửa model trong `app/models/`, rồi chạy các lệnh dưới đây. Luôn đọc file migration mới sinh trong `migrations/versions/` trước khi `upgrade`, và commit file đó cùng với model.
+
+```bash
+flask --app run db migrate -m "mô tả thay đổi"
+flask --app run db upgrade
+```
+
+**DB đã tạo bằng `db.create_all()` trước khi có Flask-Migrate.** Chạy `flask --app run db stamp 8d99a80ec994` một lần, sau đó mới `db upgrade`. Revision `8d99a80ec994` chính là bảng `users` cũ.
 
 Tài khoản test do `scripts/seed.py` tạo, chỉ dùng khi phát triển:
 
@@ -30,7 +42,7 @@ Tài khoản test do `scripts/seed.py` tạo, chỉ dùng khi phát triển:
 | 職員 | staff01 | password123 |
 | 管理者 | admin01 | password123 |
 
-Công nghệ: Flask 3, Flask-SQLAlchemy, Flask-Login, PostgreSQL (psycopg 3), Bootstrap 5, Chart.js.
+Công nghệ: Flask 3, Flask-SQLAlchemy, Flask-Migrate (Alembic), Flask-Login, PostgreSQL (psycopg 3), Bootstrap 5, Chart.js.
 
 ---
 
@@ -69,8 +81,10 @@ task-app/
 ├── .env.example                 ✅ mẫu biến môi trường (không chứa giá trị thật)
 ├── .gitignore                   ✅ bỏ qua .env, .venv, __pycache__, ảnh upload
 ├── instance/uploads/            ⬜ ảnh người dân gửi lên (không commit)
+├── migrations/                  ✅ Flask-Migrate (Alembic). versions/ chứa lịch sử thay đổi schema
+├── docs/db/                     ✅ thiết kế DB (db_design.md) và danh sách dữ liệu màn hình
 ├── scripts/
-│   └── seed.py                  ✅ tạo bảng và tài khoản test
+│   └── seed.py                  ✅ dữ liệu master (部署, カテゴリ) và tài khoản test
 ├── tests/                       ⬜ pytest
 │   ├── conftest.py
 │   ├── test_auth.py
@@ -79,16 +93,17 @@ task-app/
 │   └── test_ai_classifier.py
 └── app/
     ├── __init__.py              ✅ create_app(): config, extensions, đăng ký blueprint
-    ├── extensions.py            ✅ db, login_manager
-    ├── constants.py             ⬜ Role, ReportStatus, Urgency, luồng trạng thái, nhãn tiếng Nhật
+    ├── extensions.py            ✅ db, login_manager, migrate
+    ├── constants.py             ✅ Role, ReportStatus, Urgency, AiAnalysisStatus, DuplicateGroupStatus, luồng trạng thái, nhãn tiếng Nhật
     ├── models/
     │   ├── __init__.py          ✅ import mọi model
     │   ├── user.py              ✅ User + user_loader
-    │   ├── department.py        ⬜ 担当部署
-    │   ├── category.py          ⬜ カテゴリ
-    │   ├── report.py            ⬜ Report, ReportPhoto
-    │   ├── status_history.py    ⬜ 対応履歴
-    │   └── ai_analysis.py       ⬜ kết quả AI
+    │   ├── department.py        ✅ 担当部署
+    │   ├── category.py          ✅ カテゴリ
+    │   ├── report.py            ✅ Report, ReportPhoto
+    │   ├── status_history.py    ✅ 対応履歴
+    │   ├── ai_analysis.py       ✅ kết quả AI
+    │   └── duplicate_group.py   ✅ nhóm báo cáo nghi trùng
     ├── services/                ⬜ nghiệp vụ (xem mục 4)
     ├── ai/                      ⬜ bộ phân loại AI (xem mục 4)
     ├── forms/                   ⬜ Flask-WTF forms
@@ -127,23 +142,30 @@ task-app/
 
 ### app/ lõi
 - **app/\_\_init\_\_.py**: `create_app()`. Khi thêm blueprint mới, hãy import và `register_blueprint` ở đây. Error handler 403/404/500 và filter Jinja cũng đăng ký ở đây.
-- **extensions.py**: khởi tạo mọi extension ở một chỗ để tránh import vòng. Sau này sẽ thêm `migrate = Migrate()` và `csrf = CSRFProtect()`.
+- **extensions.py**: khởi tạo mọi extension ở một chỗ để tránh import vòng. Đã có `migrate = Migrate()`. Sau này sẽ thêm `csrf = CSRFProtect()`.
 - **constants.py**: định nghĩa trạng thái, độ khẩn cấp và vai trò bằng Enum. Mã lưu trong DB là tiếng Anh, nhãn hiển thị là tiếng Nhật. Template và service đều lấy nhãn từ đây, không viết tay.
+  - Lấy nhãn: `ReportStatus.label_of(code)`. Lấy trạng thái kế tiếp hợp lệ: `next_statuses(current, role)`.
+  - `CHECK` của model lấy danh sách giá trị qua `XXX.check_sql('cột')`. Khi thêm giá trị vào Enum, phải tạo migration để cập nhật `CHECK`.
 
 ### app/models/
-Mỗi file là một nhóm bảng. Khi thêm model mới, phải import nó trong `models/__init__.py`.
+Mỗi file là một nhóm bảng. Khi thêm model mới, phải import nó trong `models/__init__.py`, rồi tạo migration. Thiết kế chi tiết gồm cột, kiểu, ràng buộc, index và lý do của từng cột nằm trong [docs/db/db_design.md](docs/db/db_design.md).
 
 | Bảng | Nội dung chính |
 |---|---|
-| `users` | Đã có. Dự định thêm `department_id` cho nhân viên |
-| `departments` | 担当部署 như 道路課, 公園課, 環境課 |
-| `categories` | 道路, 街灯, 公園, 不法投棄, その他. Mỗi loại có phòng ban mặc định |
-| `reports` | Nội dung, vĩ độ, kinh độ, địa chỉ, `status`, `urgency`, `priority`, `category_id`, `department_id`, `citizen_id`, `duplicate_of_id`, thời gian |
-| `report_photos` | `report_id`, đường dẫn file, loại file |
-| `report_status_histories` | Trạng thái cũ và mới, người đổi, ghi chú, thời điểm. Đây là 対応履歴. Ghi chú có thể dùng làm lời nhắn gửi người dân |
-| `ai_analyses` | Mỗi lần AI phân tích: category, urgency, department, priority, độ tin cậy, phản hồi gốc, tên model |
+| `users` | Đã có. Thêm `icon_path` cho アイコン設定. `department_id` cho nhân viên để sau, khi có màn hình dùng tới |
+| `departments` | 担当部署. Tạm thời có 道路管理課, 道路照明課, 公園緑地課, 環境課, 市民生活課 |
+| `categories` | `code` (khoá cố định cho AI), `name` (道路, 街灯, 公園, 不法投棄, その他), `default_department_id` |
+| `reports` | `citizen_id`, `title` (件名), `description`, `latitude`, `longitude`, `address`, `status`, `category_id`, `urgency`, `department_id`, `duplicate_group_id`, `duplicate_of_id`, thời gian. `category_id`, `urgency`, `department_id` là giá trị đã chốt, NULL nghĩa là chưa phân loại |
+| `report_photos` | `report_id`, `file_path` (tên ngẫu nhiên), `content_type` |
+| `report_status_histories` | `from_status` (NULL là mới tiếp nhận), `to_status`, `changed_by_id` (NULL là hệ thống), `comment` (ghi chú nội bộ), `public_message` (lời nhắn gửi người dân), thời điểm. Đây là 対応履歴, chỉ thêm dòng |
+| `ai_analyses` | Mỗi lần AI phân tích: `status` (succeeded/failed), category, urgency, department, `confidence` (0 đến 1), `raw_response` (JSONB), `model_name`, `error_message` |
+| `duplicate_groups` | Nhóm báo cáo nghi trùng: `status` (open/merged/dismissed), `similarity`, người và thời điểm xử lý |
 
-Kết quả AI được lưu ở bảng riêng, không ghi đè lên `reports`. Nhờ vậy nhân viên có thể sửa phân loại mà vẫn giữ kết quả AI gốc. Dữ liệu này cũng dùng để đo độ chính xác của AI so với quyết định cuối cùng của nhân viên.
+Không lưu `priority`. 対応優先度 tính từ `urgency` và trạng thái chưa xong. Mọi báo cáo đều do người dân gửi (`citizen_id NOT NULL`).
+
+Kết quả AI được lưu ở bảng riêng, không ghi đè lên `reports`. Nhờ vậy nhân viên có thể sửa phân loại mà vẫn giữ kết quả AI gốc. Dữ liệu này cũng dùng để đo độ chính xác của AI so với quyết định cuối cùng của nhân viên. Lần phân tích mới nhất là dòng có `created_at` lớn nhất, nếu bằng nhau thì lấy `id` lớn nhất (`Report.latest_ai_analysis`).
+
+**Nhóm trùng.** Một báo cáo thuộc tối đa một nhóm qua `duplicate_group_id`. Khi 統合, các báo cáo còn lại nhận `duplicate_of_id` trỏ về 代表案件, và nhóm chuyển sang `merged`.
 
 ### Luồng trạng thái
 
@@ -261,10 +283,10 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 ## 7. Lộ trình phát triển
 
 1. ✅ Tách app thành package, dùng `create_app()` và blueprint theo actor.
-2. ⬜ Thêm **Flask-Migrate**: `pip install Flask-Migrate`, khai báo trong `extensions.py`, chạy `flask db init` và `flask db migrate`. Sau đó seed không cần `create_all` nữa.
+2. ✅ Thêm **Flask-Migrate**. Đã khai báo trong `extensions.py` và có thư mục `migrations/`. Seed không còn gọi `create_all`.
 3. ⬜ Thêm **Flask-WTF** để có CSRF cho mọi form.
 4. ⬜ Viết lại **đặt lại mật khẩu**: người dân nhận token qua email, nhân viên và admin được admin cấp lại.
-5. ⬜ Viết `constants.py` và các model phòng ban, danh mục, báo cáo, ảnh, lịch sử, kết quả AI, kèm migration và dữ liệu seed.
+5. ✅ Viết `constants.py` và các model phòng ban, danh mục, báo cáo, ảnh, lịch sử, kết quả AI, nhóm trùng, kèm migration và dữ liệu seed. Các service vẫn trả dữ liệu mẫu, sẽ chuyển sang DB ở các bước 6 và 7.
 6. ⬜ Làm luồng báo cáo của người dân với `rule_based.py`.
 7. ⬜ Làm danh sách, chi tiết, cập nhật trạng thái và lịch sử cho nhân viên. Thay số liệu hard-code trên dashboard bằng dữ liệu thật.
 8. ⬜ Thêm blueprint `api`, bản đồ Leaflet và biểu đồ.
@@ -276,13 +298,26 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 
 - **Đặt lại mật khẩu chưa thực sự đổi mật khẩu.** Ba route reset chỉ kiểm tra form rồi chuyển trang. Không được lưu mật khẩu theo form hiện tại, vì ai biết email người khác cũng sẽ đổi được mật khẩu của họ. Xem bước 4 của lộ trình.
 - **Chưa có CSRF.** Xem bước 3.
-- **Form báo cáo chưa gửi dữ liệu.** Ô ảnh và ô nội dung chưa có `name`, form thiếu `enctype="multipart/form-data"`, vị trí đang là chuỗi cố định.
+- **Form báo cáo chưa lưu dữ liệu.** Form đã có đủ ô nhập ứng với bảng `reports` và `report_photos`: `title`, `photos`, `address`, `latitude`, `longitude` (ẩn), `description`, kèm `enctype="multipart/form-data"`. Còn thiếu hai việc:
+  - Route `citizen.report_new` vẫn chỉ chuyển sang trang hoàn tất, chưa gọi `report_service`.
+  - `latitude` và `longitude` chưa được điền vì `report_form.js` (lấy GPS) chưa viết. Cột trong DB là `NOT NULL`, nên phải làm phần lấy vị trí trước khi lưu.
 - **Dashboard nhân viên** đang hiển thị số liệu và biểu đồ hard-code.
 - **Các màn hình nhân viên** 報告一覧, 報告詳細, 地図表示, AI分析・自動判定, 対応管理・重複確認, 案件統合, 一括ステータス変更, 統計 lấy dữ liệu mẫu từ `report_service`, `stats_service`, `duplicate_service`, chưa đọc DB. Tìm kiếm, lọc theo ID và lọc bản đồ đang lọc trên dữ liệu mẫu trong service. Thẻ tổng hợp trên màn hình AI分析 vẫn hard-code. Nút AIモデル再実行 chưa hoạt động.
 - **Các thao tác cập nhật của nhân viên chưa lưu gì.** Cập nhật trạng thái ở 報告詳細, 統合 và 一括ステータス変更 chỉ `flash` rồi quay lại trang. Khi có model, trạng thái phải đổi qua `status_service`, còn 統合 đặt `duplicate_of_id` qua `duplicate_service`. Cột ghi chú ở 報告詳細 chưa được dùng.
 - **Trạng thái 保留 và 対象外 trong bản thiết kế chưa có trong luồng trạng thái.** Bản thiết kế có thêm 保留・他部署へ引継ぎ, 保留・経過観察, 対象外・対応不要. Màn hình hiện chỉ dùng 未対応, 対応中, 対応済み theo mục 4. Nếu cần các trạng thái này, phải sửa luồng trạng thái trong README trước.
-- **Cờ `ai_detected` trong dữ liệu mẫu của `duplicate_service`** quyết định nút AI確認 hay 個別確認. Cách xác định "báo cáo do AI phát hiện" cần được định nghĩa lại khi có model `Report` và `AiAnalysis`.
+- **Cờ `ai_detected` trong dữ liệu mẫu của `duplicate_service`** quyết định nút AI確認 hay 個別確認. Đã chốt như sau:
+  - Không có báo cáo do AI tạo. Người báo cáo luôn là người dân.
+  - Khi chuyển service sang DB, `ai_detected` là giá trị tính được: báo cáo có `ai_analyses` thành công thì `ai_detected` đúng.
+  - Dữ liệu mẫu có người báo cáo "AIシステム" sẽ bỏ khi chuyển.
 - **レポート出力 chỉ là giao diện.** Modal chọn PDF/CSV chỉ hiện thông báo hoàn tất trên trình duyệt, chưa tạo file.
 - **Bản đồ** đang là ảnh tĩnh `static/images/map.avif` với ghim đặt theo `top`/`left` (%). Sẽ thay bằng Leaflet (`map.js`) dùng vĩ độ, kinh độ.
 - **Danh sách báo cáo của người dân** lấy dữ liệu mẫu từ `report_service.list_by_citizen()`, chưa đọc DB. Khi có model `Report` và `constants.py`, chỉ cần sửa hàm này, route không đổi.
-- **Màn hình プロフィール設定 chưa lưu gì.** Nút 変更を保存する chỉ hiện `alert` mẫu, nút パスワードを変更する đang trỏ tới trang reset công khai `auth.reset_password` (sẽ đổi sang `/citizen/password`). Màn hình アイコン設定 chưa lưu ảnh: ô file chưa có `name`, form thiếu `enctype`, `users` chưa có cột ảnh đại diện.
+- **Màn hình プロフィール設定 chưa lưu gì.** Nút 変更を保存する chỉ hiện `alert` mẫu, nút パスワードを変更する đang trỏ tới trang reset công khai `auth.reset_password` (sẽ đổi sang `/citizen/password`). Màn hình アイコン設定 chưa lưu ảnh: ô file chưa có `name`, form thiếu `enctype`. Cột `users.icon_path` đã có.
+- **Template còn viết cứng hoặc dùng nhãn tiếng Nhật làm value.** Cần sửa khi chuyển service sang DB:
+  - マイページ viết cứng tên "山田 太郎", số liệu và danh sách 最近の報告.
+  - Thẻ tổng hợp ở AI分析 viết cứng.
+  - Ô chọn trạng thái ở 報告詳細 cho chọn 未対応. Nên chỉ hiện `next_statuses()`.
+  - Nhãn "AI判定担当部署" ở 報告詳細 đang hiện phòng ban đã chốt, không phải gợi ý của AI.
+  - Bộ lọc bản đồ thiếu 不法投棄 và dùng nhãn làm value. Nên dùng `categories.id` và mã `Urgency`.
+  - Tên カテゴリ ở 統計 và dashboard khác với master.
+  - Danh sách đầy đủ ở mục 9 của [docs/db/db_design.md](docs/db/db_design.md).
