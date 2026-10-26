@@ -1,1 +1,116 @@
-{# ユーザーの作成・編集 #}
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<div class="container-fluid py-4">
+    <!-- 戻るボタン -->
+    <div class="mb-3">
+        <a href="{{ url_for('admin.portal') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>システム管理ポータルへ戻る</a>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-md-8 col-lg-6">
+            <!-- 画面側の入力チェックのエラー表示エリア -->
+            <div id="input-errors"></div>
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-dark text-white py-3">
+                    <h5 class="card-title mb-0 fs-6 fw-bold"><i class="bi bi-person-plus-fill me-2 text-primary"></i>新規職員アカウント登録</h5>
+                </div>
+                <div class="card-body p-4">
+                    <form action="{{ url_for('admin.user_register') }}" method="POST">
+                        <div class="mb-3">
+                            <label for="staff_name" class="form-label fw-bold small">職員氏名 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="staff_name" name="staff_name" placeholder="例: 埼玉県 太郎" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="login_id" class="form-label fw-bold small">ログインID <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="login_id" name="login_id" placeholder="例: admin01" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="department" class="form-label fw-bold small">所属部署 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="department" name="department" required>
+                                <option value="" selected disabled>所属部署を選択してください</option>
+                                <option value="道路維持課">道路維持課</option>
+                                <option value="都市公園課">都市公園課</option>
+                                <option value="環境管理課">環境管理課</option>
+                                <option value="防犯・交通安全課">防犯・交通安全課</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="role" class="form-label fw-bold small">アカウント権限 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="role" name="role" required>
+                                <option value="" selected disabled>アカウントの利用者を選択してください</option>
+                                <option value="staff">行政職員</option>
+                                <option value="admin">管理者</option>
+                            </select>
+                        </div>
+                        <div class="mb-4">
+                            <label for="password" class="form-label fw-bold small">初期パスワード <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="password" name="password" placeholder="8文字以上の英数字" required>
+                        </div>
+                        <!-- 初期パスワード（確認用） -->
+                        <div class="mb-3">
+                            <label for="password_confirm" class="form-label fw-bold small">初期パスワード（確認用） <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="password_confirm" name="password_confirm" placeholder="もう一度入力してください" required>
+                        </div>
+                        <div class="d-flex justify-content-end gap-2">
+                            <a href="{{ url_for('admin.portal') }}" class="btn btn-secondary px-4">キャンセル</a>
+                            <button type="submit" class="btn btn-primary px-4 fw-bold">登録する</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const form = document.querySelector('form');
+    const nameInput = document.getElementById('staff_name');
+    const loginIdInput = document.getElementById('login_id');
+    const departmentSelect = document.getElementById('department');
+    const roleSelect = document.getElementById('role');
+    const passwordInput = document.getElementById('password');
+    const confirmInput = document.getElementById('password_confirm');
+    const errorArea = document.getElementById('input-errors');
+
+    // 未入力・文字数・一致チェック（ログイン画面と同じく、最初のエラー項目にブラウザ標準の吹き出しで表示する）
+    form.querySelector('button[type="submit"]').addEventListener('click', function (event) {
+      const name = nameInput.value.trim();
+      const loginId = loginIdInput.value.trim();
+      const department = departmentSelect.value;
+      const role = roleSelect.value;
+      const password = passwordInput.value;
+      const confirm = confirmInput.value;
+
+      // 前回のメッセージを消してから判定する
+      errorArea.innerHTML = '';
+      [nameInput, loginIdInput, departmentSelect, roleSelect, passwordInput, confirmInput].forEach(function (input) { input.setCustomValidity(''); });
+
+      // すべて未入力の場合は1つのメッセージにまとめて、送信せずに画面上部に表示する（ログイン画面と同じ）
+      if (!name && !loginId && !department && !role && !password && !confirm) {
+        event.preventDefault();
+        const alert = document.createElement('div');
+        alert.className = 'alert alert-danger alert-dismissible fade show mb-3';
+        alert.setAttribute('role', 'alert');
+        alert.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><span></span>'
+            + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
+        alert.querySelector('span').textContent = '職員氏名、ログインID、所属部署、アカウント権限、初期パスワードを入力してください。';
+        errorArea.appendChild(alert);
+        return;
+      }
+      if (!name) nameInput.setCustomValidity('職員氏名を入力してください。');
+      if (!loginId) loginIdInput.setCustomValidity('ログインIDを入力してください。');
+      // 職員・管理者IDに @ は使用不可
+      else if (loginId.includes('@')) loginIdInput.setCustomValidity('ログインIDに @ は使用できません。');
+      if (!department) departmentSelect.setCustomValidity('所属部署を選択してください。');
+      if (!role) roleSelect.setCustomValidity('アカウント権限を選択してください。');
+      if (!password) passwordInput.setCustomValidity('初期パスワードを入力してください。');
+      else if (password.length < 8) passwordInput.setCustomValidity('このテキストは8文字以上で指定してください（現在は' + password.length + '文字です）。');
+      if (!confirm) confirmInput.setCustomValidity('初期パスワード（確認用）を入力してください。');
+      // 初期パスワードが8文字以上ある場合のみ、一致チェックを行う
+      else if (password.length >= 8 && password !== confirm) confirmInput.setCustomValidity('パスワードが一致しません。');
+    });
+  });
+</script>
+{% endblock %}

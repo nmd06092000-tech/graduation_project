@@ -1,0 +1,25 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<div class="container mt-5" style="max-width: 600px;">
+    <div class="card shadow-sm border-0">
+        <div class="card-body text-center p-5">
+            <!-- 完了アイコン -->
+            <div class="mb-4 text-success">
+                <i class="bi bi-check-circle-fill" style="font-size: 3.5rem;"></i>
+            </div>
+
+            <h3 class="fw-bold mb-3">職員アカウントの登録が完了しました</h3>
+            <p class="text-muted mb-4">
+                新しい職員アカウントが正常に登録されました。<br>
+                システム管理ポータルから確認・管理が可能です。
+            </p>
+
+            <!-- ポータルへ戻るボタン -->
+            <a href="{{ url_for('admin.portal') }}" class="btn btn-primary px-4">
+                システム管理ポータルへ戻る
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

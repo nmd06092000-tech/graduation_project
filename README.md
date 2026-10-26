@@ -243,6 +243,7 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 職員 | 統計 | `/staff/stats` ✅, `/api/stats` ⬜ | ✅ `staff.stats` | stats_service |
 | 管理者 | ポータル | `/admin/portal` | ✅ `admin.portal` | |
 | 管理者 | ユーザー一覧 | `/admin/users` | ⬜ | user_service |
+| 管理者 | 新規職員アカウント登録 | `/admin/users/register`, `/admin/users/register/complete` | ✅ `admin.user_register`, `admin.user_register_complete` | user_service |
 | 管理者 | システム管理 | `/admin/departments`, `/admin/categories` | ⬜ | user_service |
 
 ### app/templates/, app/static/
@@ -313,6 +314,11 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 - **Bản đồ** đang là ảnh tĩnh `static/images/map.avif` với ghim đặt theo `top`/`left` (%). Sẽ thay bằng Leaflet (`map.js`) dùng vĩ độ, kinh độ.
 - **Danh sách báo cáo của người dân** lấy dữ liệu mẫu từ `report_service.list_by_citizen()`, chưa đọc DB. Khi có model `Report` và `constants.py`, chỉ cần sửa hàm này, route không đổi.
 - **Màn hình プロフィール設定 chưa lưu gì.** Nút 変更を保存する chỉ hiện `alert` mẫu, nút パスワードを変更する đang trỏ tới trang reset công khai `auth.reset_password` (sẽ đổi sang `/citizen/password`). Màn hình アイコン設定 chưa lưu ảnh: ô file chưa có `name`, form thiếu `enctype`. Cột `users.icon_path` đã có.
+- **Màn hình 新規職員アカウント登録 chưa lưu gì.** Route `admin.user_register` chỉ chuyển sang trang hoàn tất. Khi làm `user_service` cần:
+  - Kiểm tra ID không chứa `@`, mật khẩu tối thiểu 8 ký tự, mật khẩu xác nhận khớp, ID chưa tồn tại.
+  - Thêm cột `users.department_id` (kèm migration) để lưu 所属部署.
+  - Ô 所属部署 đang viết cứng tên phòng ban theo bản thiết kế (道路維持課, 都市公園課…), khác với master `departments`. Nên lấy từ bảng `departments` và dùng `id` làm value.
+  - Danh sách tài khoản ở ポータル vẫn viết cứng.
 - **Template còn viết cứng hoặc dùng nhãn tiếng Nhật làm value.** Cần sửa khi chuyển service sang DB:
   - マイページ viết cứng tên "山田 太郎", số liệu và danh sách 最近の報告.
   - Thẻ tổng hợp ở AI分析 viết cứng.
