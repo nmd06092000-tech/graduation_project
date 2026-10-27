@@ -1,0 +1,717 @@
+/* =================================
+   トップ画面：スマホ専用レイアウト
+================================= */
+@media (max-width: 576px) {
+
+    /* 背景画像 */
+    .top-page-wrapper {
+        background-position: center center !important;
+        background-size: cover !important;
+    }
+
+    /* アカウント作成ボタン */
+    .top-page-wrapper > .position-absolute {
+        padding: 12px !important;
+    }
+
+    .top-page-wrapper > .position-absolute .btn {
+        font-size: 0.8rem;
+        padding: 7px 10px;
+    }
+
+    /* カードの配置と余白 */
+    .top-page-wrapper > .container {
+        padding: 75px 10px 25px !important;
+        min-height: 100vh !important;
+    }
+
+    .top-page-content {
+        width: 100%;
+        padding: 18px 16px !important;
+        border-radius: 16px !important;
+        background: rgba(255, 255, 255, 0.94) !important;
+    }
+
+    /* カード内のリンク */
+    .top-page-content .d-flex.justify-content-end {
+        justify-content: center !important;
+        gap: 20px !important;
+        margin-bottom: 18px !important;
+        font-size: 0.8rem;
+    }
+
+    /* 地図ピンのアイコン */
+    .top-page-content .display-3 {
+        font-size: 2.5rem;
+    }
+
+    /* タイトル */
+    .top-page-content h2 {
+        font-size: 1.2rem;
+        line-height: 1.5;
+        margin-bottom: 12px !important;
+        overflow-wrap: normal;
+    }
+
+    /* キャッチコピー */
+    .top-page-content > p.small {
+        font-size: 0.82rem;
+        line-height: 1.6;
+    }
+
+    /* サービスの説明 */
+    .top-page-content p.text-secondary {
+        font-size: 0.78rem;
+        line-height: 1.8;
+        margin-bottom: 18px !important;
+    }
+
+    /* ログインボタン */
+    .top-page-content .d-grid {
+        gap: 10px !important;
+    }
+
+    .top-page-content .btn-lg {
+        font-size: 0.9rem;
+        line-height: 1.5;
+        padding: 10px 8px !important;
+        white-space: normal;
+        border-radius: 8px;
+    }
+}
+
+/* =================================
+   はじめての方向けページ：スマホ対応
+================================= */
+@media (max-width: 576px) {
+
+    /* ページ全体 */
+    .guide-page {
+        width: 100%;
+        max-width: 100%;
+        margin-top: 12px !important;
+        margin-bottom: 12px !important;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    /* 白いカード */
+    .guide-content {
+        padding: 20px 16px !important;
+        border-radius: 14px !important;
+    }
+
+    /* 見出し */
+    .guide-content h1 {
+        font-size: 1.3rem;
+        line-height: 1.5;
+    }
+
+    .guide-content h2 {
+        font-size: 1.1rem;
+        line-height: 1.5;
+    }
+
+    .guide-content h3 {
+        font-size: 1rem;
+        line-height: 1.5;
+    }
+
+    /* 説明文 */
+    .guide-content p {
+        font-size: 0.9rem;
+        line-height: 1.8;
+        overflow-wrap: break-word;
+    }
+
+    /* 手順カード */
+    .guide-content .card {
+        margin-bottom: 12px;
+    }
+
+    /* 戻るボタン */
+    .guide-content a.btn {
+        display: inline-block;
+        max-width: 100%;
+        padding: 10px 18px;
+        font-size: 0.9rem;
+        white-space: normal;
+    }
+}
+
+/* =================================
+   FAQ画面：スマホ対応
+================================= */
+@media (max-width: 576px) {
+
+    /* ページ全体 */
+    .faq-page {
+        padding: 12px 12px !important;
+    }
+
+    /* 白いカード */
+    .faq-content {
+        padding: 20px 16px !important;
+        border-radius: 14px !important;
+    }
+
+    /* タイトル */
+    .faq-content h3 {
+        font-size: 1.2rem;
+        line-height: 1.5;
+        margin-bottom: 18px !important;
+    }
+
+    /* 質問一覧 */
+    .faq-content .accordion {
+        width: 100%;
+    }
+
+    .faq-content .accordion-item {
+        border-left: 0;
+        border-right: 0;
+    }
+
+    /* 質問文 */
+    .faq-content .accordion-button {
+        padding: 14px 4px;
+        font-size: 0.9rem;
+        line-height: 1.6;
+        gap: 8px;
+        box-shadow: none;
+    }
+
+    /* 質問を開いたときの背景色 */
+    .faq-content .accordion-button:not(.collapsed) {
+        background-color: #f0f6ff;
+        color: #0d6efd;
+    }
+
+    /* 回答文 */
+    .faq-content .accordion-body {
+        padding: 12px 6px 18px;
+        font-size: 0.88rem;
+        line-height: 1.8;
+    }
+
+    /* トップページに戻るボタン */
+    .faq-content > .text-center {
+        margin-top: 20px !important;
+    }
+
+    .faq-content a.btn {
+        padding: 10px 16px;
+        font-size: 0.9rem;
+        border-radius: 8px;
+    }
+}
+
+/* FAQ画面を上下・左右の中央に配置 */
+@media (max-width: 576px) {
+
+    .faq-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px 12px !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        box-sizing: border-box;
+    }
+
+    .faq-page > .row {
+        width: 100%;
+        margin: 0;
+        justify-content: center;
+    }
+
+    .faq-page > .row > .col-12 {
+        padding: 0;
+    }
+
+    .faq-content {
+        width: 100%;
+        margin: 0 auto;
+    }
+}
+
+/* =================================
+   県民向け画面のスマホ対応
+   ================================= */
+
+@media (max-width: 576px) {
+
+    /* ヘッダー */
+    .citizen-page .citizen-header {
+        padding: 10px 12px !important;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .citizen-page .navbar-brand {
+        font-size: 14px;
+        white-space: normal;
+    }
+
+    .citizen-page .citizen-header .small {
+        font-size: 12px;
+    }
+
+    /* サイドバー */
+    .citizen-page .sidebar {
+        min-height: auto;
+        padding: 8px !important;
+    }
+
+    .citizen-page .sidebar a {
+        padding: 10px;
+        font-size: 14px;
+    }
+
+    /* メイン領域 */
+    .citizen-page .citizen-main {
+        padding: 16px !important;
+    }
+
+    /* ページタイトル */
+    .citizen-page .citizen-page-heading {
+        align-items: flex-start !important;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .citizen-page .citizen-page-heading h4 {
+        font-size: 20px;
+    }
+
+    .citizen-page .citizen-page-heading p {
+        font-size: 12px;
+    }
+
+    .citizen-page .citizen-new-report {
+        width: 100%;
+    }
+
+    /* 件数カード */
+    .citizen-page .citizen-summary .col-md-4 {
+        width: 100%;
+    }
+
+    /* 最近の報告 */
+    .citizen-page .citizen-report-item {
+        align-items: flex-start !important;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .citizen-page .citizen-report-item small {
+        display: block;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+    }
+}
+
+/* =================================
+   県民アカウント作成画面
+   ================================= */
+
+@media (max-width: 576px) {
+
+    /* 画面全体の余白 */
+    .citizen-register-page {
+        margin-top: 1.5rem !important;
+        margin-bottom: 1.5rem !important;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    /* タイトル */
+    .citizen-register-page h3 {
+        font-size: 1.4rem;
+    }
+
+    .citizen-register-page .text-muted {
+        line-height: 1.6;
+    }
+
+    /* 入力フォーム */
+    .citizen-register-page .card-body {
+        padding: 1.25rem !important;
+    }
+
+    .citizen-register-page .form-control {
+        min-height: 44px;
+        font-size: 16px;
+    }
+
+    /* 登録ボタン */
+    .citizen-register-page button[type="submit"] {
+        min-height: 48px;
+    }
+}
+
+/* アカウント作成完了画面 */
+.register-done-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* 中央配置を維持 */
+.register-done-page > .row {
+    width: 100%;
+    justify-content: center;
+    margin: 0;
+}
+
+/* スマホサイズ */
+@media (max-width: 576px) {
+    .register-done-page {
+        padding: 20px 12px;
+    }
+}
+
+/* 新規報告画面：スマホ専用 */
+@media (max-width: 576px) {
+
+    .report-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px 12px !important;
+        margin-top: 0 !important;
+        margin-bottom: 0 !important;
+        box-sizing: border-box;
+    }
+
+    .report-page > .row {
+        width: 100%;
+        margin: 0;
+        justify-content: center;
+    }
+
+    .report-page > .row > .col-12 {
+        padding: 0;
+    }
+
+    .report-content {
+        width: 100%;
+        margin: 0 auto;
+        border-radius: 12px;
+    }
+
+    .report-content .card-body {
+        padding: 20px 16px !important;
+    }
+
+    .report-content h4 {
+        font-size: 1.2rem;
+        line-height: 1.5;
+    }
+
+    .report-content .form-label {
+        font-size: 0.9rem;
+    }
+
+    .report-content .form-control {
+        width: 100%;
+        min-height: 44px;
+        font-size: 16px;
+        box-sizing: border-box;
+    }
+
+    .report-content textarea.form-control {
+        min-height: 110px;
+        line-height: 1.7;
+    }
+
+    .report-content button[type="submit"] {
+        width: 100%;
+        min-height: 48px;
+        font-size: 1rem;
+        border-radius: 8px;
+    }
+
+    .report-page .text-center {
+        margin-top: 18px !important;
+    }
+}
+
+ /* スマホだけに適用する */
+    @media (max-width: 767.98px) {
+
+        /* 撮影エリアの高さを調整 */
+        .camera-area {
+            height: 300px !important;
+        }
+
+        /* ボタンを縦に並べる */
+        .camera-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* ボタンを押しやすくする */
+        .camera-buttons .btn {
+            width: 100%;
+            padding: 12px;
+        }
+    }
+
+/* スマホだけ適用 */
+@media (max-width: 767.98px) {
+
+    /* 画面全体を縦方向の中央に配置 */
+    body {
+        min-height: 100vh;
+    }
+
+    body > main {
+        min-height: calc(100vh - 60px);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+}
+
+/* スマホだけ適用 */
+@media (max-width: 767.98px) {
+
+    /* 画面全体を中央に配置 */
+    body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    /* コンテンツ全体の幅 */
+    body > * {
+        width: 100%;
+    }
+}
+
+/* 撮影写真の確認画面 */
+.photo-confirm-page {
+    max-width: 850px;
+}
+
+.photo-confirm-card {
+    border-radius: 14px;
+}
+
+.camera-area {
+    height: 300px;
+}
+
+.photo-icon {
+    font-size: 3rem;
+}
+
+/* PCではボタンを横並びにする */
+.camera-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.camera-buttons .btn {
+    min-width: 190px;
+    padding: 10px 18px;
+    border-radius: 8px;
+}
+
+/* スマホだけ調整 */
+@media (max-width: 767.98px) {
+
+    .photo-confirm-page {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .photo-confirm-page h2 {
+        font-size: 1.4rem;
+    }
+
+    .photo-confirm-card .card-body {
+        padding: 20px !important;
+    }
+
+    .camera-area {
+        height: 240px;
+    }
+
+    .camera-buttons {
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .camera-buttons .btn {
+        width: 100%;
+        min-width: 0;
+        margin-left: 0 !important;
+    }
+}
+
+/* 報告完了画面：スマホ専用 */
+@media (max-width: 576px) {
+
+    /* メイン領域 */
+    .citizen-report-complete-page {
+        padding: 16px 12px !important;
+        box-sizing: border-box;
+    }
+
+    /* 完了メッセージの配置 */
+    .report-complete-row {
+        min-height: calc(100vh - 100px);
+        margin-top: 0 !important;
+        margin-bottom: 0;
+        align-items: center;
+    }
+
+    /* カードの幅と余白 */
+    .report-complete-card {
+        width: 100%;
+        padding: 20px 16px !important;
+        border-radius: 12px;
+        box-sizing: border-box;
+    }
+
+    /* チェックマーク */
+    .report-complete-card .text-success {
+        font-size: 2.5rem !important;
+    }
+
+    /* 見出し */
+    .report-complete-card h4 {
+        font-size: 1.2rem;
+        line-height: 1.6;
+    }
+
+    /* 説明文 */
+    .report-complete-card p {
+        font-size: 0.9rem;
+        line-height: 1.8;
+    }
+
+    /* マイページに戻るボタン */
+    .report-complete-card .btn {
+        width: 100%;
+        min-height: 48px;
+        padding: 12px;
+        font-size: 1rem;
+        border-radius: 8px;
+    }
+}
+
+/* =================================
+   報告一覧画面：スマホ専用
+================================= */
+@media (max-width: 576px) {
+
+    /* メイン領域 */
+    .citizen-reports-page {
+        padding: 12px !important;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+
+    /* 報告一覧のカード */
+    .citizen-reports-card {
+        width: 100%;
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    /* 各報告の項目 */
+    .citizen-report-list-item {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 12px;
+        padding: 16px !important;
+    }
+
+    /* 報告タイトル */
+    .citizen-report-list-item h6 {
+        font-size: 1rem;
+        line-height: 1.6;
+        overflow-wrap: anywhere;
+    }
+
+    /* 位置情報・日付 */
+    .citizen-report-list-item small {
+        display: block;
+        font-size: 0.8rem;
+        line-height: 1.7;
+        overflow-wrap: anywhere;
+    }
+
+    /* 対応状況 */
+    .citizen-report-list-item .badge {
+        display: inline-block;
+        font-size: 0.8rem;
+        padding: 8px 12px !important;
+        white-space: nowrap;
+    }
+}
+
+/* =================================
+   プロフィール設定画面：スマホ対応
+================================= */
+@media (max-width: 576px) {
+
+    /* プロフィール設定画面 */
+    .citizen-profile-page {
+        padding: 12px !important;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+
+    /* プロフィールカード */
+    .citizen-profile-page .card {
+        width: 100%;
+        border-radius: 12px;
+    }
+
+    /* カード内の余白 */
+    .citizen-profile-page .card-body {
+        padding: 20px 16px !important;
+    }
+
+    /* ページタイトル */
+    .citizen-profile-page h4 {
+        font-size: 1.2rem;
+        line-height: 1.6;
+    }
+
+    /* 入力欄 */
+    .citizen-profile-page .form-control {
+        width: 100%;
+        min-height: 44px;
+        font-size: 16px;
+        box-sizing: border-box;
+    }
+
+    /* 入力項目のラベル */
+    .citizen-profile-page .form-label {
+        font-size: 0.9rem;
+    }
+
+    /* アイコン変更ボタン */
+    .citizen-profile-page a.btn {
+        max-width: 100%;
+        white-space: normal;
+    }
+
+    /* 保存ボタン */
+    .citizen-profile-page button {
+        min-height: 48px;
+    }
+}

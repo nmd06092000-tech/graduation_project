@@ -26,6 +26,9 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     # False の場合はログイン不可（利用停止）
     is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=sa.true())
+    # 市民の郵便番号（「123-4567」の形で保存）と住所（埼玉県内）。職員・管理者は NULL
+    postal_code = db.Column(db.String(8))
+    address = db.Column(db.String(255))
     # アイコン画像の保存パス（UPLOAD_FOLDER からの相対パス）。NULL の場合は既定アイコン
     icon_path = db.Column(db.String(255))
     last_login_at = db.Column(db.DateTime(timezone=True))

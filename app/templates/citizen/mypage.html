@@ -1,8 +1,9 @@
 {% extends 'layouts/base.html' %}
 
 {% block layout %}
+<div class="citizen-page">
 <!-- ヘッダー -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4">
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4 citizen-header">
     <span class="navbar-brand fw-bold text-primary"><i class="bi bi-geo-alt-fill me-1"></i>埼玉県の困りごと報告システム</span>
     <div class="ms-auto d-flex align-items-center">
         <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
@@ -25,17 +26,17 @@
         </div>
 
         <!-- メイン領域 -->
-        <div class="col-md-10 p-4">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+        <div class="col-md-10 p-4 citizen-main">
+            <div class="d-flex justify-content-between align-items-center mb-4 citizen-page-heading">
                 <div>
                     <h4 class="fw-bold">マイページ</h4>
                     <p class="text-muted small mb-0">ようこそ、山田 太郎 さん。あなたが報告した内容の一覧を確認できます。</p>
                 </div>
-                <a href="{{ url_for('citizen.report_new') }}" class="btn btn-primary fw-bold">+ 新しい困りごとを報告</a>
+                <a href="{{ url_for('citizen.report_new') }}" class="btn btn-primary fw-bold citizen-new-report">+ 新しい困りごとを報告</a>
             </div>
 
             <!-- サマリーカード -->
-            <div class="row g-3 mb-4">
+            <div class="row g-3 mb-4 citizen-summary">
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3 text-center">
                         <small class="text-muted">報告した件数</small>
@@ -60,21 +61,21 @@
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white fw-bold py-3">最近の報告</div>
                 <div class="list-group list-group-flush">
-                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center citizen-report-item">
                         <div>
                             <h6 class="fw-bold mb-1">道路の穴</h6>
                             <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇町1丁目付近 | 2026/10/01 10:23</small>
                         </div>
                         <span class="badge bg-warning text-dark px-3 py-2">対応中</span>
                     </div>
-                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center citizen-report-item">
                         <div>
                             <h6 class="fw-bold mb-1">公園の遊具の破損</h6>
                             <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇公園 | 2026/09/28 15:40</small>
                         </div>
                         <span class="badge bg-danger px-3 py-2">未対応</span>
                     </div>
-                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center citizen-report-item">
                         <div>
                             <h6 class="fw-bold mb-1">街灯の故障</h6>
                             <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇町3丁目 | 2026/09/20 09:15</small>
@@ -104,5 +105,6 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}

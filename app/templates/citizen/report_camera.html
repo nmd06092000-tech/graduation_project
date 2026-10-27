@@ -1,0 +1,21 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<div class="container py-4">
+    <h2 class="mb-4">写真撮影</h2>
+
+    <div class="card shadow-sm">
+        <div class="card-body text-center p-4">
+            <!-- 撮影画面（現在はプレビューのみ） -->
+            <div class="bg-dark text-white rounded d-flex align-items-center justify-content-center mb-4" style="height: 300px;">
+                <p class="fs-5 mb-0">撮影画面</p>
+            </div>
+
+            <p class="text-muted">報告したい場所の写真を撮影してください。</p>
+
+            <a href="{{ url_for('citizen.report_photo') }}" class="btn btn-primary">撮影する</a>
+            <a href="{{ url_for('citizen.report_new') }}" class="btn btn-outline-secondary ms-2">戻る</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

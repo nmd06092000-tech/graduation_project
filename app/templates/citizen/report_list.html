@@ -1,8 +1,9 @@
 {% extends 'layouts/base.html' %}
 
 {% block layout %}
+<div class="citizen-page">
 <!-- ヘッダー -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4">
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4 citizen-header">
     <span class="navbar-brand fw-bold text-primary"><i class="bi bi-geo-alt-fill me-1"></i>埼玉県の困りごと報告システム</span>
     <div class="ms-auto d-flex align-items-center">
         <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
@@ -23,24 +24,29 @@
         </div>
 
         <!-- メイン領域 -->
-        <div class="col-md-10 p-4">
-            <div class="card border-0 shadow-sm">
+        <div class="col-12 col-md-10 p-4 citizen-main citizen-reports-page">
+            <div class="card border-0 shadow-sm citizen-reports-card">
                 <div class="card-body p-0">
+                    <!-- 報告一覧 -->
                     <div class="list-group list-group-flush">
                         {% for report in reports %}
-                        <div class="list-group-item p-3 d-flex justify-content-between align-items-center">
-                            <div>
-                                <h6 class="fw-bold mb-1">{{ report.title }}</h6>
-                                <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ report.location }} | {{ report.date }}</small>
-                            </div>
-                            <div>
-                                {% if report.status == '対応中' %}
-                                    <span class="badge bg-warning text-dark px-3 py-2">対応中</span>
-                                {% elif report.status == '未対応' %}
-                                    <span class="badge bg-danger px-3 py-2">未対応</span>
-                                {% else %}
-                                    <span class="badge bg-success px-3 py-2">対応済み</span>
-                                {% endif %}
+                        <div class="list-group-item p-3 citizen-report-list-item">
+                            <div class="d-flex justify-content-between align-items-center gap-3">
+                                <!-- 報告内容 -->
+                                <div>
+                                    <h6 class="fw-bold mb-1">{{ report.title }}</h6>
+                                    <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ report.location }} | {{ report.date }}</small>
+                                </div>
+                                <!-- 対応状況 -->
+                                <div class="flex-shrink-0">
+                                    {% if report.status == '対応中' %}
+                                        <span class="badge bg-warning text-dark px-3 py-2">対応中</span>
+                                    {% elif report.status == '未対応' %}
+                                        <span class="badge bg-danger px-3 py-2">未対応</span>
+                                    {% else %}
+                                        <span class="badge bg-success px-3 py-2">対応済み</span>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                         {% endfor %}
@@ -68,5 +74,6 @@
             </div>
         </div>
     </div>
+</div>
 </div>
 {% endblock %}

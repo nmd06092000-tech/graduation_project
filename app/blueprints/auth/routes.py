@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timezone
 
 from flask import Blueprint, render_template, request, redirect, url_for, flash
@@ -103,14 +104,20 @@ def register():
         name = request.form.get('name', '').strip()
         # ログイン時と同じく、メールアドレスは小文字で保存する
         email = request.form.get('email', '').strip().lower()
+        postal_code = request.form.get('postal_code', '').strip()
+        address = request.form.get('address', '').strip()
         password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
 
         error = None
-        if not name or not email or not password or not confirm_password:
-            error = 'お名前、メールアドレス、パスワードのいずれかが未入力です。'
+        if not name or not email or not postal_code or not address or not password or not confirm_password:
+            error = 'お名前、メールアドレス、郵便番号、住所、パスワードのいずれかが未入力です。'
         elif len(name) > 100:
             error = 'お名前は100文字以内で入力してください。'
+        elif not re.fullmatch(r'[0-9]{3}-?[0-9]{4}', postal_code):
+            error = '郵便番号を正しく入力してください。（例：330-9301）'
+        elif len(address) > 255:
+            error = '住所は255文字以内で入力してください。'
         elif len(password) < 8:
             error = 'パスワードは8文字以上で入力してください。'
         elif password != confirm_password:
@@ -120,9 +127,14 @@ def register():
 
         if error:
             flash(error, 'danger')
-            return render_template('auth/register.html', name=name, email=email)
+            return render_template('auth/register.html', name=name, email=email,
+                                   postal_code=postal_code, address=address)
 
-        user = User(login_id=email, name=name, role=User.ROLE_CITIZEN)
+        # 郵便番号はハイフンありの形（123-4567）にそろえて保存する
+        postal_code = postal_code.replace('-', '')
+        postal_code = f'{postal_code[:3]}-{postal_code[3:]}'
+        user = User(login_id=email, name=name, role=User.ROLE_CITIZEN,
+                    postal_code=postal_code, address=address)
         user.set_password(password)
         db.session.add(user)
         try:
@@ -131,7 +143,8 @@ def register():
             # 同時登録などで一意制約に違反した場合
             db.session.rollback()
             flash('このメールアドレスは既に登録されています。', 'danger')
-            return render_template('auth/register.html', name=name, email=email)
+            return render_template('auth/register.html', name=name, email=email,
+                                   postal_code=postal_code, address=address)
 
         return redirect(url_for('auth.register_complete'))
 

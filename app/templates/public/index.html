@@ -2,18 +2,18 @@
 
 {% block layout %}
 <!-- 背景画像ラッパー（fixed を外してスクロールに追従） -->
-<div style="background: url('{{ url_for('static', filename='images/top_11_sp.jpg') }}') no-repeat center center; background-size: cover; min-height: 100vh; position: relative;">
+<div class="top-page-wrapper" style="background: url('{{ url_for('static', filename='images/top_11_sp.jpg') }}') no-repeat center center; background-size: cover; min-height: 100vh; position: relative;">
 
     <!-- 画面右上の新規登録ボタン -->
     <div class="position-absolute top-0 end-0 p-3 z-3">
         <a href="{{ url_for('auth.register') }}" class="btn btn-light shadow-sm fw-bold border text-primary">
-            <i class="bi bi-person-plus-fill me-1"></i>新規登録
+            <i class="bi bi-person-plus-fill me-1"></i>アカウント作成
         </a>
     </div>
 
     <!-- 中央カード表示エリア -->
     <div class="container d-flex align-items-center justify-content-center min-vh-100 py-5">
-        <div class="card border-0 shadow-lg p-4 p-md-5 rounded-4 text-center" style="max-width: 550px; background: rgba(255, 255, 255, 0.95);">
+        <div class="card border-0 shadow-lg p-4 p-md-5 rounded-4 text-center top-page-content" style="max-width: 550px; background: rgba(255, 255, 255, 0.95);">
             
             <!-- カード内右上リンク -->
             <div class="d-flex justify-content-end gap-3 mb-3 small">
@@ -34,7 +34,7 @@
 
             <div class="d-grid gap-3">
                 <a href="{{ url_for('auth.login_citizen') }}" class="btn btn-primary btn-lg fw-bold py-2">
-                    <i class="bi bi-person-fill me-2"></i>市民の方はこちら（ログイン）
+                    <i class="bi bi-person-fill me-2"></i>県民の方はこちら（ログイン）
                 </a>
                 <a href="{{ url_for('auth.login_staff') }}" class="btn btn-success btn-lg fw-bold py-2">
                     <i class="bi bi-building me-2"></i>行政職員の方はこちら（ログイン）

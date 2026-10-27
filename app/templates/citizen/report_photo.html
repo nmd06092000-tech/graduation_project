@@ -1,0 +1,34 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<div class="container py-4 photo-confirm-page">
+    <!-- タイトル -->
+    <h2 class="mb-4 fw-bold text-center">撮影写真の確認</h2>
+
+    <!-- 写真確認カード -->
+    <div class="card shadow-sm border-0 photo-confirm-card">
+        <div class="card-body text-center p-4">
+            <!-- 写真プレビュー -->
+            <div class="bg-light border rounded d-flex align-items-center justify-content-center mb-4 camera-area">
+                <div>
+                    <i class="bi bi-image text-secondary photo-icon"></i>
+                    <p class="text-muted mb-0 mt-2">撮影した写真のプレビュー</p>
+                </div>
+            </div>
+
+            <!-- 説明文 -->
+            <p class="text-secondary mb-4">この写真で報告を進めますか？</p>
+
+            <!-- 操作ボタン -->
+            <div class="camera-buttons">
+                <a href="{{ url_for('citizen.report_location') }}" class="btn btn-primary">
+                    <i class="bi bi-geo-alt me-1"></i>位置情報を確認する
+                </a>
+                <a href="{{ url_for('citizen.report_camera') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-counterclockwise me-1"></i>撮り直す
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

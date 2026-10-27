@@ -1,0 +1,41 @@
+{
+  "title": "認証",
+  "entities": [
+    {
+      "id": "user",
+      "name": "ユーザーアカウント",
+      "attributes": ["利用者ID(PK)", "ログインID", "お名前", "ロール", "パスワード", "有効フラグ", "最終ログイン日時"],
+      "methods": ["登録する(): void", "ログインIDで検索する(): ユーザーアカウント", "認証する(): ユーザーアカウント", "最終ログイン日時を更新する(): void"]
+    }
+  ],
+  "views": [
+    {"id": "register_view", "url": "/register", "get": "新規登録画面を表示する", "post": "入力を検証してアカウントを登録する",
+     "template": "register.html", "redirects": ["register_complete_view"],
+     "uses": [{"entity": "user", "label": "ログインIDで検索 登録"}]},
+    {"id": "register_complete_view", "url": "/register/complete", "get": "新規登録完了画面を表示する",
+     "template": "register_complete.html"},
+    {"id": "login_citizen_view", "url": "/login/citizen", "get": "市民ログイン画面を表示する", "post": "認証する",
+     "template": "login_citizen.html", "redirects": ["mypage_view"],
+     "uses": [{"entity": "user", "label": "認証 最終ログイン日時を更新"}]},
+    {"id": "mypage_view", "url": "/citizen/mypage", "get": "マイページを表示する", "template": "mypage.html"},
+    {"id": "login_staff_view", "url": "/login/staff", "get": "職員ログイン画面を表示する", "post": "認証する",
+     "template": "login_staff.html", "redirects": ["dashboard_view"],
+     "uses": [{"entity": "user", "label": "認証 最終ログイン日時を更新"}]},
+    {"id": "dashboard_view", "url": "/staff/dashboard", "get": "ダッシュボードを表示する", "template": "dashboard.html"},
+    {"id": "login_admin_view", "url": "/login/admin", "get": "管理者ログイン画面を表示する", "post": "認証する",
+     "template": "login_admin.html", "redirects": ["portal_view"],
+     "uses": [{"entity": "user", "label": "認証 最終ログイン日時を更新"}]},
+    {"id": "portal_view", "url": "/admin/portal", "get": "ポータルを表示する", "template": "portal.html"},
+    {"id": "logout_view", "url": "/logout", "get": "ログアウトする", "redirects": ["index_view"]},
+    {"id": "index_view", "url": "/", "get": "トップページを表示する", "template": "index.html"}
+  ],
+  "memo": [
+    "シーケンス図でビューから伸びている線は、クラス図のメソッドの箇所に書く（表示は GET、登録・ログインは POST）",
+    "ビューからエンティティに向かう線は、エンティティのメソッドとして書く",
+    "リダイレクトはビューからビューへ線を引く",
+    "logout_view は画面(Template)を持たず、リダイレクトのみ",
+    "新規登録後は自動ログインしない（市民ログイン画面からログインする）",
+    "マイページ・ダッシュボード・ポータルは、ログイン済みかつロール一致が必要（未ログインはログイン画面へ、ロール違いは403）",
+    "職員・管理者のログインでは、IDに @ を含むとエラーになる"
+  ]
+}

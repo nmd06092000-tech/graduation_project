@@ -83,6 +83,8 @@ task-app/
 ├── instance/uploads/            ⬜ ảnh người dân gửi lên (không commit)
 ├── migrations/                  ✅ Flask-Migrate (Alembic). versions/ chứa lịch sử thay đổi schema
 ├── docs/db/                     ✅ thiết kế DB (db_design.md) và danh sách dữ liệu màn hình
+├── docs/sequence/               ✅ sơ đồ sequence (PlantUML): auth/ (đăng nhập, đăng ký), citizen/, staff/, admin/, common/ (dùng chung)
+├── docs/class/                  sơ đồ class: auth/ ✅, citizen/ staff/ admin/ ⬜. Mỗi thư mục con của sequence là một sơ đồ <グループ名>_クラス図 (.drawio, .json, .png)
 ├── scripts/
 │   └── seed.py                  ✅ dữ liệu master (部署, カテゴリ) và tài khoản test
 ├── tests/                       ⬜ pytest
@@ -124,7 +126,7 @@ task-app/
     │   ├── public/ auth/ citizen/ staff/ admin/   template theo từng blueprint
     │   └── errors/              ⬜ 403, 404, 500
     └── static/
-        ├── css/                 tokens.css ⬜, base.css ✅, components.css ⬜
+        ├── css/                 tokens.css ⬜, base.css ✅, components.css ⬜, responsive.css ✅ (スマホ表示)
         ├── js/                  report_form.js, map.js, charts.js ⬜
         └── images/              ✅
 ```
@@ -152,7 +154,7 @@ Mỗi file là một nhóm bảng. Khi thêm model mới, phải import nó tron
 
 | Bảng | Nội dung chính |
 |---|---|
-| `users` | Đã có. Thêm `icon_path` cho アイコン設定. `department_id` cho nhân viên để sau, khi có màn hình dùng tới |
+| `users` | Đã có. Thêm `icon_path` cho アイコン設定, `postal_code` (dạng `123-4567`) và `address` cho アカウント作成 (chỉ người dân, NULL với nhân viên và admin). `department_id` cho nhân viên để sau, khi có màn hình dùng tới |
 | `departments` | 担当部署. Tạm thời có 道路管理課, 道路照明課, 公園緑地課, 環境課, 市民生活課 |
 | `categories` | `code` (khoá cố định cho AI), `name` (道路, 街灯, 公園, 不法投棄, その他), `default_department_id` |
 | `reports` | `citizen_id`, `title` (件名), `description`, `latitude`, `longitude`, `address`, `status`, `category_id`, `urgency`, `department_id`, `duplicate_group_id`, `duplicate_of_id`, thời gian. `category_id`, `urgency`, `department_id` là giá trị đã chốt, NULL nghĩa là chưa phân loại |
@@ -222,6 +224,9 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | Chung | パスワード再設定 | `/reset-password`, `/login/staff/reset-password`, `/login/admin/reset-password` | ✅ `auth.reset_password*` | auth_service |
 | 市民 | マイページ | `/citizen/mypage` | ✅ `citizen.mypage` | report_service |
 | 市民 | 報告する | `/citizen/report` | ✅ `citizen.report_new` | report_service |
+| 市民 | 写真撮影 | `/citizen/report/camera` | ✅ `citizen.report_camera` | |
+| 市民 | 撮影写真の確認 | `/citizen/report/photo` | ✅ `citizen.report_photo` | |
+| 市民 | 位置情報の確認 | `/citizen/report/location` | ✅ `citizen.report_location` | report_service |
 | 市民 | 報告完了画面 | `/citizen/report/complete` (sau này `/citizen/reports/<id>/complete`) | ✅ `citizen.report_complete` | report_service |
 | 市民 | 履歴を表示する | `/citizen/reports` | ✅ `citizen.report_list` | report_service |
 | 市民 | 対応状況を表示する | `/citizen/reports/<id>` | ⬜ | report_service |
@@ -250,7 +255,7 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 - **layouts/base.html**: khung HTML chung, nạp Bootstrap, Bootstrap Icons, Chart.js và các file CSS. Các layout theo vai trò sẽ kế thừa base và chứa navbar, sidebar. Trang con chỉ viết phần nội dung.
 - **components/**: các mảnh dùng lại bằng `{% include %}`. Màu badge trạng thái và độ khẩn cấp chỉ định nghĩa ở đây.
 - **staff/mockup_report_triage.html**: mockup giao diện màn hình phân loại báo cáo, chưa có route. Dùng làm tham khảo khi làm `staff/report_list.html` và `staff/report_detail.html`, làm xong thì xóa.
-- **static/css/**: `tokens.css` chứa biến màu và khoảng cách, `base.css` chứa style chung, `components.css` chứa style cho từng thành phần.
+- **static/css/**: `tokens.css` chứa biến màu và khoảng cách, `base.css` chứa style chung, `components.css` chứa style cho từng thành phần, `responsive.css` chứa style cho điện thoại (nạp cuối cùng trong `base.html`, dùng các class như `citizen-page`, `report-page`, `guide-page`).
 - **static/js/**: `report_form.js` lấy GPS và hiện ảnh xem trước, `map.js` vẽ bản đồ Leaflet với ghim đỏ cho khẩn cấp, vàng cho đang xử lý, xanh cho đã xong, `charts.js` vẽ biểu đồ Chart.js từ API.
 
 ---
@@ -302,6 +307,8 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 - **Form báo cáo chưa lưu dữ liệu.** Form đã có đủ ô nhập ứng với bảng `reports` và `report_photos`: `title`, `photos`, `address`, `latitude`, `longitude` (ẩn), `description`, kèm `enctype="multipart/form-data"`. Còn thiếu hai việc:
   - Route `citizen.report_new` vẫn chỉ chuyển sang trang hoàn tất, chưa gọi `report_service`.
   - `latitude` và `longitude` chưa được điền vì `report_form.js` (lấy GPS) chưa viết. Cột trong DB là `NOT NULL`, nên phải làm phần lấy vị trí trước khi lưu.
+- **Luồng chụp ảnh khi báo cáo chỉ là giao diện.** 写真撮影 và 撮影写真の確認 chưa chụp hay lưu ảnh. 位置情報の確認 lấy địa chỉ mẫu từ `report_service.estimate_address()`, lưu vào `session['report_address']` để điền sẵn ô 発生場所, và xoá sau khi gửi form. Ảnh vẫn đính kèm qua ô 写真添付. Khi làm `report_form.js` (camera, GPS) cần nối ảnh chụp vào form và thay địa chỉ mẫu bằng vị trí thật.
+- **`responsive.css` căn giữa `body` theo chiều dọc trên màn hình dưới 768px** (`display: flex` cho `body`). Quy tắc này áp dụng cho mọi màn hình, kể cả 職員 và 管理者.
 - **Dashboard nhân viên** đang hiển thị số liệu và biểu đồ hard-code.
 - **Các màn hình nhân viên** 報告一覧, 報告詳細, 地図表示, AI分析・自動判定, 対応管理・重複確認, 案件統合, 一括ステータス変更, 統計 lấy dữ liệu mẫu từ `report_service`, `stats_service`, `duplicate_service`, chưa đọc DB. Tìm kiếm, lọc theo ID và lọc bản đồ đang lọc trên dữ liệu mẫu trong service. Thẻ tổng hợp trên màn hình AI分析 vẫn hard-code. Nút AIモデル再実行 chưa hoạt động.
 - **Các thao tác cập nhật của nhân viên chưa lưu gì.** Cập nhật trạng thái ở 報告詳細, 統合 và 一括ステータス変更 chỉ `flash` rồi quay lại trang. Khi có model, trạng thái phải đổi qua `status_service`, còn 統合 đặt `duplicate_of_id` qua `duplicate_service`. Cột ghi chú ở 報告詳細 chưa được dùng.

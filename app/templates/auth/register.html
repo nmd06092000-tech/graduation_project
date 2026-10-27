@@ -1,14 +1,14 @@
 {% extends 'layouts/base.html' %}
 
 {% block layout %}
-<div class="container my-5">
+<div class="container my-5 citizen-register-page">
     <div class="row justify-content-center">
-        <div class="col-md-5">
+        <div class="col-12 col-md-5">
             <div class="text-center mb-3">
                 <div class="bg-primary text-white rounded-circle d-inline-flex p-3 mb-2">
                     <i class="bi bi-person-plus-fill fs-1"></i>
                 </div>
-                <h3 class="fw-bold">アカウント作成画面</h3>
+                <h3 class="fw-bold">県民アカウント作成</h3>
                 <p class="text-muted small">必要情報を入力してアカウントを作成してください。</p>
             </div>
             {% include 'components/_flash.html' %}
@@ -18,20 +18,32 @@
                 <div class="card-body p-4">
                     <form action="{{ url_for('auth.register') }}" method="POST">
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">お名前</label>
-                            <input type="text" name="name" class="form-control" placeholder="例) 埼玉 太郎" value="{{ name or '' }}" maxlength="100" required>
+                            <label for="name" class="form-label small fw-bold">お名前</label>
+                            <input type="text" id="name" name="name" class="form-control" placeholder="例) 埼玉 太郎" value="{{ name or '' }}" maxlength="100" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">メールアドレス</label>
-                            <input type="email" name="email" class="form-control" placeholder="example@saitama.jp" value="{{ email or '' }}" required>
+                            <label for="email" class="form-label small fw-bold">メールアドレス</label>
+                            <input type="email" id="email" name="email" class="form-control" placeholder="example@saitama.jp" value="{{ email or '' }}" required>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">パスワード</label>
+                            <label for="postal_code" class="form-label small fw-bold">郵便番号</label>
+                            <input type="text" id="postal_code" name="postal_code" class="form-control" placeholder="例) 330-9301"
+                                   inputmode="numeric" pattern="[0-9]{3}-?[0-9]{4}" maxlength="8" autocomplete="postal-code"
+                                   value="{{ postal_code or '' }}" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="address" class="form-label small fw-bold">住所（埼玉県内）</label>
+                            <input type="text" id="address" name="address" class="form-control" placeholder="例) 埼玉県さいたま市浦和区高砂"
+                                   maxlength="255" autocomplete="street-address" value="{{ address or '' }}" required>
+                            <small class="text-muted">埼玉県内の住所を入力してください。</small>
+                        </div>
+                        <div class="mb-3">
+                            <label for="password" class="form-label small fw-bold">パスワード</label>
                             <input type="password" id="password" name="password" class="form-control" placeholder="8文字以上のパスワード" minlength="8" required>
                             <div class="form-text text-muted small">※8文字以上で設定してください</div>
                         </div>
                         <div class="mb-4">
-                            <label class="form-label small fw-bold">パスワード（確認用）</label>
+                            <label for="confirm_password" class="form-label small fw-bold">パスワード（確認用）</label>
                             <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="もう一度入力してください" minlength="8" required>
                         </div>
                         <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">アカウントを作成する</button>
@@ -48,25 +60,29 @@
 <script>
   document.addEventListener('DOMContentLoaded', function () {
     const form = document.querySelector('form');
-    const nameInput = form.elements['name'];
-    const emailInput = form.elements['email'];
+    const nameInput = document.getElementById('name');
+    const emailInput = document.getElementById('email');
+    const postalCodeInput = document.getElementById('postal_code');
+    const addressInput = document.getElementById('address');
     const passwordInput = document.getElementById('password');
     const confirmInput = document.getElementById('confirm_password');
     const errorArea = document.getElementById('input-errors');
 
-    // 未入力・文字数・一致チェック（ログイン画面と同じく、最初のエラー項目にブラウザ標準の吹き出しで表示する）
+    // 未入力・形式・文字数・一致チェック（ログイン画面と同じく、最初のエラー項目にブラウザ標準の吹き出しで表示する）
     form.querySelector('button[type="submit"]').addEventListener('click', function (event) {
       const name = nameInput.value.trim();
       const email = emailInput.value.trim();
+      const postalCode = postalCodeInput.value.trim();
+      const address = addressInput.value.trim();
       const password = passwordInput.value;
       const confirm = confirmInput.value;
 
       // 前回のメッセージを消してから判定する
       errorArea.innerHTML = '';
-      [nameInput, emailInput, passwordInput, confirmInput].forEach(function (input) { input.setCustomValidity(''); });
+      [nameInput, emailInput, postalCodeInput, addressInput, passwordInput, confirmInput].forEach(function (input) { input.setCustomValidity(''); });
 
       // すべて未入力の場合は1つのメッセージにまとめて、送信せずに画面上部に表示する（ログイン画面と同じ）
-      if (!name && !email && !password && !confirm) {
+      if (!name && !email && !postalCode && !address && !password && !confirm) {
         event.preventDefault();
         // サーバー側の flash も消してから表示する
         document.querySelectorAll('.alert').forEach(function (alert) { alert.remove(); });
@@ -75,12 +91,15 @@
         alert.setAttribute('role', 'alert');
         alert.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><span></span>'
             + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
-        alert.querySelector('span').textContent = 'お名前、メールアドレス、パスワードを入力してください。';
+        alert.querySelector('span').textContent = 'お名前、メールアドレス、郵便番号、住所、パスワードを入力してください。';
         errorArea.appendChild(alert);
         return;
       }
       if (!name) nameInput.setCustomValidity('お名前を入力してください。');
       if (!email) emailInput.setCustomValidity('メールアドレスを入力してください。');
+      if (!postalCode) postalCodeInput.setCustomValidity('郵便番号を入力してください。');
+      else if (!/^[0-9]{3}-?[0-9]{4}$/.test(postalCode)) postalCodeInput.setCustomValidity('郵便番号を正しく入力してください。（例：330-9301）');
+      if (!address) addressInput.setCustomValidity('住所を入力してください。');
       if (!password) passwordInput.setCustomValidity('パスワードを入力してください。');
       else if (password.length < 8) passwordInput.setCustomValidity('このテキストは8文字以上で指定してください（現在は' + password.length + '文字です）。');
       if (!confirm) confirmInput.setCustomValidity('パスワード（確認用）を入力してください。');

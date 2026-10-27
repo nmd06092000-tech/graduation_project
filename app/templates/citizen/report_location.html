@@ -1,0 +1,48 @@
+{% extends 'layouts/base.html' %}
+
+{% block layout %}
+<div class="container py-4">
+    <!-- タイトル -->
+    <h2 class="mb-4">📍 位置情報の確認</h2>
+
+    <!-- AIによる推定結果の案内 -->
+    <div class="alert alert-info mb-4">
+        <i class="bi bi-geo-alt-fill me-2"></i>AIが写真から推定した位置情報です。
+        <br>
+        <small>※ 現在は画面表示の確認用です。実際のAIによる位置推定は行っていません。</small>
+    </div>
+
+    <!-- 位置情報カード -->
+    <div class="card shadow-sm">
+        <div class="card-body p-4">
+            <!-- 推定された住所 -->
+            <label for="address" class="form-label fw-bold">推定された住所</label>
+            <input type="text" class="form-control mb-4" id="address" value="{{ address }}" readonly>
+            <!-- 住所が違う場合の案内文 -->
+            <p class="text-muted small mt-2">住所が違う場合は、報告画面で修正できます。</p>
+
+            <!-- 地図の確認エリア（地図は今後追加する） -->
+            <div class="border rounded-4 p-4" style="background-color: #f8f9fa; border-color: #dee2e6 !important;">
+                <div class="d-flex align-items-center mb-3">
+                    <div class="me-4 fs-1">🗺️</div>
+                    <div>
+                        <h4 class="fw-bold mb-1">位置情報の確認</h4>
+                        <p class="text-secondary fs-5 mb-0">地図表示エリア（今はプレビュー）</p>
+                    </div>
+                </div>
+                <div class="border rounded-3 d-flex align-items-center justify-content-center bg-white"
+                     style="height: 168px; border-style: dashed !important; border-color: #ced4da !important;">
+                    <p class="text-secondary fs-5 mb-0">地図は今後追加できます</p>
+                </div>
+            </div>
+
+            <!-- 報告画面に戻るボタン -->
+            <a href="{{ url_for('citizen.report_new') }}" class="btn btn-primary w-100 mt-4">この位置情報で報告画面に戻る</a>
+
+            <div class="text-center mt-3">
+                <a href="{{ url_for('citizen.report_photo') }}" class="small text-muted text-decoration-none">← 写真の確認画面に戻る</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
