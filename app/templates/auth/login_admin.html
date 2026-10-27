@@ -63,34 +63,36 @@
 
 {% block scripts %}
 <script>
-    // 未入力・文字数チェック（エラーは送信せずに、すべて画面上部にまとめて表示する）
+    // 未入力・文字数チェック（アカウント作成画面と同じく、最初のエラー項目にブラウザ標準の吹き出しで表示する）
     document.querySelector('form button[type="submit"]').addEventListener('click', function (event) {
         const form = this.form;
-        const loginId = form.elements['admin_id'].value.trim();
-        const password = form.elements['password'].value;
-        const errors = [];
-        // 両方未入力の場合は1つのメッセージにまとめる
-        if (!loginId && !password) errors.push('管理者IDまたはパスワードを入力してください');
-        else {
-            if (!loginId) errors.push('管理者IDを入力してください。');
-            if (!password) errors.push('パスワードを入力してください。');
-            else if (password.length < 8) errors.push('このテキストは8文字以上で指定してください（現在は' + password.length + '文字です）。');
-        }
-        if (errors.length === 0) return;
-
-        event.preventDefault();
-        // 前回のエラー（サーバー側の flash を含む）を消してから表示する
-        document.querySelectorAll('.alert').forEach(function (alert) { alert.remove(); });
+        const loginIdInput = form.elements['admin_id'];
+        const passwordInput = form.elements['password'];
+        const loginId = loginIdInput.value.trim();
+        const password = passwordInput.value;
         const area = document.getElementById('login-errors');
-        errors.forEach(function (message) {
+
+        // 前回のメッセージを消してから判定する
+        area.innerHTML = '';
+        [loginIdInput, passwordInput].forEach(function (input) { input.setCustomValidity(''); });
+
+        // すべて未入力の場合は1つのメッセージにまとめて、送信せずに画面上部に表示する
+        if (!loginId && !password) {
+            event.preventDefault();
+            // サーバー側の flash も消してから表示する
+            document.querySelectorAll('.alert').forEach(function (alert) { alert.remove(); });
             const alert = document.createElement('div');
             alert.className = 'alert alert-danger alert-dismissible fade show mb-3';
             alert.setAttribute('role', 'alert');
             alert.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-2"></i><span></span>'
                 + '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>';
-            alert.querySelector('span').textContent = message;
+            alert.querySelector('span').textContent = '管理者IDまたはパスワードを入力してください';
             area.appendChild(alert);
-        });
+            return;
+        }
+        if (!loginId) loginIdInput.setCustomValidity('管理者IDを入力してください。');
+        if (!password) passwordInput.setCustomValidity('パスワードを入力してください。');
+        else if (password.length < 8) passwordInput.setCustomValidity('このテキストは8文字以上で指定してください（現在は' + password.length + '文字です）。');
     });
 </script>
 {% endblock %}
