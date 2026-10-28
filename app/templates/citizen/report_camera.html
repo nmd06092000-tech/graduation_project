@@ -33,6 +33,27 @@
         </div>
     </div>
 </div>
+
+<!-- 位置情報確認モーダル（キャンセル・× は報告画面に戻る。スマホでもボタンは横並び） -->
+<div class="modal fade" id="locationModal" data-bs-backdrop="static" data-bs-keyboard="false" tabindex="-1"
+     aria-labelledby="locationModalLabel" aria-hidden="true" data-cancel-url="{{ url_for('citizen.report_new') }}">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header border-0 pb-0">
+                <h5 class="modal-title fw-bold" id="locationModalLabel">位置情報確認</h5>
+                <button type="button" class="btn-close" id="modalCloseBtn" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body text-center py-3">
+                <p class="mb-0 text-muted">位置情報をオンにしますか？</p>
+            </div>
+            <div class="modal-footer justify-content-center border-0 pt-0 gap-1 location-footer">
+                <button type="button" class="btn btn-secondary px-2 py-2 custom-btn" id="cancelLocationBtn">キャンセル</button>
+                <button type="button" class="btn btn-outline-primary px-2 py-2 custom-btn" id="onceLocationBtn">今回だけ使用</button>
+                <button type="button" class="btn btn-primary px-2 py-2 custom-btn" id="okLocationBtn">オンにする</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}

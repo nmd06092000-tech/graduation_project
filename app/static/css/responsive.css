@@ -240,6 +240,31 @@
    県民向け画面のスマホ対応
    ================================= */
 
+/* =================================
+   マイページ：最近の報告リスト（スマホ対応）
+================================= */
+@media (max-width: 576px) {
+    /* リスト項目を縦並びにして、ステータスを右側に配置する */
+    .citizen-page .card .list-group-item {
+        display: flex !important;
+        flex-direction: row !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 14px 16px !important;
+    }
+
+    /* 左側のテキストエリア */
+    .citizen-page .card .list-group-item > div:first-child {
+        flex-grow: 1;
+        padding-right: 12px;
+    }
+
+    /* 右側のステータスバッジ */
+    .citizen-page .card .list-group-item .flex-shrink-0 {
+        flex-shrink: 0;
+    }
+}
+
 @media (max-width: 576px) {
 
     /* ヘッダー */
@@ -493,6 +518,15 @@
     /* コンテンツ全体の幅 */
     body > * {
         width: 100%;
+    }
+}
+
+/* スマホサイズ（768px未満）のとき、横並びをキープしつつボタンの文字と余白を微調整する */
+@media (max-width: 767.98px) {
+    .location-footer .custom-btn {
+        font-size: 13px !important;    /* 文字サイズを少しだけコンパクトにする */
+        padding-left: 6px !important;  /* 左右の余白を詰める */
+        padding-right: 6px !important;
     }
 }
 

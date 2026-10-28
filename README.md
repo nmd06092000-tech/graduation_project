@@ -289,7 +289,7 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 - **components/**: các mảnh dùng lại bằng `{% include %}`. Màu badge trạng thái và độ khẩn cấp chỉ định nghĩa ở đây.
 - **staff/mockup_report_triage.html**: mockup giao diện màn hình phân loại báo cáo, chưa có route. Dùng làm tham khảo khi làm `staff/report_list.html` và `staff/report_detail.html`, làm xong thì xóa.
 - **static/css/**: `tokens.css` chứa biến màu và khoảng cách, `base.css` chứa style chung, `components.css` chứa style cho từng thành phần, `responsive.css` chứa style cho điện thoại (nạp cuối cùng trong `base.html`, dùng các class như `citizen-page`, `report-page`, `guide-page`).
-- **static/js/**: `report_form.js` lấy GPS và hiện ảnh xem trước, `map.js` vẽ Google Maps với ghim theo 緊急度 (đỏ 高, vàng 中, xanh 低), dữ liệu lấy từ `<script id="mapReports">` trong `staff/map.html`, `charts.js` vẽ biểu đồ Chart.js từ API.
+- **static/js/**: `report_form.js` lấy GPS và hiện ảnh xem trước (ở 写真撮影, chỉ lấy GPS sau khi người dân chọn 今回だけ使用 hoặc オンにする trong modal 位置情報確認, キャンセル thì quay về 報告する), `map.js` vẽ Google Maps với ghim theo 緊急度 (đỏ 高, vàng 中, xanh 低), dữ liệu lấy từ `<script id="mapReports">` trong `staff/map.html`, `charts.js` vẽ biểu đồ Chart.js từ API.
 
 ---
 
@@ -338,7 +338,7 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 - **Đặt lại mật khẩu chưa thực sự đổi mật khẩu.** Ba route reset chỉ kiểm tra form rồi chuyển trang. Không được lưu mật khẩu theo form hiện tại, vì ai biết email người khác cũng sẽ đổi được mật khẩu của họ. Xem bước 4 của lộ trình.
 - **Chưa có CSRF.** Xem bước 3.
 - **Luồng báo cáo của người dân.** Ảnh chụp, tọa độ và địa chỉ đoán được giữ trong `session['report_draft']` cho đến khi gửi 報告する. Ảnh chụp được lưu tạm ở `instance/uploads/drafts/`, khi gửi thì chuyển sang `reports/`. Còn thiếu:
-  - Camera và GPS của trình duyệt chỉ chạy trên **HTTPS** hoặc `localhost`. Nếu server EC2 chạy HTTP thì trang 写真撮影 chuyển sang ô chọn ảnh, còn tọa độ chỉ lấy được từ EXIF của ảnh. Khi đó có thể không gửi được báo cáo, vì DB bắt buộc tọa độ. Nên bật HTTPS, hoặc làm thêm phần chọn điểm trên bản đồ (Google Maps).
+  - Camera và GPS của trình duyệt chỉ chạy trên **HTTPS** hoặc `localhost`. Nếu chạy HTTP thì trang 写真撮影 chuyển sang ô chọn ảnh, còn tọa độ chỉ lấy được từ EXIF của ảnh. Khi đó có thể không gửi được báo cáo, vì DB bắt buộc tọa độ. Server EC2 đã bật HTTPS tại `https://team3app.duckdns.org` (Nginx + Let's Encrypt/Certbot, tự gia hạn bằng `certbot.timer`, HTTP chuyển hướng 301 sang HTTPS). Nếu Learner Lab đổi Public IP thì phải cập nhật IP trên DuckDNS, nếu không trang web và việc gia hạn chứng chỉ sẽ lỗi. Người dùng từ chối quyền vị trí vẫn không gửi được báo cáo nếu ảnh không có GPS. Có thể làm thêm phần chọn điểm trên bản đồ (Google Maps).
   - Địa chỉ do Gemini đoán từ tọa độ có thể sai. Người dân sửa được ở 報告する. Nếu cần chính xác thì nên dùng API reverse geocoding (ví dụ của 国土地理院).
   - Ảnh tạm trong `drafts/` của người bỏ dở giữa chừng chưa được tự động xoá.
   - Chưa phát hiện nhóm trùng khi tạo báo cáo (`duplicate_service`).

@@ -65,7 +65,9 @@
                     <div class="list-group-item p-3 d-flex justify-content-between align-items-center citizen-report-item">
                         <div>
                             <h6 class="fw-bold mb-1">{{ report.title }}</h6>
-                            <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ report.location }} | {{ report.date }}</small>
+                            <small class="text-muted d-block mb-1"><i class="bi bi-geo-alt"></i> {{ report.location }} | {{ report.date }}</small>
+                            <!-- 詳細内容 -->
+                            <p class="mb-0 text-secondary small">{{ report.description }}</p>
                         </div>
                         {% if report.status == '対応中' %}
                             <span class="badge bg-warning text-dark px-3 py-2">対応中</span>

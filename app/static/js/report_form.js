@@ -26,8 +26,24 @@
         const shutter = document.getElementById('cameraShutter');
         let stream = null;
 
-        // 撮影時の位置情報（写真に GPS 情報がない場合にサーバーで使う）
-        fillLocation(document.getElementById('cameraLatitude'), document.getElementById('cameraLongitude'), function () {});
+        // 位置情報確認モーダル：許可されたら撮影時の位置情報（写真に GPS 情報がない場合にサーバーで使う）を取得する
+        const modalElement = document.getElementById('locationModal');
+        const locationModal = new bootstrap.Modal(modalElement);
+        function useLocation() {
+            locationModal.hide();
+            fillLocation(document.getElementById('cameraLatitude'), document.getElementById('cameraLongitude'), function () {});
+        }
+        // キャンセル・× は報告画面に戻る
+        function cancelLocation() {
+            locationModal.hide();
+            window.location.href = modalElement.dataset.cancelUrl;
+        }
+        document.getElementById('cancelLocationBtn').addEventListener('click', cancelLocation);
+        document.getElementById('modalCloseBtn').addEventListener('click', cancelLocation);
+        // 「今回だけ使用」「オンにする」はどちらもこの撮影で位置情報を使う（許可の保存はブラウザに任せる）
+        document.getElementById('onceLocationBtn').addEventListener('click', useLocation);
+        document.getElementById('okLocationBtn').addEventListener('click', useLocation);
+        locationModal.show();
 
         // カメラを使えない場合は写真の選択欄（スマホではカメラが起動する）を表示する
         function showFileInput() {

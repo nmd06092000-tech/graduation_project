@@ -13,11 +13,6 @@
                     {# 必須チェックはサーバー側で行い、設計書のメッセージを表示する（ブラウザの required は付けない） #}
                     <form action="{{ url_for('citizen.report_new') }}" method="POST" enctype="multipart/form-data">
                         <div class="mb-3">
-                            <label for="title" class="form-label small fw-bold">件名 <span class="text-danger">*</span></label>
-                            <input type="text" id="title" name="title" class="form-control" maxlength="100"
-                                   value="{{ form.title or '' }}" placeholder="例) 道路に大きな穴が開いている">
-                        </div>
-                        <div class="mb-3">
                             <label class="form-label small fw-bold">写真撮影 <span class="text-danger">*</span></label>
                             {# 撮影 → 写真の確認 → 位置情報の確認 の順に進み、推定した住所を持って報告画面に戻る #}
                             <!-- 撮影した写真のプレビュー画面（写真撮影画面で撮影した写真があるときだけ表示） -->
@@ -26,6 +21,8 @@
                                 <img id="photo-preview" src="{{ url_for('citizen.report_photo_image') }}" alt="撮影した写真のプレビュー" class="img-fluid rounded border" style="max-height: 250px;">
                                 <div class="small text-muted mt-1">撮影した写真を報告に添付します</div>
                             </div>
+                            {% else %}
+                            <p id="photo-placeholder" class="text-muted border rounded p-4 mb-3 text-center">まだ写真がありません</p>
                             {% endif %}
                             <a href="{{ url_for('citizen.report_camera') }}" class="btn btn-primary w-100 mb-2">📷 {{ '写真を撮り直す' if has_draft_photo else '写真を撮影する' }}</a>
                             <label for="photos" class="form-label small fw-bold">写真添付（撮影した写真と合わせて3枚まで）</label>
@@ -39,6 +36,11 @@
                             <input type="hidden" id="latitude" name="latitude" value="{{ form.latitude or '' }}">
                             <input type="hidden" id="longitude" name="longitude" value="{{ form.longitude or '' }}">
                             <div id="locationStatus" class="form-text"></div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="title" class="form-label small fw-bold">件名 <span class="text-danger">*</span></label>
+                            <input type="text" id="title" name="title" class="form-control" maxlength="100"
+                                   value="{{ form.title or '' }}" placeholder="例) 道路に大きな穴が開いている">
                         </div>
                         <div class="mb-3">
                             <label for="description" class="form-label small fw-bold">詳細内容 <span class="text-danger">*</span></label>

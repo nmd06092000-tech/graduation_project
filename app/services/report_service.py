@@ -225,6 +225,7 @@ def list_by_citizen(user_id, limit=None):
         'location': r.address,
         'date': format_datetime(r.created_at),
         'status': ReportStatus.label_of(r.status),
+        'description': r.description,
     } for r in db.session.execute(stmt).scalars()]
 
 
