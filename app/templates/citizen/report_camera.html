@@ -1,5 +1,8 @@
 {% extends 'layouts/base.html' %}
 
+{# 報告画面の子画面（写真撮影 → 写真の確認 → 位置情報の確認 の間は履歴を増やさない） #}
+{% block nav_parent %}{{ url_for('citizen.report_new') }}{% endblock %}
+
 {% block layout %}
 <div class="container py-4">
     <h2 class="mb-4">写真撮影</h2>
@@ -10,7 +13,7 @@
     <div class="card shadow-sm">
         <div class="card-body text-center p-4">
             {# カメラ映像（report_form.js が表示する）。カメラを使えない端末では写真の選択欄を表示する #}
-            <form id="cameraForm" action="{{ url_for('citizen.report_camera') }}" method="POST" enctype="multipart/form-data">
+            <form id="cameraForm" action="{{ url_for('citizen.report_camera') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
                 <div class="bg-dark text-white rounded d-flex align-items-center justify-content-center mb-4 overflow-hidden" style="height: 300px;">
                     <video id="cameraVideo" class="w-100 h-100 d-none" style="object-fit: cover;" autoplay playsinline muted></video>
                     <p id="cameraPlaceholder" class="fs-5 mb-0">撮影画面</p>
@@ -28,7 +31,7 @@
                 <p class="text-muted">報告したい場所の写真を撮影してください。</p>
 
                 <button type="submit" id="cameraShutter" class="btn btn-primary">撮影する</button>
-                <a href="{{ url_for('citizen.report_new') }}" class="btn btn-outline-secondary ms-2">戻る</a>
+                <a href="{{ url_for('citizen.report_new') }}" class="btn btn-outline-secondary ms-2" data-nav="replace">戻る</a>
             </form>
         </div>
     </div>

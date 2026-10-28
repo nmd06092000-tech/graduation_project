@@ -1,5 +1,8 @@
 {% extends 'layouts/base.html' %}
 
+{# 報告画面の子画面（写真撮影 → 写真の確認 → 位置情報の確認 の間は履歴を増やさない） #}
+{% block nav_parent %}{{ url_for('citizen.report_new') }}{% endblock %}
+
 {% block layout %}
 <div class="container py-4">
     <!-- タイトル -->
@@ -50,10 +53,10 @@
             </div>
 
             <!-- 報告画面に戻るボタン -->
-            <a href="{{ url_for('citizen.report_new') }}" class="btn btn-primary w-100 mt-4">この位置情報で報告画面に戻る</a>
+            <a href="{{ url_for('citizen.report_new') }}" class="btn btn-primary w-100 mt-4" data-nav="replace">この位置情報で報告画面に戻る</a>
 
             <div class="text-center mt-3">
-                <a href="{{ url_for('citizen.report_photo') }}" class="small text-muted text-decoration-none">← 写真の確認画面に戻る</a>
+                <a href="{{ url_for('citizen.report_photo') }}" class="small text-muted text-decoration-none" data-nav="replace">← 写真の確認画面に戻る</a>
             </div>
         </div>
     </div>

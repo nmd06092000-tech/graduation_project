@@ -1,10 +1,13 @@
 {% extends 'layouts/base.html' %}
 
+{# ポータルの子画面（登録 → 完了 → ポータル で履歴を増やさない） #}
+{% block nav_parent %}{{ url_for('admin.portal') }}{% endblock %}
+
 {% block layout %}
 <div class="container-fluid py-4">
     <!-- 戻るボタン -->
     <div class="mb-3">
-        <a href="{{ url_for('admin.portal') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>システム管理ポータルへ戻る</a>
+        <a href="{{ url_for('admin.portal') }}" class="btn btn-outline-secondary btn-sm" data-nav="replace"><i class="bi bi-arrow-left me-1"></i>システム管理ポータルへ戻る</a>
     </div>
 
     <div class="row justify-content-center">
@@ -16,7 +19,7 @@
                     <h5 class="card-title mb-0 fs-6 fw-bold"><i class="bi bi-person-plus-fill me-2 text-primary"></i>新規職員アカウント登録</h5>
                 </div>
                 <div class="card-body p-4">
-                    <form action="{{ url_for('admin.user_register') }}" method="POST">
+                    <form action="{{ url_for('admin.user_register') }}" method="POST" data-nav="replace">
                         <div class="mb-3">
                             <label for="staff_name" class="form-label fw-bold small">職員氏名 <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="staff_name" name="staff_name" placeholder="例: 埼玉県 太郎" required>
@@ -53,7 +56,7 @@
                             <input type="password" class="form-control" id="password_confirm" name="password_confirm" placeholder="もう一度入力してください" required>
                         </div>
                         <div class="d-flex justify-content-end gap-2">
-                            <a href="{{ url_for('admin.portal') }}" class="btn btn-secondary px-4">キャンセル</a>
+                            <a href="{{ url_for('admin.portal') }}" class="btn btn-secondary px-4" data-nav="replace">キャンセル</a>
                             <button type="submit" class="btn btn-primary px-4 fw-bold">登録する</button>
                         </div>
                     </form>

@@ -14,10 +14,12 @@
     <!-- スマホ表示の調整（最後に読み込んで上書きする） -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/responsive.css') }}">
 </head>
-<body>
+{# 子画面は nav_parent に親画面の URL を書く（ブラウザの「戻る」の履歴を親画面にまとめる。js/navigation.js） #}
+<body data-nav-parent="{% block nav_parent %}{% endblock %}">
     {% block layout %}{% endblock %}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/navigation.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

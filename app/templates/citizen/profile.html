@@ -34,7 +34,8 @@
                             <!-- アイコン設定画面からのメッセージを表示する -->
                             {% include 'components/_flash.html' %}
 
-                            <form action="{{ url_for('citizen.profile') }}" method="POST">
+                            {# 保存後・入力エラーの画面は履歴を置き換えて表示する（js/navigation.js） #}
+                            <form action="{{ url_for('citizen.profile') }}" method="POST" data-nav="replace">
                                 <div class="mb-4 text-center">
                                     <label class="form-label small fw-bold d-block text-start">プロフィールアイコン</label>
                                     <div class="mb-2">

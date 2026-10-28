@@ -33,10 +33,10 @@
             locationModal.hide();
             fillLocation(document.getElementById('cameraLatitude'), document.getElementById('cameraLongitude'), function () {});
         }
-        // キャンセル・× は報告画面に戻る
+        // キャンセル・× は報告画面に戻る（履歴を増やさない。navigation.js）
         function cancelLocation() {
             locationModal.hide();
-            window.location.href = modalElement.dataset.cancelUrl;
+            window.historyNav.go(modalElement.dataset.cancelUrl);
         }
         document.getElementById('cancelLocationBtn').addEventListener('click', cancelLocation);
         document.getElementById('modalCloseBtn').addEventListener('click', cancelLocation);
@@ -78,7 +78,8 @@
                 transfer.items.add(new File([blob], 'camera.jpg', { type: 'image/jpeg' }));
                 fileInput.files = transfer.files;
                 stream.getTracks().forEach(function (track) { track.stop(); });
-                form.submit();
+                // submit イベントを発生させて navigation.js で送信する（履歴を増やさない）
+                form.requestSubmit();
             }, 'image/jpeg', 0.9);
         });
 

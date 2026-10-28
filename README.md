@@ -140,7 +140,7 @@ task-app/
     │   └── errors/              ⬜ 403, 404, 500
     └── static/
         ├── css/                 tokens.css ⬜, base.css ✅, components.css ⬜, responsive.css ✅ (スマホ表示)
-        ├── js/                  report_form.js ✅, map.js ✅ (Google Maps), charts.js ⬜
+        ├── js/                  navigation.js ✅ (lịch sử trình duyệt), report_form.js ✅, map.js ✅ (Google Maps), charts.js ⬜
         └── images/              ✅
 ```
 
@@ -289,6 +289,11 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 - **components/**: các mảnh dùng lại bằng `{% include %}`. Màu badge trạng thái và độ khẩn cấp chỉ định nghĩa ở đây.
 - **staff/mockup_report_triage.html**: mockup giao diện màn hình phân loại báo cáo, chưa có route. Dùng làm tham khảo khi làm `staff/report_list.html` và `staff/report_detail.html`, làm xong thì xóa.
 - **static/css/**: `tokens.css` chứa biến màu và khoảng cách, `base.css` chứa style chung, `components.css` chứa style cho từng thành phần, `responsive.css` chứa style cho điện thoại (nạp cuối cùng trong `base.html`, dùng các class như `citizen-page`, `report-page`, `guide-page`).
+- **Lịch sử trình duyệt (`static/js/navigation.js`, nạp trong `base.html`).** Đi qua lại giữa màn cha và màn con, hoặc gửi form, không được làm nút Back của trình duyệt quay về màn con hay hiện lại cùng một màn hình. Quy ước:
+  - Màn con khai báo màn cha bằng `{% block nav_parent %}{{ url_for('...') }}{% endblock %}`. Hiện có: 写真撮影, 撮影写真の確認, 位置情報の確認 (cha là 報告する), アイコン設定 (cha là プロフィール設定), 代表案件に統合, 一括対応ステータス変更 (cha là 重複確認), 新規職員アカウント登録 và màn hoàn tất (cha là ポータル).
+  - Link di chuyển trong màn con, hoặc từ màn con về màn cha, thêm `data-nav="replace"`. Khi về màn cha mà mục lịch sử ngay trước đó chính là màn cha, script gọi `history.back()` rồi tải lại màn cha để hiện nội dung mới (ảnh vừa chụp, flash). Trường hợp khác thì dùng `location.replace`. Từ JS thì gọi `window.historyNav.go(url)`.
+  - Form thêm `data-nav="replace"` sẽ được gửi bằng `fetch` kèm header `X-Replace-History`. `create_app()` đổi response redirect thành JSON `{"redirect": url}` (flash vẫn giữ trong session), rồi script chuyển trang mà không thêm mục lịch sử. Vì vậy route của các form này **luôn trả redirect, kể cả khi lỗi** (flash + redirect, PRG). Nội dung đã nhập thì giữ trong session (`report_draft['form']`, `profile_form`) để hiện lại. Không render template ngay trong POST.
+  - Link mở màn con từ màn cha và link giữa các màn độc lập (sidebar, 一覧 → 詳細) vẫn là link thường.
 - **static/js/**: `report_form.js` lấy GPS và hiện ảnh xem trước (ở 写真撮影, chỉ lấy GPS sau khi người dân chọn 今回だけ使用 hoặc オンにする trong modal 位置情報確認, キャンセル thì quay về 報告する), `map.js` vẽ Google Maps với ghim theo 緊急度 (đỏ 高, vàng 中, xanh 低), dữ liệu lấy từ `<script id="mapReports">` trong `staff/map.html`, `charts.js` vẽ biểu đồ Chart.js từ API.
 
 ---
@@ -343,6 +348,7 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
   - Ảnh tạm trong `drafts/` của người bỏ dở giữa chừng chưa được tự động xoá.
   - Chưa phát hiện nhóm trùng khi tạo báo cáo (`duplicate_service`).
   - Thông báo ở アカウント作成 và ログイン (`auth`) chưa giống hệt câu chữ trong Excel 県民. Màn hình パスワード変更 (đặt lại bằng email) chưa làm, xem bước 4.
+- **Màn hình `auth` (ログイン, アカウント作成, パスワード再設定) chưa dùng `navigation.js`.** Khi nhập sai, route render lại template ngay trong POST, nên lịch sử có thêm một mục của cùng màn hình. Muốn sửa thì chuyển sang PRG như form của 市民 (xem mục 4, static/js).
 - **`responsive.css` căn giữa `body` theo chiều dọc trên màn hình dưới 768px** (`display: flex` cho `body`). Quy tắc này áp dụng cho mọi màn hình, kể cả 職員 và 管理者.
 - **Màn hình nhân viên đã đọc và ghi DB thật, nhưng còn thiếu:**
   - Nút AIモデル再実行 ở AI分析 chưa hoạt động (có thể gọi `report_service.analyze_report()`).

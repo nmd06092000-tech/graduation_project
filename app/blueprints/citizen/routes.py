@@ -12,6 +12,9 @@ citizen_bp = Blueprint('citizen', __name__, url_prefix='/citizen')
 
 # 撮影した写真・位置情報・推定住所を、報告画面で送信するまで保持するセッションのキー
 DRAFT_KEY = 'report_draft'
+# 入力エラーで画面に戻すとき、入力内容を次の表示まで保持するキー（下書きの中・セッション）
+DRAFT_FORM_KEY = 'form'
+PROFILE_FORM_KEY = 'profile_form'
 
 
 # 写真の合計サイズが MAX_CONTENT_LENGTH を超えた場合は、同じ画面に戻してメッセージを表示する
@@ -51,15 +54,21 @@ def report_new():
         except ValidationError as e:
             for category, message in e.messages:
                 flash(message, category)
-            return render_template('citizen/report_new.html', form=request.form,
-                                   has_draft_photo=bool(draft.get('photo')))
+            # 入力内容を下書きに残して報告画面を表示し直す（履歴に同じ画面を増やさない）
+            session[DRAFT_KEY] = {**draft, DRAFT_FORM_KEY: {
+                key: request.form.get(key, '') for key in ('title', 'description', 'address', 'latitude', 'longitude')}}
+            return redirect(url_for('citizen.report_new'))
         # 撮影した写真は報告に移したので、下書きは消す
         session.pop(DRAFT_KEY, None)
         return redirect(url_for('citizen.report_complete', report_id=report.id))
 
-    # 位置情報の確認画面から戻った場合は、推定した住所と座標を初期値にする
-    form = {'address': draft.get('address') or '', 'latitude': draft.get('latitude') or '',
-            'longitude': draft.get('longitude') or ''}
+    # 入力エラーで戻った場合は入力内容を、位置情報の確認画面から戻った場合は推定した住所と座標を初期値にする
+    form = draft.pop(DRAFT_FORM_KEY, None)
+    if form is not None:
+        session[DRAFT_KEY] = draft
+    else:
+        form = {'address': draft.get('address') or '', 'latitude': draft.get('latitude') or '',
+                'longitude': draft.get('longitude') or ''}
     return render_template('citizen/report_new.html', form=form, has_draft_photo=bool(draft.get('photo')))
 
 
@@ -81,7 +90,7 @@ def report_camera():
             return redirect(url_for('citizen.report_new'))
         except ServiceError as e:
             flash(str(e), 'warning')
-            return render_template('citizen/report_camera.html')
+            return redirect(url_for('citizen.report_camera'))
         session[DRAFT_KEY] = draft
         return redirect(url_for('citizen.report_photo'))
     return render_template('citizen/report_camera.html')
@@ -148,10 +157,13 @@ def profile():
         except ValidationError as e:
             for category, message in e.messages:
                 flash(message, category)
-            return render_template('citizen/profile.html', form=request.form)
+            # 入力内容を残してプロフィール設定画面を表示し直す（履歴に同じ画面を増やさない）
+            session[PROFILE_FORM_KEY] = {key: request.form.get(key, '') for key in ('name', 'email')}
+            return redirect(url_for('citizen.profile'))
         flash(MSG_PROFILE_UPDATED, 'success')
         return redirect(url_for('citizen.profile'))
-    return render_template('citizen/profile.html', form={'name': current_user.name, 'email': current_user.login_id})
+    form = session.pop(PROFILE_FORM_KEY, None) or {'name': current_user.name, 'email': current_user.login_id}
+    return render_template('citizen/profile.html', form=form)
 
 
 # 市民アイコン設定画面
@@ -163,7 +175,7 @@ def profile_icon():
             user_service.update_icon(current_user.id, request.files.get('icon'))
         except ServiceError as e:
             flash(str(e), 'warning')
-            return render_template('citizen/profile_icon.html', msg_icon_not_saved=MSG_ICON_NOT_SAVED)
+            return redirect(url_for('citizen.profile_icon'))
         flash(MSG_ICON_UPDATED, 'success')
         return redirect(url_for('citizen.profile'))
     return render_template('citizen/profile_icon.html', msg_icon_not_saved=MSG_ICON_NOT_SAVED)

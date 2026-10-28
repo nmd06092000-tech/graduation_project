@@ -11,7 +11,8 @@
                     {% include 'components/_flash.html' %}
                     {# 入力項目は reports（title・address・latitude・longitude・description）と report_photos に対応する #}
                     {# 必須チェックはサーバー側で行い、設計書のメッセージを表示する（ブラウザの required は付けない） #}
-                    <form action="{{ url_for('citizen.report_new') }}" method="POST" enctype="multipart/form-data">
+                    {# 入力エラー・送信完了の画面は履歴を置き換えて表示する（js/navigation.js） #}
+                    <form action="{{ url_for('citizen.report_new') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
                         <div class="mb-3">
                             <label class="form-label small fw-bold">写真撮影 <span class="text-danger">*</span></label>
                             {# 撮影 → 写真の確認 → 位置情報の確認 の順に進み、推定した住所を持って報告画面に戻る #}

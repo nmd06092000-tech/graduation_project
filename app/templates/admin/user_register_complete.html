@@ -1,5 +1,8 @@
 {% extends 'layouts/base.html' %}
 
+{# ポータルの子画面（ポータルへ戻ると履歴を戻る） #}
+{% block nav_parent %}{{ url_for('admin.portal') }}{% endblock %}
+
 {% block layout %}
 <div class="container mt-5" style="max-width: 600px;">
     <div class="card shadow-sm border-0">
@@ -16,7 +19,7 @@
             </p>
 
             <!-- ポータルへ戻るボタン -->
-            <a href="{{ url_for('admin.portal') }}" class="btn btn-primary px-4">
+            <a href="{{ url_for('admin.portal') }}" class="btn btn-primary px-4" data-nav="replace">
                 システム管理ポータルへ戻る
             </a>
         </div>

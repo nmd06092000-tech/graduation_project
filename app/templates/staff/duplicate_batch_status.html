@@ -1,6 +1,9 @@
 {# 重複グループ内のすべての報告に、同じ対応ステータスを一括で適用する #}
 {% extends 'layouts/base.html' %}
 
+{# 重複確認画面の子画面（変更の実行・戻るで履歴を増やさない） #}
+{% block nav_parent %}{{ url_for('staff.duplicates') }}{% endblock %}
+
 {% block layout %}
 <!-- ヘッダー -->
 <nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
@@ -28,7 +31,7 @@
                 <div class="col-md-8">
 
                     <div class="d-flex align-items-center mb-4">
-                        <a href="{{ url_for('staff.duplicates') }}" class="btn btn-outline-secondary btn-sm me-3">
+                        <a href="{{ url_for('staff.duplicates') }}" class="btn btn-outline-secondary btn-sm me-3" data-nav="replace">
                             <i class="bi bi-arrow-left me-1"></i>戻る
                         </a>
                         <h3 class="fw-bold mb-0"><i class="bi bi-scissors me-2 text-primary"></i>重複グループ #{{ group.group_id }} の一括対応ステータス変更</h3>
@@ -45,7 +48,7 @@
                                 グループ内のすべての報告に対して、新しい対応ステータスを一括で適用します。
                             </p>
 
-                            <form method="POST" action="{{ url_for('staff.duplicate_batch_status', group_id=group.group_id) }}">
+                            <form method="POST" action="{{ url_for('staff.duplicate_batch_status', group_id=group.group_id) }}" data-nav="replace">
                                 <!-- ステータス選択（README の状態遷移 対応中 → 対応済み に合わせる） -->
                                 <div class="mb-4 p-3 border rounded bg-light">
                                     <label class="form-label fw-bold text-dark mb-2">変更後の対応ステータス</label>
@@ -70,7 +73,7 @@
                                 </div>
 
                                 <div class="d-flex justify-content-end gap-2">
-                                    <a href="{{ url_for('staff.duplicates') }}" class="btn btn-secondary px-4">キャンセル</a>
+                                    <a href="{{ url_for('staff.duplicates') }}" class="btn btn-secondary px-4" data-nav="replace">キャンセル</a>
                                     <button type="submit" class="btn btn-primary px-5">
                                         <i class="bi bi-check-lg me-1"></i>一括ステータス変更を実行
                                     </button>

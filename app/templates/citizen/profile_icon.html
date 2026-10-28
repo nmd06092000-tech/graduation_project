@@ -1,5 +1,8 @@
 {% extends 'layouts/base.html' %}
 
+{# プロフィール設定の子画面（保存・戻るで履歴を増やさない） #}
+{% block nav_parent %}{{ url_for('citizen.profile') }}{% endblock %}
+
 {% block layout %}
 <!-- ヘッダー -->
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4">
@@ -48,7 +51,7 @@
                                 {% endif %}
                             </div>
 
-                            <form action="{{ url_for('citizen.profile_icon') }}" method="POST" enctype="multipart/form-data">
+                            <form action="{{ url_for('citizen.profile_icon') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
                                 <div class="mb-4 text-start">
                                     <label for="icon" class="form-label small fw-bold">画像ファイルを選択</label>
                                     <input type="file" id="icon" name="icon" class="form-control" accept="image/jpeg,image/png,image/webp">
@@ -56,7 +59,7 @@
                                 <button type="submit" class="btn btn-primary w-100 py-2 fw-bold mb-2">アイコンを保存する</button>
                             </form>
 
-                            <a id="iconBackLink" href="{{ url_for('citizen.profile') }}" class="small text-muted text-decoration-none">← プロフィール設定に戻る</a>
+                            <a id="iconBackLink" href="{{ url_for('citizen.profile') }}" class="small text-muted text-decoration-none" data-nav="replace">← プロフィール設定に戻る</a>
                         </div>
                     </div>
                 </div>

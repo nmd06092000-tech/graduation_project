@@ -136,7 +136,8 @@
                             <h5 class="card-title fs-6 fw-bold mb-0"><i class="bi bi-pencil-square me-2"></i>対応状況の更新</h5>
                         </div>
                         <div class="card-body">
-                            <form action="{{ url_for('staff.report_status_update', report_id=report.id) }}" method="POST">
+                            {# 更新後の詳細画面は履歴を置き換えて表示する（js/navigation.js） #}
+                            <form action="{{ url_for('staff.report_status_update', report_id=report.id) }}" method="POST" data-nav="replace">
                                 <div class="mb-3">
                                     <label class="form-label fw-bold small">現在のステータス</label>
                                     {# 選択肢は現在のステータスと、README の状態遷移で変更できる次のステータスのみ #}

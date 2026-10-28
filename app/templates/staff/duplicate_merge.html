@@ -1,6 +1,9 @@
 {# 重複グループの代表（親）案件を選び、他の報告を子案件として統合する #}
 {% extends 'layouts/base.html' %}
 
+{# 重複確認画面の子画面（統合・戻るで履歴を増やさない） #}
+{% block nav_parent %}{{ url_for('staff.duplicates') }}{% endblock %}
+
 {% block layout %}
 <!-- ヘッダー -->
 <nav class="navbar navbar-dark bg-dark px-4 border-bottom border-secondary">
@@ -30,7 +33,7 @@
                     {% include 'components/_flash.html' %}
 
                     <div class="d-flex align-items-center mb-4">
-                        <a href="{{ url_for('staff.duplicates') }}" class="btn btn-outline-secondary btn-sm me-3">
+                        <a href="{{ url_for('staff.duplicates') }}" class="btn btn-outline-secondary btn-sm me-3" data-nav="replace">
                             <i class="bi bi-arrow-left me-1"></i>戻る
                         </a>
                         <h3 class="fw-bold mb-0"><i class="bi bi-intersect me-2 text-success"></i>重複グループ #{{ group.group_id }} の案件統合</h3>
@@ -45,7 +48,7 @@
                                 同一場所・類似内容と判定された以下の報告から、代表となる親案件を選択してください。統合すると、他の報告は子案件として紐付けられ、対応ステータスが一括管理されます。
                             </p>
 
-                            <form method="POST" action="{{ url_for('staff.duplicate_merge', group_id=group.group_id) }}">
+                            <form method="POST" action="{{ url_for('staff.duplicate_merge', group_id=group.group_id) }}" data-nav="replace">
                                 <div class="mb-4">
                                     {% for r in group.reports %}
                                     <div class="form-check p-3 border rounded mb-3 bg-light">
@@ -62,7 +65,7 @@
                                 </div>
 
                                 <div class="d-flex justify-content-end gap-2">
-                                    <a href="{{ url_for('staff.duplicates') }}" class="btn btn-secondary px-4">キャンセル</a>
+                                    <a href="{{ url_for('staff.duplicates') }}" class="btn btn-secondary px-4" data-nav="replace">キャンセル</a>
                                     <button type="submit" class="btn btn-success px-5">
                                         <i class="bi bi-check-lg me-1"></i>この代表案件に統合実行
                                     </button>
