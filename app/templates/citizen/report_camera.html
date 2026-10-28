@@ -4,18 +4,37 @@
 <div class="container py-4">
     <h2 class="mb-4">写真撮影</h2>
 
+    <!-- ピントが合っていない場合などのメッセージ（代替フロー4b-1） -->
+    {% include 'components/_flash.html' %}
+
     <div class="card shadow-sm">
         <div class="card-body text-center p-4">
-            <!-- 撮影画面（現在はプレビューのみ） -->
-            <div class="bg-dark text-white rounded d-flex align-items-center justify-content-center mb-4" style="height: 300px;">
-                <p class="fs-5 mb-0">撮影画面</p>
-            </div>
+            {# カメラ映像（report_form.js が表示する）。カメラを使えない端末では写真の選択欄を表示する #}
+            <form id="cameraForm" action="{{ url_for('citizen.report_camera') }}" method="POST" enctype="multipart/form-data">
+                <div class="bg-dark text-white rounded d-flex align-items-center justify-content-center mb-4 overflow-hidden" style="height: 300px;">
+                    <video id="cameraVideo" class="w-100 h-100 d-none" style="object-fit: cover;" autoplay playsinline muted></video>
+                    <p id="cameraPlaceholder" class="fs-5 mb-0">撮影画面</p>
+                </div>
+                <canvas id="cameraCanvas" class="d-none"></canvas>
 
-            <p class="text-muted">報告したい場所の写真を撮影してください。</p>
+                <div id="cameraFileArea" class="mb-3 text-start d-none">
+                    <label for="cameraFile" class="form-label small fw-bold">カメラで撮影する・写真を選ぶ</label>
+                    <input type="file" id="cameraFile" name="photo" class="form-control" accept="image/jpeg,image/png,image/webp" capture="environment">
+                </div>
+                {# 撮影時の端末の位置情報（写真に GPS 情報がない場合に使う） #}
+                <input type="hidden" id="cameraLatitude" name="latitude">
+                <input type="hidden" id="cameraLongitude" name="longitude">
 
-            <a href="{{ url_for('citizen.report_photo') }}" class="btn btn-primary">撮影する</a>
-            <a href="{{ url_for('citizen.report_new') }}" class="btn btn-outline-secondary ms-2">戻る</a>
+                <p class="text-muted">報告したい場所の写真を撮影してください。</p>
+
+                <button type="submit" id="cameraShutter" class="btn btn-primary">撮影する</button>
+                <a href="{{ url_for('citizen.report_new') }}" class="btn btn-outline-secondary ms-2">戻る</a>
+            </form>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/report_form.js') }}"></script>
 {% endblock %}

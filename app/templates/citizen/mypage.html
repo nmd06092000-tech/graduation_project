@@ -30,7 +30,7 @@
             <div class="d-flex justify-content-between align-items-center mb-4 citizen-page-heading">
                 <div>
                     <h4 class="fw-bold">マイページ</h4>
-                    <p class="text-muted small mb-0">ようこそ、山田 太郎 さん。あなたが報告した内容の一覧を確認できます。</p>
+                    <p class="text-muted small mb-0">ようこそ、{{ current_user.name }} さん。あなたが報告した内容の一覧を確認できます。</p>
                 </div>
                 <a href="{{ url_for('citizen.report_new') }}" class="btn btn-primary fw-bold citizen-new-report">+ 新しい困りごとを報告</a>
             </div>
@@ -40,19 +40,19 @@
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3 text-center">
                         <small class="text-muted">報告した件数</small>
-                        <h2 class="fw-bold text-primary mb-0">5<span class="fs-6">件</span></h2>
+                        <h2 class="fw-bold text-primary mb-0">{{ summary.total }}<span class="fs-6">件</span></h2>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3 text-center">
                         <small class="text-muted">対応中</small>
-                        <h2 class="fw-bold text-warning mb-0">2<span class="fs-6">件</span></h2>
+                        <h2 class="fw-bold text-warning mb-0">{{ summary.in_progress }}<span class="fs-6">件</span></h2>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3 text-center">
                         <small class="text-muted">対応済み</small>
-                        <h2 class="fw-bold text-success mb-0">3<span class="fs-6">件</span></h2>
+                        <h2 class="fw-bold text-success mb-0">{{ summary.resolved }}<span class="fs-6">件</span></h2>
                     </div>
                 </div>
             </div>
@@ -61,27 +61,25 @@
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white fw-bold py-3">最近の報告</div>
                 <div class="list-group list-group-flush">
+                    {% for report in recent_reports %}
                     <div class="list-group-item p-3 d-flex justify-content-between align-items-center citizen-report-item">
                         <div>
-                            <h6 class="fw-bold mb-1">道路の穴</h6>
-                            <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇町1丁目付近 | 2026/10/01 10:23</small>
+                            <h6 class="fw-bold mb-1">{{ report.title }}</h6>
+                            <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ report.location }} | {{ report.date }}</small>
                         </div>
-                        <span class="badge bg-warning text-dark px-3 py-2">対応中</span>
+                        {% if report.status == '対応中' %}
+                            <span class="badge bg-warning text-dark px-3 py-2">対応中</span>
+                        {% elif report.status == '未対応' %}
+                            <span class="badge bg-danger px-3 py-2">未対応</span>
+                        {% elif report.status == '対応済み' %}
+                            <span class="badge bg-success px-3 py-2">対応済み</span>
+                        {% else %}
+                            <span class="badge bg-secondary px-3 py-2">{{ report.status }}</span>
+                        {% endif %}
                     </div>
-                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center citizen-report-item">
-                        <div>
-                            <h6 class="fw-bold mb-1">公園の遊具の破損</h6>
-                            <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇公園 | 2026/09/28 15:40</small>
-                        </div>
-                        <span class="badge bg-danger px-3 py-2">未対応</span>
-                    </div>
-                    <div class="list-group-item p-3 d-flex justify-content-between align-items-center citizen-report-item">
-                        <div>
-                            <h6 class="fw-bold mb-1">街灯の故障</h6>
-                            <small class="text-muted"><i class="bi bi-geo-alt"></i> 〇〇町3丁目 | 2026/09/20 09:15</small>
-                        </div>
-                        <span class="badge bg-success px-3 py-2">対応済み</span>
-                    </div>
+                    {% else %}
+                    <div class="list-group-item p-3 text-muted small">まだ報告はありません。</div>
+                    {% endfor %}
                 </div>
             </div>
         </div>

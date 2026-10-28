@@ -5,35 +5,48 @@
     <!-- タイトル -->
     <h2 class="mb-4">📍 位置情報の確認</h2>
 
+    {% if message %}
+    <!-- GPS 情報を取得できない・住所を推定できない場合の案内（代替フロー3a-1） -->
+    <div class="alert alert-warning mb-4">
+        <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ message }}
+    </div>
+    {% else %}
     <!-- AIによる推定結果の案内 -->
     <div class="alert alert-info mb-4">
-        <i class="bi bi-geo-alt-fill me-2"></i>AIが写真から推定した位置情報です。
-        <br>
-        <small>※ 現在は画面表示の確認用です。実際のAIによる位置推定は行っていません。</small>
+        <i class="bi bi-geo-alt-fill me-2"></i>AIが写真の位置情報から推定した住所です。
     </div>
+    {% endif %}
 
     <!-- 位置情報カード -->
     <div class="card shadow-sm">
         <div class="card-body p-4">
             <!-- 推定された住所 -->
             <label for="address" class="form-label fw-bold">推定された住所</label>
-            <input type="text" class="form-control mb-4" id="address" value="{{ address }}" readonly>
+            <input type="text" class="form-control mb-4" id="address" value="{{ draft.address or '' }}" readonly>
             <!-- 住所が違う場合の案内文 -->
             <p class="text-muted small mt-2">住所が違う場合は、報告画面で修正できます。</p>
 
-            <!-- 地図の確認エリア（地図は今後追加する） -->
+            <!-- 地図の確認エリア（写真の位置にピンを表示する） -->
             <div class="border rounded-4 p-4" style="background-color: #f8f9fa; border-color: #dee2e6 !important;">
                 <div class="d-flex align-items-center mb-3">
                     <div class="me-4 fs-1">🗺️</div>
                     <div>
                         <h4 class="fw-bold mb-1">位置情報の確認</h4>
-                        <p class="text-secondary fs-5 mb-0">地図表示エリア（今はプレビュー）</p>
+                        {% if draft.latitude is not none %}
+                        <p class="text-secondary mb-0">緯度 {{ '%.6f'|format(draft.latitude) }} / 経度 {{ '%.6f'|format(draft.longitude) }}</p>
+                        {% endif %}
                     </div>
                 </div>
+                {% if draft.latitude is not none %}
+                {# OpenStreetMap の埋め込み地図（撮影地点の周辺約 1km） #}
+                <iframe class="border rounded-3 w-100 bg-white" style="height: 240px;" loading="lazy" title="撮影地点の地図"
+                        src="https://www.openstreetmap.org/export/embed.html?bbox={{ draft.longitude - 0.006 }}%2C{{ draft.latitude - 0.004 }}%2C{{ draft.longitude + 0.006 }}%2C{{ draft.latitude + 0.004 }}&amp;layer=mapnik&amp;marker={{ draft.latitude }}%2C{{ draft.longitude }}"></iframe>
+                {% else %}
                 <div class="border rounded-3 d-flex align-items-center justify-content-center bg-white"
                      style="height: 168px; border-style: dashed !important; border-color: #ced4da !important;">
-                    <p class="text-secondary fs-5 mb-0">地図は今後追加できます</p>
+                    <p class="text-secondary fs-5 mb-0">位置情報がありません</p>
                 </div>
+                {% endif %}
             </div>
 
             <!-- 報告画面に戻るボタン -->

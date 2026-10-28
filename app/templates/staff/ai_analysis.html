@@ -36,22 +36,25 @@
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3">
                         <div class="text-muted small">本日のAI判定処理件数</div>
-                        <div class="fs-4 fw-bold text-primary">24 件</div>
+                        <div class="fs-4 fw-bold text-primary">{{ ai_summary.today_count }} 件</div>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3">
                         <div class="text-muted small">平均分類信頼度</div>
-                        <div class="fs-4 fw-bold text-success">93.5 %</div>
+                        <div class="fs-4 fw-bold text-success">{% if ai_summary.avg_confidence is not none %}{{ ai_summary.avg_confidence }} %{% else %}—{% endif %}</div>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3">
                         <div class="text-muted small">要人間チェック（低信頼度）</div>
-                        <div class="fs-4 fw-bold text-warning">2 件</div>
+                        <div class="fs-4 fw-bold text-warning">{{ ai_summary.low_confidence_count }} 件</div>
                     </div>
                 </div>
             </div>
+
+            <!-- 検索結果が0件の場合のメッセージ（代替フロー4a-1） -->
+            {% include 'components/_flash.html' %}
 
             <!-- 検索・絞り込みフォーム -->
             <div class="card border-0 shadow-sm mb-4">
@@ -115,8 +118,10 @@
                                             <span class="badge bg-danger">高 (即時対応)</span>
                                         {% elif log.urgency == '中' %}
                                             <span class="badge bg-warning text-dark">中</span>
-                                        {% else %}
+                                        {% elif log.urgency == '低' %}
                                             <span class="badge bg-success">低</span>
+                                        {% else %}
+                                            <span class="text-muted">—</span>
                                         {% endif %}
                                     </td>
                                     <td><span class="text-secondary fw-bold small"><i class="bi bi-building me-1"></i>{{ log.department }}</span></td>
@@ -133,6 +138,10 @@
                                     <td class="text-end pe-3">
                                         <a href="{{ url_for('staff.report_detail', report_id=log.id) }}" class="btn btn-outline-primary btn-sm px-3">詳細確認</a>
                                     </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="9" class="text-center text-muted py-4">AI判定結果はありません。</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

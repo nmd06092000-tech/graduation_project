@@ -9,11 +9,8 @@
     <div class="card shadow-sm border-0 photo-confirm-card">
         <div class="card-body text-center p-4">
             <!-- 写真プレビュー -->
-            <div class="bg-light border rounded d-flex align-items-center justify-content-center mb-4 camera-area">
-                <div>
-                    <i class="bi bi-image text-secondary photo-icon"></i>
-                    <p class="text-muted mb-0 mt-2">撮影した写真のプレビュー</p>
-                </div>
+            <div class="bg-light border rounded d-flex align-items-center justify-content-center mb-4 camera-area overflow-hidden">
+                <img src="{{ url_for('citizen.report_photo_image') }}" class="img-fluid" alt="撮影した写真のプレビュー" style="max-height: 100%; object-fit: contain;">
             </div>
 
             <!-- 説明文 -->

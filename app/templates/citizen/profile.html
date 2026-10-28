@@ -34,25 +34,30 @@
                             <!-- アイコン設定画面からのメッセージを表示する -->
                             {% include 'components/_flash.html' %}
 
-                            <form>
+                            <form action="{{ url_for('citizen.profile') }}" method="POST">
                                 <div class="mb-4 text-center">
                                     <label class="form-label small fw-bold d-block text-start">プロフィールアイコン</label>
                                     <div class="mb-2">
+                                        {% if current_user.icon_path %}
+                                        <img src="{{ url_for('citizen.profile_icon_image') }}" class="rounded-circle" alt="プロフィールアイコン" style="width: 80px; height: 80px; object-fit: cover;">
+                                        {% else %}
                                         <div class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 80px; height: 80px; font-size: 2rem;">
                                             <i class="bi bi-person-fill"></i>
                                         </div>
+                                        {% endif %}
                                     </div>
                                     <a href="{{ url_for('citizen.profile_icon') }}" class="btn btn-outline-secondary btn-sm">
                                         <i class="bi bi-camera me-1"></i>アイコンを変更する
                                     </a>
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label small fw-bold">お名前</label>
-                                    <input type="text" class="form-control" value="{{ current_user.name }}">
+                                    <label for="name" class="form-label small fw-bold">お名前</label>
+                                    <input type="text" id="name" name="name" class="form-control" maxlength="100" value="{{ form.name or '' }}">
                                 </div>
                                 <div class="mb-3">
-                                    <label class="form-label small fw-bold">メールアドレス</label>
-                                    <input type="email" class="form-control" value="{{ current_user.login_id }}">
+                                    {# 未入力・＠なしのメッセージはサーバー側で設計書の文言を表示する（type="text"） #}
+                                    <label for="email" class="form-label small fw-bold">メールアドレス</label>
+                                    <input type="text" id="email" name="email" class="form-control" maxlength="255" value="{{ form.email or '' }}">
                                 </div>
                                 <div class="mb-4">
                                     <label class="form-label small fw-bold">パスワード</label>
@@ -60,7 +65,7 @@
                                         <a href="{{ url_for('auth.reset_password') }}" class="btn btn-outline-primary btn-sm">パスワードを変更する</a>
                                     </div>
                                 </div>
-                                <button type="button" class="btn btn-primary w-100 py-2 fw-bold" onclick="alert('プロフィールを更新しました（サンプル）');">変更を保存する</button>
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">変更を保存する</button>
                             </form>
                         </div>
                     </div>

@@ -34,19 +34,19 @@
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3 border-start border-danger border-4">
                         <small class="text-muted">未対応案件</small>
-                        <h2 class="fw-bold text-danger mb-0">12<span class="fs-6">件</span></h2>
+                        <h2 class="fw-bold text-danger mb-0">{{ status_counts.received }}<span class="fs-6">件</span></h2>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3 border-start border-warning border-4">
                         <small class="text-muted">対応中案件</small>
-                        <h2 class="fw-bold text-warning mb-0">8<span class="fs-6">件</span></h2>
+                        <h2 class="fw-bold text-warning mb-0">{{ status_counts.in_progress }}<span class="fs-6">件</span></h2>
                     </div>
                 </div>
                 <div class="col-md-4">
                     <div class="card border-0 shadow-sm p-3 border-start border-success border-4">
                         <small class="text-muted">対応済み案件</small>
-                        <h2 class="fw-bold text-success mb-0">56<span class="fs-6">件</span></h2>
+                        <h2 class="fw-bold text-success mb-0">{{ status_counts.resolved }}<span class="fs-6">件</span></h2>
                     </div>
                 </div>
             </div>
@@ -65,14 +65,12 @@
                     <div class="card border-0 shadow-sm p-3">
                         <h6 class="fw-bold mb-3">緊急度別件数（AI判定結果）</h6>
                         <div class="mt-2">
-                            <div class="d-flex justify-content-between mb-1"><span>高（即時対応）</span><span class="fw-bold text-danger">3件</span></div>
-                            <div class="progress mb-3" style="height: 10px;"><div class="progress-bar bg-danger" style="width: 15%"></div></div>
-                            
-                            <div class="d-flex justify-content-between mb-1"><span>中（優先対応）</span><span class="fw-bold text-warning">7件</span></div>
-                            <div class="progress mb-3" style="height: 10px;"><div class="progress-bar bg-warning" style="width: 35%"></div></div>
-                            
-                            <div class="d-flex justify-content-between mb-1"><span>低（通常対応）</span><span class="fw-bold text-success">66件</span></div>
-                            <div class="progress" style="height: 10px;"><div class="progress-bar bg-success" style="width: 80%"></div></div>
+                            {# 色は緊急度のコードで決める（高: danger / 中: warning / 低: success） #}
+                            {% set urgency_colors = {'high': 'danger', 'medium': 'warning', 'low': 'success'} %}
+                            {% for u in urgency_stats %}
+                            <div class="d-flex justify-content-between mb-1"><span>{{ u.label }}（{{ u.description }}）</span><span class="fw-bold text-{{ urgency_colors[u.code] }}">{{ u.count }}件</span></div>
+                            <div class="progress {% if not loop.last %}mb-3{% endif %}" style="height: 10px;"><div class="progress-bar bg-{{ urgency_colors[u.code] }}" style="width: {{ u.percentage }}"></div></div>
+                            {% endfor %}
                         </div>
                     </div>
                 </div>
@@ -84,16 +82,15 @@
                     <div class="card border-0 shadow-sm p-3">
                         <h6 class="fw-bold mb-3">本日の優先対応案件</h6>
                         <ul class="list-group list-group-flush small">
+                            {% for r in priority_reports %}
                             <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                                <div><span class="badge bg-danger me-2">高</span>道路の大きな穴（〇〇市1丁目）</div>
-                                <!-- 詳細画面（report_id=1）へ画面遷移 -->
-                                <a href="{{ url_for('staff.report_detail', report_id=1) }}" class="btn btn-sm btn-outline-primary px-3 py-1">確認</a>
+                                <div><span class="badge bg-danger me-2">{{ r.urgency }}</span>{{ r.title }}（{{ r.location }}）</div>
+                                <!-- 詳細画面へ画面遷移 -->
+                                <a href="{{ url_for('staff.report_detail', report_id=r.id) }}" class="btn btn-sm btn-outline-primary px-3 py-1">確認</a>
                             </li>
-                            <li class="list-group-item d-flex justify-content-between align-items-center px-0 py-2">
-                                <div><span class="badge bg-danger me-2">高</span>公園の遊具破損（〇〇公園）</div>
-                                <!-- 詳細画面（report_id=2）へ画面遷移 -->
-                                <a href="{{ url_for('staff.report_detail', report_id=2) }}" class="btn btn-sm btn-outline-primary px-3 py-1">確認</a>
-                            </li>
+                            {% else %}
+                            <li class="list-group-item px-0 py-2 text-muted">優先対応が必要な案件はありません。</li>
+                            {% endfor %}
                         </ul>
                     </div>
                 </div>
@@ -133,15 +130,15 @@
 
 {% block scripts %}
 <script>
-    // Chart.jsで円グラフ描画
+    // Chart.jsで円グラフ描画（カテゴリ名と件数は stats_service の集計結果）
     const ctx = document.getElementById('categoryChart').getContext('2d');
     new Chart(ctx, {
         type: 'doughnut',
         data: {
-            labels: ['道路', '公園', 'ごみ', '街灯', 'その他'],
+            labels: {{ category_stats|map(attribute='category')|list|tojson }},
             datasets: [{
-                data: [25, 14, 12, 9, 16],
-                backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#0dcaf0', '#6c757d']
+                data: {{ category_stats|map(attribute='count')|list|tojson }},
+                backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#0dcaf0', '#6c757d', '#adb5bd']
             }]
         },
         options: { responsive: true, maintainAspectRatio: false }

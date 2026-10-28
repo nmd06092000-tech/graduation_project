@@ -87,16 +87,16 @@
                     </div>
                 </div>
 
-                <!-- 月別推移サマリー（ダミーカード） -->
+                <!-- 月別報告件数トレンド（直近の月ごとの件数） -->
                 <div class="col-md-6">
                     <div class="card border-0 shadow-sm h-100">
                         <div class="card-header bg-white py-3">
                             <h5 class="card-title fs-6 fw-bold mb-0">月別報告件数トレンド</h5>
                         </div>
-                        <div class="card-body d-flex flex-column justify-content-center align-items-center text-muted py-5">
-                            <i class="bi bi-graph-up display-4 text-secondary opacity-50 mb-3"></i>
-                            <p class="fw-bold mb-1">2026年度上半期 報告推移グラフ</p>
-                            <small class="text-muted">（4月〜9月にかけてインフラ関連の報告が安定して処理されています）</small>
+                        <div class="card-body">
+                            <div style="height: 240px;">
+                                <canvas id="trendChart"></canvas>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -155,7 +155,7 @@
             </div>
             <div class="modal-footer justify-content-center bg-light">
                 <button type="button" class="btn btn-secondary px-4" data-bs-dismiss="modal">キャンセル</button>
-                <button type="button" class="btn btn-primary px-4" onclick="executeExport()">
+                <button type="button" id="exportExecuteButton" class="btn btn-primary px-4" onclick="executeExport()">
                     <i class="bi bi-check-lg me-1"></i>確定
                 </button>
             </div>
@@ -185,9 +185,33 @@
 
 {% block scripts %}
 <script>
+    // 月別報告件数トレンドを棒グラフで描画（月と件数は stats_service の集計結果）
+    new Chart(document.getElementById('trendChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: {{ monthly_trend.labels|tojson }},
+            datasets: [{
+                label: '報告件数',
+                data: {{ monthly_trend.counts|tojson }},
+                backgroundColor: '#0d6efd'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+
     // 選択された出力形式を保存
-    // TODO: 現状は画面上にメッセージを表示するだけで、実際のファイル出力は未実装
     let selectedFormat = '';
+
+    // 出力形式ごとのダウンロード URL（staff.stats_export）
+    const exportUrls = {
+        PDF: {{ url_for('staff.stats_export', fmt='pdf')|tojson }},
+        CSV: {{ url_for('staff.stats_export', fmt='csv')|tojson }}
+    };
 
     // PDF・CSV の選択時に確認モーダルを表示する
     function confirmExport(format) {
@@ -202,10 +226,39 @@
         bootstrap.Modal.getOrCreateInstance(exportModalElement).hide();
     }
 
-    // 確定ボタンを押したときに、選択した形式に応じた完了メッセージを表示する
-    function executeExport() {
-        document.getElementById('exportSuccessText').textContent = selectedFormat + '形式での出力が完了しました。';
-        document.getElementById('exportSuccessMessage').classList.remove('d-none');
+    // 確定ボタンを押したときに、選択した形式のファイルを取得して保存し、完了メッセージを表示する
+    async function executeExport() {
+        const button = document.getElementById('exportExecuteButton');
+        button.disabled = true;
+        try {
+            const response = await fetch(exportUrls[selectedFormat]);
+            if (!response.ok) {
+                throw new Error(response.status);
+            }
+            // ファイル名はサーバーの Content-Disposition に合わせる
+            const disposition = response.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename="?([^";]+)"?/);
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(await response.blob());
+            link.download = match ? match[1] : 'statistics_report.' + selectedFormat.toLowerCase();
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(link.href);
+            showExportMessage(selectedFormat + '形式での出力が完了しました。', true);
+        } catch (e) {
+            showExportMessage(selectedFormat + '形式での出力に失敗しました。時間をおいて再度お試しください。', false);
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    // 出力結果のメッセージ（成功は緑、失敗は赤）を表示する
+    function showExportMessage(text, succeeded) {
+        const box = document.getElementById('exportSuccessMessage');
+        box.classList.remove('d-none', 'alert-success', 'alert-danger');
+        box.classList.add(succeeded ? 'alert-success' : 'alert-danger');
+        document.getElementById('exportSuccessText').textContent = text;
     }
 
     // 出力形式選択モーダルを開く前に、前回の完了メッセージと選択形式をリセットする

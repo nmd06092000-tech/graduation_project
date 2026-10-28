@@ -39,12 +39,23 @@
                 </div>
             </div>
 
+            <!-- 絞り込み結果が0件の場合のメッセージ（地図表示 代替フロー6a-1） -->
+            {% include 'components/_flash.html' %}
+
             <div class="row g-3">
                 <!-- 左側：地図エリア -->
                 <div class="col-md-10">
                     <div class="card border-0 shadow-sm position-relative">
                         <div class="card-body p-2 text-center bg-light rounded">
-                            <!-- 埼玉県の地図画像 -->
+                            {% if google_maps_api_key %}
+                            <!-- Google Maps（ピンは static/js/map.js が発生場所の住所の位置に表示。クリックで報告の概要と詳細へのリンク） -->
+                            <div id="reportMap" class="rounded" style="width: 100%; height: 850px;"
+                                 data-map-id="{{ google_maps_map_id }}"
+                                 data-detail-url="{{ url_for('staff.report_detail', report_id=0) }}"></div>
+                            <!-- ピンの位置は発生場所の住所を国土地理院の住所検索 API で検索して決める -->
+                            <div class="text-end small text-muted mt-1">住所検索 出典：国土地理院</div>
+                            {% else %}
+                            <!-- GOOGLE_MAPS_API_KEY 未設定時：埼玉県の地図画像 -->
                             <img src="{{ url_for('static', filename='images/map.avif') }}" class="img-fluid rounded" alt="埼玉県マップ" style="width: 100%; height: 850px; object-fit: contain;">
 
                             <!-- 報告データに基づいてピンを絶対配置でプロット（クリックで報告詳細へ） -->
@@ -61,6 +72,7 @@
                                 </a>
                             </div>
                             {% endfor %}
+                            {% endif %}
                         </div>
                     </div>
                 </div>
@@ -76,23 +88,24 @@
                                 <!-- カテゴリ絞り込み -->
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold">カテゴリ</label>
+                                    {# 選択肢は categories マスタ（value は categories.id） #}
                                     <select name="category" class="form-select form-select-sm">
                                         <option value="all" {% if selected_category == 'all' %}selected{% endif %}>すべて</option>
-                                        <option value="道路" {% if selected_category == '道路' %}selected{% endif %}>道路</option>
-                                        <option value="公園" {% if selected_category == '公園' %}selected{% endif %}>公園</option>
-                                        <option value="街灯" {% if selected_category == '街灯' %}selected{% endif %}>街灯</option>
-                                        <option value="その他" {% if selected_category == 'その他' %}selected{% endif %}>その他</option>
+                                        {% for value, label in filter_options.categories %}
+                                        <option value="{{ value }}" {% if selected_category == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
                                     </select>
                                 </div>
 
                                 <!-- 危険度絞り込み -->
                                 <div class="mb-3">
                                     <label class="form-label small fw-bold">危険度</label>
+                                    {# value は Urgency のコード（high / medium / low） #}
                                     <select name="urgency" class="form-select form-select-sm">
                                         <option value="all" {% if selected_urgency == 'all' %}selected{% endif %}>すべて</option>
-                                        <option value="高" {% if selected_urgency == '高' %}selected{% endif %}>高</option>
-                                        <option value="中" {% if selected_urgency == '中' %}selected{% endif %}>中</option>
-                                        <option value="低" {% if selected_urgency == '低' %}selected{% endif %}>低</option>
+                                        {% for value, label in filter_options.urgencies %}
+                                        <option value="{{ value }}" {% if selected_urgency == value %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
                                     </select>
                                 </div>
 
@@ -131,4 +144,14 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+{% if google_maps_api_key %}
+<!-- 地図に表示する報告（stats_service.map_points の結果） -->
+<script id="mapReports" type="application/json">{{ reports|tojson }}</script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+<!-- Google Maps JavaScript API（読み込み後に map.js の initReportMap を呼ぶ） -->
+<script async src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key|urlencode }}&loading=async&callback=initReportMap&language=ja&region=JP"></script>
+{% endif %}
 {% endblock %}

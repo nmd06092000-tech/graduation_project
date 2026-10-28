@@ -31,11 +31,16 @@
                 <span class="text-muted small">同一場所・類似内容の報告をまとめて管理できます</span>
             </div>
 
+            <!-- 統合の成功メッセージ・重複がない場合のメッセージ（代替フロー1a-1） -->
+            {% include 'components/_flash.html' %}
+
             <!-- アラート表示（件数は重複候補データから数える） -->
+            {% if duplicate_groups %}
             <div class="alert alert-warning border-0 shadow-sm mb-4" role="alert">
                 <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
                 <strong>{{ duplicate_groups|length }}件の重複グループ（計{{ duplicate_groups|map(attribute='reports')|map('length')|sum }}件の報告）</strong>がAIによって検出されています。統合処理または個別対応を選択してください。
             </div>
+            {% endif %}
 
             <!-- 重複グループカード一覧 -->
             {% for group in duplicate_groups %}

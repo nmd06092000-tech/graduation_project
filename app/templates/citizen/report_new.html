@@ -7,32 +7,43 @@
             <div class="card border-0 shadow report-content">
                 <div class="card-body p-4">
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-pencil-square me-2"></i>困りごとを報告する</h4>
+                    <!-- 入力エラー（全て未入力は赤、項目ごとはオレンジ）・写真撮影画面からのメッセージ -->
+                    {% include 'components/_flash.html' %}
                     {# 入力項目は reports（title・address・latitude・longitude・description）と report_photos に対応する #}
+                    {# 必須チェックはサーバー側で行い、設計書のメッセージを表示する（ブラウザの required は付けない） #}
                     <form action="{{ url_for('citizen.report_new') }}" method="POST" enctype="multipart/form-data">
                         <div class="mb-3">
                             <label for="title" class="form-label small fw-bold">件名 <span class="text-danger">*</span></label>
-                            <input type="text" id="title" name="title" class="form-control" maxlength="100" required
-                                   placeholder="例) 道路に大きな穴が開いている">
+                            <input type="text" id="title" name="title" class="form-control" maxlength="100"
+                                   value="{{ form.title or '' }}" placeholder="例) 道路に大きな穴が開いている">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label small fw-bold">写真撮影</label>
+                            <label class="form-label small fw-bold">写真撮影 <span class="text-danger">*</span></label>
                             {# 撮影 → 写真の確認 → 位置情報の確認 の順に進み、推定した住所を持って報告画面に戻る #}
-                            <a href="{{ url_for('citizen.report_camera') }}" class="btn btn-primary w-100 mb-2">📷 写真を撮影する</a>
-                            <label for="photos" class="form-label small fw-bold">写真添付（3枚まで）</label>
-                            <input type="file" id="photos" name="photos" class="form-control" accept="image/*" multiple>
+                            <!-- 撮影した写真のプレビュー画面（写真撮影画面で撮影した写真があるときだけ表示） -->
+                            {% if has_draft_photo %}
+                            <div class="mb-3 text-center">
+                                <img id="photo-preview" src="{{ url_for('citizen.report_photo_image') }}" alt="撮影した写真のプレビュー" class="img-fluid rounded border" style="max-height: 250px;">
+                                <div class="small text-muted mt-1">撮影した写真を報告に添付します</div>
+                            </div>
+                            {% endif %}
+                            <a href="{{ url_for('citizen.report_camera') }}" class="btn btn-primary w-100 mb-2">📷 {{ '写真を撮り直す' if has_draft_photo else '写真を撮影する' }}</a>
+                            <label for="photos" class="form-label small fw-bold">写真添付（撮影した写真と合わせて3枚まで）</label>
+                            <input type="file" id="photos" name="photos" class="form-control" accept="image/jpeg,image/png,image/webp" multiple>
                         </div>
                         <div class="mb-3">
                             <label for="address" class="form-label small fw-bold">発生場所 <span class="text-danger">*</span></label>
-                            <input type="text" id="address" name="address" class="form-control" maxlength="255" required
-                                   value="{{ address or '' }}" placeholder="例) 埼玉県さいたま市大宮区高鼻町1丁目 付近">
-                            {# 緯度・経度は位置情報の取得（report_form.js）で設定する #}
-                            <input type="hidden" id="latitude" name="latitude">
-                            <input type="hidden" id="longitude" name="longitude">
+                            <input type="text" id="address" name="address" class="form-control" maxlength="255"
+                                   value="{{ form.address or '' }}" placeholder="例) 埼玉県さいたま市大宮区高鼻町1丁目 付近">
+                            {# 緯度・経度は撮影時の位置情報。なければ report_form.js が端末の位置情報で設定する #}
+                            <input type="hidden" id="latitude" name="latitude" value="{{ form.latitude or '' }}">
+                            <input type="hidden" id="longitude" name="longitude" value="{{ form.longitude or '' }}">
+                            <div id="locationStatus" class="form-text"></div>
                         </div>
                         <div class="mb-3">
                             <label for="description" class="form-label small fw-bold">詳細内容 <span class="text-danger">*</span></label>
-                            <textarea id="description" name="description" class="form-control" rows="4" maxlength="1000" required
-                                      placeholder="状況を入力してください（いつから・大きさ・危険の有無など）"></textarea>
+                            <textarea id="description" name="description" class="form-control" rows="4" maxlength="1000"
+                                      placeholder="状況を入力してください（いつから・大きさ・危険の有無など）">{{ form.description or '' }}</textarea>
                         </div>
                         <button type="submit" class="btn btn-primary w-100 fw-bold">送信する</button>
                     </form>
@@ -45,4 +56,8 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/report_form.js') }}"></script>
 {% endblock %}

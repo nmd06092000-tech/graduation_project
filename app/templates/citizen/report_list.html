@@ -43,12 +43,16 @@
                                         <span class="badge bg-warning text-dark px-3 py-2">対応中</span>
                                     {% elif report.status == '未対応' %}
                                         <span class="badge bg-danger px-3 py-2">未対応</span>
-                                    {% else %}
+                                    {% elif report.status == '対応済み' %}
                                         <span class="badge bg-success px-3 py-2">対応済み</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary px-3 py-2">{{ report.status }}</span>
                                     {% endif %}
                                 </div>
                             </div>
                         </div>
+                        {% else %}
+                        <div class="list-group-item p-3 text-muted small">まだ報告はありません。</div>
                         {% endfor %}
                     </div>
                 </div>

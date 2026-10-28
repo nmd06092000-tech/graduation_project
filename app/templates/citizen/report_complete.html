@@ -33,10 +33,15 @@
                                 <i class="bi bi-check-circle-fill"></i>
                             </div>
                             <h4 class="fw-bold mb-3">報告が完了しました</h4>
-                            <p class="text-muted small mb-4">
+                            <p class="text-muted small mb-3">
                                 困りごとの報告を受け付けました。<br>
-                                AIによる自動分類・緊急度判定を実施しています。
+                                AIによる自動分類・緊急度判定を実施しました。
                             </p>
+                            <div class="border rounded p-3 mb-4 text-start small">
+                                <div class="mb-1"><span class="text-muted">報告番号：</span><span class="fw-bold">#{{ report.id }}</span></div>
+                                <div class="mb-1"><span class="text-muted">件名：</span>{{ report.title }}</div>
+                                <div><span class="text-muted">AIによる緊急度：</span><span class="fw-bold">{{ report.urgency or '判定中（職員が確認します）' }}</span></div>
+                            </div>
                             <a href="{{ url_for('citizen.mypage') }}" class="btn btn-primary w-100 py-2 fw-bold">
                                 マイページに戻る
                             </a>

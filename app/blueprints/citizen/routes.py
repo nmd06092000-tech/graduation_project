@@ -1,37 +1,89 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort, send_file
 from flask_login import current_user
+from werkzeug.exceptions import RequestEntityTooLarge
 
+from app.constants import MSG_ICON_NOT_SAVED, MSG_ICON_UPDATED, MSG_PROFILE_UPDATED, MSG_UPLOAD_TOO_LARGE
 from app.models import User
-from app.services import report_service
+from app.services import ServiceError, ValidationError, report_service, storage_service, user_service
+from app.services.report_service import InappropriatePhotoError
 from app.utils.decorators import role_required
 
 citizen_bp = Blueprint('citizen', __name__, url_prefix='/citizen')
 
+# 撮影した写真・位置情報・推定住所を、報告画面で送信するまで保持するセッションのキー
+DRAFT_KEY = 'report_draft'
 
-# 4. 市民マイページ
+
+# 写真の合計サイズが MAX_CONTENT_LENGTH を超えた場合は、同じ画面に戻してメッセージを表示する
+@citizen_bp.errorhandler(RequestEntityTooLarge)
+def upload_too_large(error):
+    flash(MSG_UPLOAD_TOO_LARGE, 'warning')
+    return redirect(request.url)
+
+
+# 4. 市民マイページ（報告件数のサマリーと最近の報告）
 @citizen_bp.route('/mypage')
 @role_required(User.ROLE_CITIZEN)
 def mypage():
-    return render_template('citizen/mypage.html')
+    return render_template('citizen/mypage.html',
+                           summary=report_service.citizen_summary(current_user.id),
+                           recent_reports=report_service.list_by_citizen(
+                               current_user.id, limit=report_service.RECENT_REPORT_LIMIT))
 
 
-# 市民新規報告画面
+# 市民新規報告画面（送信すると報告を登録し、AI で緊急度を判定して完了画面へ）
 @citizen_bp.route('/report', methods=['GET', 'POST'])
 @role_required(User.ROLE_CITIZEN)
 def report_new():
+    draft = session.get(DRAFT_KEY) or {}
     if request.method == 'POST':
-        # 位置情報の確認画面で保存した住所は、送信後は使わないので消す
-        session.pop('report_address', None)
-        return redirect(url_for('citizen.report_complete'))
-    # 位置情報の確認画面から戻った場合は、推定した住所を発生場所の初期値にする
-    return render_template('citizen/report_new.html', address=session.get('report_address', ''))
+        try:
+            report = report_service.create_report(
+                citizen_id=current_user.id,
+                title=request.form.get('title', ''),
+                description=request.form.get('description', ''),
+                address=request.form.get('address', ''),
+                latitude=request.form.get('latitude', ''),
+                longitude=request.form.get('longitude', ''),
+                photos=request.files.getlist('photos'),
+                draft=draft,
+            )
+        except ValidationError as e:
+            for category, message in e.messages:
+                flash(message, category)
+            return render_template('citizen/report_new.html', form=request.form,
+                                   has_draft_photo=bool(draft.get('photo')))
+        # 撮影した写真は報告に移したので、下書きは消す
+        session.pop(DRAFT_KEY, None)
+        return redirect(url_for('citizen.report_complete', report_id=report.id))
+
+    # 位置情報の確認画面から戻った場合は、推定した住所と座標を初期値にする
+    form = {'address': draft.get('address') or '', 'latitude': draft.get('latitude') or '',
+            'longitude': draft.get('longitude') or ''}
+    return render_template('citizen/report_new.html', form=form, has_draft_photo=bool(draft.get('photo')))
 
 
-# 写真撮影画面
-# TODO: 現状は撮影画面のプレビューのみ。カメラ撮影（report_form.js）ができたら写真を報告に添付する
-@citizen_bp.route('/report/camera')
+# 写真撮影画面（撮影した写真を一時保存し、撮影写真の確認画面へ）
+@citizen_bp.route('/report/camera', methods=['GET', 'POST'])
 @role_required(User.ROLE_CITIZEN)
 def report_camera():
+    if request.method == 'POST':
+        try:
+            draft = report_service.capture_photo(
+                request.files.get('photo'),
+                latitude=request.form.get('latitude'),
+                longitude=request.form.get('longitude'),
+                previous=session.get(DRAFT_KEY),
+            )
+        except InappropriatePhotoError as e:
+            # 不適切な写真は報告画面に戻す（代替フロー4c-1）
+            flash(str(e), 'warning')
+            return redirect(url_for('citizen.report_new'))
+        except ServiceError as e:
+            flash(str(e), 'warning')
+            return render_template('citizen/report_camera.html')
+        session[DRAFT_KEY] = draft
+        return redirect(url_for('citizen.report_photo'))
     return render_template('citizen/report_camera.html')
 
 
@@ -39,24 +91,42 @@ def report_camera():
 @citizen_bp.route('/report/photo')
 @role_required(User.ROLE_CITIZEN)
 def report_photo():
+    if not (session.get(DRAFT_KEY) or {}).get('photo'):
+        return redirect(url_for('citizen.report_camera'))
     return render_template('citizen/report_photo.html')
 
 
-# 位置情報の確認画面（推定した住所をセッションに保存し、報告画面の初期値にする）
+# 撮影した写真（一時保存）の画像。セッションの下書きにある本人の写真だけを返す
+@citizen_bp.route('/report/photo/image')
+@role_required(User.ROLE_CITIZEN)
+def report_photo_image():
+    relative = (session.get(DRAFT_KEY) or {}).get('photo')
+    if not storage_service.exists(relative):
+        abort(404)
+    return send_file(storage_service.path_of(relative), mimetype=storage_service.content_type_of(relative),
+                     max_age=0)
+
+
+# 位置情報の確認画面（写真の GPS 情報から AI で住所を推定し、報告画面の初期値にする）
 @citizen_bp.route('/report/location')
 @role_required(User.ROLE_CITIZEN)
 def report_location():
-    address = report_service.estimate_address()
-    session['report_address'] = address
-    return render_template('citizen/report_location.html', address=address)
+    draft = session.get(DRAFT_KEY) or {}
+    if not draft.get('photo'):
+        return redirect(url_for('citizen.report_camera'))
+    draft, message = report_service.estimate_location(draft)
+    session[DRAFT_KEY] = draft
+    return render_template('citizen/report_location.html', draft=draft, message=message)
 
 
-# 市民新規報告完了画面
-# TODO: Report モデルができたら /citizen/reports/<id>/complete にして、作成した報告を表示する
-@citizen_bp.route('/report/complete')
+# 市民新規報告完了画面（AI が判定した緊急度を表示する）
+@citizen_bp.route('/reports/<int:report_id>/complete')
 @role_required(User.ROLE_CITIZEN)
-def report_complete():
-    return render_template('citizen/report_complete.html')
+def report_complete(report_id):
+    report = report_service.get_complete_info(report_id, current_user.id)
+    if report is None:
+        abort(404)
+    return render_template('citizen/report_complete.html', report=report)
 
 
 # 市民報告一覧画面
@@ -67,19 +137,43 @@ def report_list():
     return render_template('citizen/report_list.html', reports=reports)
 
 
-# 市民プロフィール設定画面
-@citizen_bp.route('/profile')
+# 市民プロフィール設定画面（お名前・メールアドレスの変更）
+@citizen_bp.route('/profile', methods=['GET', 'POST'])
 @role_required(User.ROLE_CITIZEN)
 def profile():
-    return render_template('citizen/profile.html')
+    if request.method == 'POST':
+        try:
+            user_service.update_profile(current_user.id, name=request.form.get('name', ''),
+                                        email=request.form.get('email', ''))
+        except ValidationError as e:
+            for category, message in e.messages:
+                flash(message, category)
+            return render_template('citizen/profile.html', form=request.form)
+        flash(MSG_PROFILE_UPDATED, 'success')
+        return redirect(url_for('citizen.profile'))
+    return render_template('citizen/profile.html', form={'name': current_user.name, 'email': current_user.login_id})
 
 
 # 市民アイコン設定画面
-# TODO: 現状は画像を保存しない。storage_service と User のアイコン列ができたら保存する
 @citizen_bp.route('/profile/icon', methods=['GET', 'POST'])
 @role_required(User.ROLE_CITIZEN)
 def profile_icon():
     if request.method == 'POST':
-        flash('プロフィールアイコンを更新しました。', 'success')
+        try:
+            user_service.update_icon(current_user.id, request.files.get('icon'))
+        except ServiceError as e:
+            flash(str(e), 'warning')
+            return render_template('citizen/profile_icon.html', msg_icon_not_saved=MSG_ICON_NOT_SAVED)
+        flash(MSG_ICON_UPDATED, 'success')
         return redirect(url_for('citizen.profile'))
-    return render_template('citizen/profile_icon.html')
+    return render_template('citizen/profile_icon.html', msg_icon_not_saved=MSG_ICON_NOT_SAVED)
+
+
+# 本人のアイコン画像
+@citizen_bp.route('/profile/icon/image')
+@role_required(User.ROLE_CITIZEN)
+def profile_icon_image():
+    if not storage_service.exists(current_user.icon_path):
+        abort(404)
+    return send_file(storage_service.path_of(current_user.icon_path),
+                     mimetype=storage_service.content_type_of(current_user.icon_path), max_age=0)

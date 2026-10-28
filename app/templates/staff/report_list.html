@@ -86,8 +86,10 @@
                                             <span class="badge bg-danger">高 (即時)</span>
                                         {% elif report.urgency == '中' %}
                                             <span class="badge bg-warning text-dark">中</span>
-                                        {% else %}
+                                        {% elif report.urgency == '低' %}
                                             <span class="badge bg-success">低</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark border">未判定</span>
                                         {% endif %}
                                     </td>
                                     <td>
@@ -95,14 +97,20 @@
                                             <span class="badge bg-danger">未対応</span>
                                         {% elif report.status == '対応中' %}
                                             <span class="badge bg-warning text-dark">対応中</span>
-                                        {% else %}
+                                        {% elif report.status == '対応済み' %}
                                             <span class="badge bg-success">対応済み</span>
+                                        {% else %}
+                                            <span class="badge bg-secondary">{{ report.status }}</span>
                                         {% endif %}
                                     </td>
                                     <td><small class="text-muted">{{ report.date }}</small></td>
                                     <td class="text-end pe-3">
                                         <a href="{{ url_for('staff.report_detail', report_id=report.id) }}" class="btn btn-outline-primary btn-sm">詳細・対応</a>
                                     </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="8" class="text-center text-muted py-4">該当する報告はありません。</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

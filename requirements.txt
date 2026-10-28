@@ -4,3 +4,9 @@ Flask-Login>=0.6.3
 Flask-Migrate>=4.0
 psycopg[binary]>=3.2
 python-dotenv>=1.0
+# 統計レポートの PDF 出力（日本語フォントは app/fonts/ipaexg.ttf を埋め込む）
+reportlab==4.4.10
+# 写真の形式チェック・GPS 情報の読み取り・AI に送る前の縮小
+Pillow>=10.0
+# AI（Gemini）
+google-genai==2.33.0

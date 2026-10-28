@@ -41,8 +41,10 @@
                         <span class="badge bg-danger fs-6">緊急度：高</span>
                     {% elif report.urgency == '中' %}
                         <span class="badge bg-warning text-dark fs-6">緊急度：中</span>
-                    {% else %}
+                    {% elif report.urgency == '低' %}
                         <span class="badge bg-success fs-6">緊急度：低</span>
+                    {% else %}
+                        <span class="badge bg-light text-dark border fs-6">緊急度：未判定</span>
                     {% endif %}
                 </div>
             </div>
@@ -73,8 +75,9 @@
 
                             <div class="row mb-3">
                                 <div class="col-md-6">
+                                    {# AI の推定担当部署（最新の判定）。確定した担当部署は report.department #}
                                     <small class="text-muted d-block">AI判定担当部署</small>
-                                    <span class="fw-bold text-dark"><i class="bi bi-building me-1"></i>{{ report.department or '未設定' }}</span>
+                                    <span class="fw-bold text-dark"><i class="bi bi-building me-1"></i>{{ report.ai_department or '未判定' }}</span>
                                 </div>
                                 <div class="col-md-6">
                                     <small class="text-muted d-block">AI判定信頼度</small>
@@ -112,6 +115,9 @@
                                     <div>
                                         <span class="fw-bold me-2">{{ item.user }}</span>
                                         <span class="text-secondary">{{ item.action }}</span>
+                                        {% if item.comment %}
+                                        <div class="text-muted mt-1"><i class="bi bi-chat-left-text me-1"></i>{{ item.comment }}</div>
+                                        {% endif %}
                                     </div>
                                     <small class="text-muted">{{ item.date }}</small>
                                 </li>
@@ -133,11 +139,11 @@
                             <form action="{{ url_for('staff.report_status_update', report_id=report.id) }}" method="POST">
                                 <div class="mb-3">
                                     <label class="form-label fw-bold small">現在のステータス</label>
-                                    {# 選択肢は README の状態遷移（未対応 → 対応中 → 対応済み）に合わせる #}
+                                    {# 選択肢は現在のステータスと、README の状態遷移で変更できる次のステータスのみ #}
                                     <select name="status" class="form-select fw-bold">
-                                        <option value="未対応" {% if report.status == '未対応' %}selected{% endif %}>未対応</option>
-                                        <option value="対応中" {% if report.status == '対応中' %}selected{% endif %}>対応中</option>
-                                        <option value="対応済み" {% if report.status == '対応済み' %}selected{% endif %}>対応済み</option>
+                                        {% for code, label in report.status_options %}
+                                        <option value="{{ code }}" {% if code == report.status_code %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
                                     </select>
                                 </div>
 
