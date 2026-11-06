@@ -1,5 +1,6 @@
-// 地図表示：Google Maps に未完了の報告のピンを、市民が入力した発生場所（住所）の位置に表示する
-// 住所から位置を取得できない場合は、報告時の緯度・経度に表示する
+// 地図表示：Google Maps に未完了の報告のピンを、報告の緯度・経度に表示する
+// 緯度・経度は GPS（撮影時・端末の位置・写真の GPS 情報）があればその位置、なければ報告時に発生場所の住所から
+// 国土地理院の住所検索 API で検索した位置（report_service.create_report で保存）
 // 報告データは map.html の <script id="mapReports">（stats_service.map_points の結果）
 (function () {
     'use strict';
@@ -26,31 +27,6 @@
         pin.style.lineHeight = '1';
         pin.style.filter = 'drop-shadow(0 2px 2px rgba(0, 0, 0, 0.4))';
         return pin;
-    }
-
-    // 国土地理院の住所検索 API（無料・キー不要）。結果の coordinates は [経度, 緯度]
-    const GSI_ADDRESS_SEARCH_URL = 'https://msearch.gsi.go.jp/address-search/AddressSearch?q=';
-
-    // 発生場所（住所）から位置を検索してピンの位置を決める。失敗したら報告時の緯度・経度を使う
-    function resolvePosition(report) {
-        const fallback = { lat: report.latitude, lng: report.longitude };
-        if (!report.location) {
-            return Promise.resolve(fallback);
-        }
-        return fetch(GSI_ADDRESS_SEARCH_URL + encodeURIComponent(report.location))
-            .then(function (response) {
-                return response.ok ? response.json() : [];
-            })
-            .then(function (results) {
-                const result = results[0];
-                if (!result) {
-                    return fallback;
-                }
-                return { lat: result.geometry.coordinates[1], lng: result.geometry.coordinates[0] };
-            })
-            .catch(function () {
-                return fallback;
-            });
     }
 
     // ピンをクリックしたときの吹き出し（件名・住所・危険度・詳細へのリンク）
@@ -109,10 +85,9 @@
         // 吹き出しは1つを使い回す（別のピンを押すと前の吹き出しは閉じる）
         const infoWindow = new InfoWindow();
         const bounds = new LatLngBounds();
-        const positions = await Promise.all(reports.map(resolvePosition));
 
-        reports.forEach(function (report, index) {
-            const position = positions[index];
+        reports.forEach(function (report) {
+            const position = { lat: report.latitude, lng: report.longitude };
             const marker = new AdvancedMarkerElement({
                 map: map,
                 position: position,

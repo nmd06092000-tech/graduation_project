@@ -11,14 +11,17 @@ from app import ai
 from app.ai.base import AIError, Choice, ClassificationChoices
 from app.ai.gemini_client import prepare_image
 from app.constants import (
-    MSG_ADDRESS_NOT_ESTIMATED, MSG_ADDRESS_TOO_LONG, MSG_DESCRIPTION_REQUIRED, MSG_DESCRIPTION_TOO_LONG,
+    MSG_ADDRESS_NOT_ESTIMATED, MSG_ADDRESS_NOT_FOUND, MSG_ADDRESS_TOO_LONG, MSG_DESCRIPTION_REQUIRED,
+    MSG_DESCRIPTION_TOO_LONG,
     MSG_GPS_NOT_FOUND, MSG_LOCATION_REQUIRED, MSG_PHOTO_INAPPROPRIATE, MSG_PHOTO_OUT_OF_FOCUS,
     MSG_PHOTO_REQUIRED, MSG_PHOTO_TOO_MANY, MSG_REPORT_ALL_REQUIRED, MSG_TITLE_REQUIRED, MSG_TITLE_TOO_LONG,
-    OPEN_STATUSES, URGENCY_DESCRIPTIONS, AiAnalysisStatus, ReportStatus, Role, Urgency, next_statuses,
+    OPEN_STATUSES, URGENCY_DESCRIPTIONS, AiAnalysisStatus, LocationSource, ReportStatus, Role, Urgency,
+    next_statuses,
 )
 from app.extensions import db
 from app.models import AiAnalysis, Category, Department, Report, ReportPhoto, ReportStatusHistory
 from app.services import ServiceError, ValidationError, status_service, storage_service
+from app.utils import geo
 
 # 画面に表示する日時のタイムゾーン（DB は timestamptz で保存）
 JST = timezone(timedelta(hours=9), 'JST')
@@ -51,13 +54,19 @@ def capture_photo(file_storage, *, latitude=None, longitude=None, previous=None)
         raise ServiceError(MSG_PHOTO_REQUIRED)
     _check_photo(image)
 
-    coordinates = storage_service.extract_gps(image.data) or _parse_coordinates(latitude, longitude)
+    coordinates = storage_service.extract_gps(image.data)
+    source = LocationSource.PHOTO.value if coordinates else None
+    if coordinates is None:
+        coordinates = _parse_coordinates(latitude, longitude)
+        source = LocationSource.DEVICE.value if coordinates else None
     relative = storage_service.save(image, storage_service.DRAFT_DIR)
     discard_draft(previous)
     return {
         'photo': relative,
         'latitude': coordinates[0] if coordinates else None,
         'longitude': coordinates[1] if coordinates else None,
+        # 緯度・経度の取得元（写真の GPS・撮影時の端末の位置）。報告の location_source に引き継ぐ
+        'location_source': source,
         'address': None,
         'address_estimated': False,
     }
@@ -95,10 +104,31 @@ def estimate_address(latitude, longitude):
         return None
 
 
+def geocode_address(address):
+    """発生場所の住所から緯度・経度 (lat, lng) を検索する（GPS 情報がない報告の位置）
+
+    検索しない設定（GEOCODER_URL が空）・見つからない・API の失敗時は None。
+    """
+    config = current_app.config
+    return geo.search_address(address, url=config.get('GEOCODER_URL'), timeout=config.get('GEOCODER_TIMEOUT', 5))
+
+
+def reverse_geocode(latitude, longitude):
+    """GPS の緯度・経度から住所を求める（職員が発生場所と照合する・発生場所が未入力のときの住所）
+
+    求めない設定（REVERSE_GEOCODER_URL が空）・埼玉県外・API の失敗時は None。
+    """
+    config = current_app.config
+    return geo.reverse_geocode(latitude, longitude, url=config.get('REVERSE_GEOCODER_URL'),
+                               timeout=config.get('GEOCODER_TIMEOUT', 5))
+
+
 def create_report(*, citizen_id, title, description, address, latitude, longitude, photos=(), draft=None):
     """新規報告を登録し、AI で緊急度などを判定する。新規報告 基本フロー2〜3
 
     写真は撮影した写真（下書き）と添付ファイルの合計 3 枚まで。入力エラーは ValidationError。
+    位置は GPS を優先し、なければ発生場所の住所から検索する。GPS の場合は位置から住所も求めて保存し（職員の照合用）、
+    発生場所が未入力ならその住所を発生場所にする。
     報告を保存（コミット）してから AI を呼ぶため、AI が失敗しても報告は登録される。
     """
     title = (title or '').strip()
@@ -117,12 +147,18 @@ def create_report(*, citizen_id, title, description, address, latitude, longitud
         if image:
             images.append(image)
 
-    # 位置情報 = 発生場所（住所）と緯度・経度。座標がなければ撮影時の位置 → 添付写真の GPS 情報の順に使う
-    coordinates = _parse_coordinates(latitude, longitude)
-    if coordinates is None and draft_photo:
-        coordinates = _parse_coordinates(draft.get('latitude'), draft.get('longitude'))
-    if coordinates is None:
-        coordinates = next(filter(None, (storage_service.extract_gps(i.data) for i in images)), None)
+    # 位置情報 = 発生場所（住所）と緯度・経度
+    coordinates, source = _resolve_gps(latitude, longitude, draft if draft_photo else None, images)
+    gps_address = None
+    if coordinates is not None:
+        # GPS の位置の住所。発生場所が未入力（入力し忘れ）ならこの住所を発生場所にする
+        gps_address = reverse_geocode(*coordinates)
+        if not address and gps_address:
+            address = gps_address
+    elif address and len(address) <= ADDRESS_MAX_LENGTH:
+        # GPS がない（写真に GPS 情報がない・端末の位置情報を使えない）場合は、発生場所の住所から検索する
+        coordinates = geocode_address(address)
+        source = LocationSource.ADDRESS.value if coordinates else None
     has_photo = bool(images or draft_photo)
     has_location = bool(address) and coordinates is not None
 
@@ -133,7 +169,8 @@ def create_report(*, citizen_id, title, description, address, latitude, longitud
         if not has_photo:
             errors.append(('warning', MSG_PHOTO_REQUIRED))
         if not has_location:
-            errors.append(('warning', MSG_LOCATION_REQUIRED))
+            # 住所は入力されたが、GPS 情報がなく住所からも位置を検索できない場合は住所の確認を促す
+            errors.append(('warning', MSG_ADDRESS_NOT_FOUND if address else MSG_LOCATION_REQUIRED))
         if not description:
             errors.append(('warning', MSG_DESCRIPTION_REQUIRED))
     if not title:
@@ -150,7 +187,8 @@ def create_report(*, citizen_id, title, description, address, latitude, longitud
         raise ValidationError(errors)
 
     report = Report(citizen_id=citizen_id, title=title, description=description, address=address,
-                    latitude=coordinates[0], longitude=coordinates[1])
+                    latitude=coordinates[0], longitude=coordinates[1],
+                    location_source=source, gps_address=gps_address)
     db.session.add(report)
     status_service.record_received(report, actor_id=citizen_id)
 
@@ -264,6 +302,23 @@ def _check_photo(image):
         raise ServiceError(MSG_PHOTO_OUT_OF_FOCUS)
 
 
+# GPS の緯度・経度と取得元を決める。画面の座標 → 撮影時の位置 → 添付写真の GPS 情報の順。なければ (None, None)
+# 画面の座標は、撮影時の位置を初期値にしたもの（取得元は撮影時と同じ）か、報告画面で取得した端末の位置
+def _resolve_gps(latitude, longitude, draft, images):
+    draft_coordinates = _parse_coordinates(draft.get('latitude'), draft.get('longitude')) if draft else None
+    draft_source = (draft.get('location_source') if draft else None) or LocationSource.DEVICE.value
+    coordinates = _parse_coordinates(latitude, longitude)
+    if coordinates is not None:
+        if draft_coordinates is not None and all(
+                math.isclose(a, b, abs_tol=1e-7) for a, b in zip(coordinates, draft_coordinates)):
+            return coordinates, draft_source
+        return coordinates, LocationSource.DEVICE.value
+    if draft_coordinates is not None:
+        return draft_coordinates, draft_source
+    coordinates = next(filter(None, (storage_service.extract_gps(i.data) for i in images)), None)
+    return (coordinates, LocationSource.PHOTO.value) if coordinates else (None, None)
+
+
 # 緯度・経度の文字列を数値にする。未入力・範囲外は None
 def _parse_coordinates(latitude, longitude):
     try:
@@ -371,6 +426,12 @@ def get_for_staff(report_id):
     return {
         **_staff_row(report),
         'address': report.address,
+        # 位置情報の照合用：緯度・経度の取得元（NULL は記録前の報告）と GPS の位置から求めた住所
+        'location_source': LocationSource.label_of(report.location_source, '不明'),
+        'is_gps': report.location_source in LocationSource.gps_values(),
+        'gps_address': report.gps_address,
+        'latitude': report.latitude,
+        'longitude': report.longitude,
         'description': report.description,
         'status_code': report.status,
         'status_options': [(s.value, s.label) for s in status_options],

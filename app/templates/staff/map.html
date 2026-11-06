@@ -48,11 +48,11 @@
                     <div class="card border-0 shadow-sm position-relative">
                         <div class="card-body p-2 text-center bg-light rounded">
                             {% if google_maps_api_key %}
-                            <!-- Google Maps（ピンは static/js/map.js が発生場所の住所の位置に表示。クリックで報告の概要と詳細へのリンク） -->
+                            <!-- Google Maps（ピンは static/js/map.js が報告の緯度・経度に表示。クリックで報告の概要と詳細へのリンク） -->
                             <div id="reportMap" class="rounded" style="width: 100%; height: 850px;"
                                  data-map-id="{{ google_maps_map_id }}"
                                  data-detail-url="{{ url_for('staff.report_detail', report_id=0) }}"></div>
-                            <!-- ピンの位置は発生場所の住所を国土地理院の住所検索 API で検索して決める -->
+                            <!-- GPS 情報がない報告のピンは、発生場所の住所を国土地理院の住所検索 API で検索した位置（報告時に保存） -->
                             <div class="text-end small text-muted mt-1">住所検索 出典：国土地理院</div>
                             {% else %}
                             <!-- GOOGLE_MAPS_API_KEY 未設定時：埼玉県の地図画像 -->

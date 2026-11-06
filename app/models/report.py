@@ -1,7 +1,7 @@
 # 報告（Report）と添付写真（ReportPhoto）モデル
 import sqlalchemy as sa
 
-from app.constants import ReportStatus, Urgency
+from app.constants import LocationSource, ReportStatus, Urgency
 from app.extensions import db
 
 
@@ -13,6 +13,8 @@ class Report(db.Model):
         sa.CheckConstraint(f"urgency IS NULL OR {Urgency.check_sql('urgency')}", name='ck_reports_urgency'),
         sa.CheckConstraint('latitude BETWEEN -90 AND 90', name='ck_reports_latitude'),
         sa.CheckConstraint('longitude BETWEEN -180 AND 180', name='ck_reports_longitude'),
+        sa.CheckConstraint(f"location_source IS NULL OR {LocationSource.check_sql('location_source')}",
+                           name='ck_reports_location_source'),
         sa.CheckConstraint('duplicate_of_id IS NULL OR duplicate_of_id <> id', name='ck_reports_duplicate_of_self'),
         # 市民の報告一覧・マイページ（市民ごと・新しい順）
         sa.Index('ix_reports_citizen_id_created_at', 'citizen_id', 'created_at'),
@@ -33,6 +35,11 @@ class Report(db.Model):
     latitude = db.Column(db.Double, nullable=False)
     longitude = db.Column(db.Double, nullable=False)
     address = db.Column(db.String(255), nullable=False)
+    # 緯度・経度の取得元（写真の GPS・端末の GPS・発生場所の住所から検索）。NULL = 記録前の報告で不明
+    location_source = db.Column(db.String(20))
+    # GPS の位置から求めた住所（国土地理院の逆ジオコーダー）。職員が発生場所（市民の入力）と照合する
+    # NULL = 住所から検索した位置・住所を求められなかった
+    gps_address = db.Column(db.String(255))
     # 現在のステータス（変更は status_service のみ）
     status = db.Column(db.String(20), nullable=False,
                        default=ReportStatus.RECEIVED.value, server_default=ReportStatus.RECEIVED.value)

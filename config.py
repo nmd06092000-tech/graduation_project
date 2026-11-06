@@ -43,6 +43,16 @@ class Config:
     # AdvancedMarker に必要なマップ ID（DEMO_MAP_ID は開発用）
     GOOGLE_MAPS_MAP_ID = os.environ.get('GOOGLE_MAPS_MAP_ID', 'DEMO_MAP_ID')
 
+    # 住所から緯度・経度を検索する API（国土地理院の住所検索。無料・キー不要）。GPS 情報がない報告の位置に使う
+    # 空にすると検索しない（GPS 情報がなければ報告できない）
+    GEOCODER_URL = os.environ.get('GEOCODER_URL', 'https://msearch.gsi.go.jp/address-search/AddressSearch')
+    # 緯度・経度から住所を求める API（国土地理院の逆ジオコーダー）。GPS の位置の住所（職員が発生場所と照合する）に使う
+    # 空にすると求めない
+    REVERSE_GEOCODER_URL = os.environ.get(
+        'REVERSE_GEOCODER_URL', 'https://mreversegeocoder.gsi.go.jp/reverse-geocoder/LonLatToAddress')
+    # 上の 2 つの API のタイムアウト（秒）
+    GEOCODER_TIMEOUT = float(os.environ.get('GEOCODER_TIMEOUT', '5'))
+
 
 class TestingConfig(Config):
     # pytest 用。開発 DB とは別の PostgreSQL（テストのたびにテーブルを作り直す）
@@ -51,3 +61,6 @@ class TestingConfig(Config):
     # テストでは Gemini を呼ばない
     AI_PROVIDER = 'rule_based'
     GEMINI_API_KEY = ''
+    # テストでは住所検索・逆ジオコーダーの API を呼ばない
+    GEOCODER_URL = ''
+    REVERSE_GEOCODER_URL = ''

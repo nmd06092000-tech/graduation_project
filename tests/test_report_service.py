@@ -6,7 +6,7 @@ import pytest
 from app import ai
 from app.ai.base import AddressEstimate, AIError, PhotoCheckResult
 from app.constants import (
-    MSG_ADDRESS_NOT_ESTIMATED, MSG_DESCRIPTION_REQUIRED, MSG_GPS_NOT_FOUND, MSG_LOCATION_REQUIRED,
+    MSG_ADDRESS_NOT_ESTIMATED, MSG_ADDRESS_NOT_FOUND, MSG_DESCRIPTION_REQUIRED, MSG_GPS_NOT_FOUND, MSG_LOCATION_REQUIRED,
     MSG_PHOTO_INAPPROPRIATE, MSG_PHOTO_INVALID, MSG_PHOTO_OUT_OF_FOCUS, MSG_PHOTO_REQUIRED,
     MSG_PHOTO_TOO_MANY, MSG_REPORT_ALL_REQUIRED, MSG_TITLE_REQUIRED, AiAnalysisStatus,
 )
@@ -14,6 +14,7 @@ from app.extensions import db
 from app.models import AiAnalysis, ReportStatusHistory
 from app.services import ServiceError, ValidationError, report_service, status_service, storage_service
 from app.services.report_service import InappropriatePhotoError
+from app.utils import geo
 from tests.conftest import jpeg_bytes, upload
 
 SAITAMA = (35.906, 139.624)
@@ -65,6 +66,8 @@ def test_get_for_staff(staff, make_report, road):
     assert detail['ai_department'] == '道路管理課'
     assert detail['ai_confidence'] == '92%'
     assert detail['department'] is None
+    # 取得元を記録する前の報告は「不明」
+    assert detail['location_source'] == '不明' and detail['is_gps'] is False and detail['gps_address'] is None
     [history] = detail['history']
     assert history['user'] == '鈴木 健一'
     assert history['action'] == 'ステータスを「未対応」から「対応中」に変更'
@@ -142,8 +145,10 @@ def test_create_report_all_required(citizen):
 # 代替フロー2b-1〜2d-1：項目ごとのメッセージ（オレンジ）。件名は設計書にない必須チェック
 @pytest.mark.parametrize('values, expected', [
     ({'photos': []}, MSG_PHOTO_REQUIRED),
+    # 発生場所が空欄で、GPS の位置からも住所を求められない（テストでは逆ジオコーダーを呼ばない設定）
     ({'address': ''}, MSG_LOCATION_REQUIRED),
-    ({'latitude': '', 'longitude': ''}, MSG_LOCATION_REQUIRED),
+    # GPS 情報がなく、住所からも検索できない（テストでは住所検索 API を呼ばない設定）
+    ({'latitude': '', 'longitude': ''}, MSG_ADDRESS_NOT_FOUND),
     ({'description': '  '}, MSG_DESCRIPTION_REQUIRED),
     ({'title': ''}, MSG_TITLE_REQUIRED),
     ({'photos': [upload(jpeg_bytes()) for _ in range(4)]}, MSG_PHOTO_TOO_MANY.format(max=3)),
@@ -170,12 +175,118 @@ def test_create_report(app, citizen, road):
     assert report.category_id == road.id
     assert report.urgency == 'high'
     assert report.department_id == road.default_department_id
+    # 報告画面の座標（撮影していない）は端末の GPS。テストでは逆ジオコーダーを呼ばないので GPS の住所はない
+    assert report.location_source == 'device' and report.gps_address is None
 
 
 # 緯度・経度がなくても、添付写真の GPS 情報があれば位置情報として使う
 def test_create_report_uses_photo_gps(citizen, road):
     report = _create(citizen, latitude='', longitude='', photos=[upload(jpeg_bytes(gps=SAITAMA))])
     assert (round(report.latitude, 3), round(report.longitude, 3)) == SAITAMA
+    assert report.location_source == 'photo'
+
+
+# GPS の位置から住所を求めて保存する（職員の照合用）。発生場所が空欄ならその住所を発生場所にする
+@pytest.mark.parametrize('address, expected_address', [
+    ('', '埼玉県さいたま市大宮区桜木町一丁目'),
+    ('さいたま市浦和区 付近', 'さいたま市浦和区 付近'),   # 入力した発生場所はそのまま（間違っていても職員が照合する）
+])
+def test_create_report_gps_address(monkeypatch, citizen, road, address, expected_address):
+    calls = []
+    def reverse(latitude, longitude, *, url, timeout=5):
+        calls.append((latitude, longitude))
+        return '埼玉県さいたま市大宮区桜木町一丁目'
+    monkeypatch.setattr(geo, 'reverse_geocode', reverse)
+
+    report = _create(citizen, address=address)
+
+    assert calls == [SAITAMA]
+    assert report.address == expected_address
+    assert report.gps_address == '埼玉県さいたま市大宮区桜木町一丁目'
+
+
+# GPS 情報がなければ、発生場所の住所から検索した位置を使う
+def test_create_report_geocodes_address(monkeypatch, citizen, road):
+    searched = []
+    def search(address, *, url, timeout=5):
+        searched.append(address)
+        return SAITAMA
+    monkeypatch.setattr(geo, 'search_address', search)
+
+    report = _create(citizen, latitude='', longitude='')
+
+    assert searched == ['さいたま市大宮区桜木町1丁目 付近']
+    assert (report.latitude, report.longitude) == SAITAMA
+    assert report.location_source == 'address' and report.gps_address is None
+
+
+# GPS 情報があれば住所は検索しない（GPS を優先する）
+def test_create_report_prefers_gps(monkeypatch, citizen, road):
+    def search(address, **kwargs):
+        raise AssertionError('住所検索は呼ばれないはず')
+    monkeypatch.setattr(geo, 'search_address', search)
+
+    report = _create(citizen, latitude='35.95', longitude='139.65')
+
+    assert (report.latitude, report.longitude) == (35.95, 139.65)
+
+
+class _FakeResponse:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self, *args):
+        return self.body
+
+
+# 国土地理院の住所検索 API の結果（[経度, 緯度]）を (緯度, 経度) にする。見つからない・失敗は None
+def test_search_address(monkeypatch):
+    requested = []
+    def urlopen(url, timeout):
+        requested.append(url)
+        return _FakeResponse(b'[{"geometry": {"coordinates": [139.621185, 35.90395]}}]')
+    monkeypatch.setattr(geo.urllib.request, 'urlopen', urlopen)
+
+    assert geo.search_address('桜木町1丁目', url='https://example.test/search') == (35.90395, 139.621185)
+    assert requested[0].startswith('https://example.test/search?q=')
+
+    monkeypatch.setattr(geo.urllib.request, 'urlopen', lambda url, timeout: _FakeResponse(b'[]'))
+    assert geo.search_address('存在しない住所', url='https://example.test/search') is None
+
+    def timeout_error(url, timeout):
+        raise TimeoutError
+    monkeypatch.setattr(geo.urllib.request, 'urlopen', timeout_error)
+    assert geo.search_address('桜木町1丁目', url='https://example.test/search') is None
+    # URL が空（検索しない設定）・住所が空なら API を呼ばない
+    assert geo.search_address('桜木町1丁目', url='') is None
+    assert geo.search_address('  ', url='https://example.test/search') is None
+
+
+# 国土地理院の逆ジオコーダーの結果（市区町村コード＋町名）を住所にする。住所がない・埼玉県外・失敗は None
+@pytest.mark.parametrize('body, expected', [
+    ('{"results": {"muniCd": "11103", "lv01Nm": "桜木町一丁目"}}', '埼玉県さいたま市大宮区桜木町一丁目'),
+    ('{"results": {"muniCd": "11201", "lv01Nm": "－"}}', '埼玉県川越市'),
+    ('{"results": {"muniCd": "13101", "lv01Nm": "千代田"}}', None),
+    ('{}', None),
+    ('not json', None),
+])
+def test_reverse_geocode(monkeypatch, body, expected):
+    requested = []
+    def urlopen(url, timeout):
+        requested.append(url)
+        return _FakeResponse(body.encode('utf-8'))
+    monkeypatch.setattr(geo.urllib.request, 'urlopen', urlopen)
+
+    assert geo.reverse_geocode(35.90395, 139.621185, url='https://example.test/reverse') == expected
+    assert 'lat=35.9039500' in requested[0] and 'lon=139.6211850' in requested[0]
+    # URL が空（求めない設定）なら API を呼ばない
+    assert geo.reverse_geocode(35.9, 139.6, url='') is None
 
 
 # 撮影した写真（下書き）は報告の写真に移す
@@ -188,6 +299,19 @@ def test_create_report_with_draft_photo(citizen, road):
     assert photo.file_path.startswith('reports/')
     assert not storage_service.exists(draft['photo'])
     assert report.latitude == pytest.approx(SAITAMA[0])
+    assert report.location_source == 'photo'
+
+
+# 報告画面の座標が撮影時の位置（初期値）のままなら撮影時の取得元、別の座標なら端末の位置
+def test_create_report_location_source_from_draft(citizen, road):
+    draft = report_service.capture_photo(upload(jpeg_bytes(gps=SAITAMA)))
+    same = _create(citizen, photos=[], latitude=str(draft['latitude']), longitude=str(draft['longitude']),
+                   draft=draft)
+    assert same.location_source == 'photo'
+
+    draft = report_service.capture_photo(upload(jpeg_bytes(gps=SAITAMA)))
+    moved = _create(citizen, photos=[], latitude='35.95', longitude='139.65', draft=draft)
+    assert moved.location_source == 'device'
 
 
 class _FailingClassifier:
@@ -236,6 +360,7 @@ def test_capture_photo(app):
 
     assert draft['photo'].startswith('drafts/') and storage_service.exists(draft['photo'])
     assert (round(draft['latitude'], 3), round(draft['longitude'], 3)) == SAITAMA
+    assert draft['location_source'] == 'photo'
 
 
 # 写真に GPS 情報がなければ撮影時の端末の位置情報を使う。撮り直したら前の写真は消す
@@ -244,7 +369,8 @@ def test_capture_photo_browser_location_and_retake(app):
     second = report_service.capture_photo(upload(jpeg_bytes()), previous=first)
 
     assert (first['latitude'], first['longitude']) == (35.9, 139.6)
-    assert second['latitude'] is None
+    assert first['location_source'] == 'device'
+    assert second['latitude'] is None and second['location_source'] is None
     assert not storage_service.exists(first['photo'])
 
 

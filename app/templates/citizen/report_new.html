@@ -34,6 +34,8 @@
                             <input type="text" id="address" name="address" class="form-control" maxlength="255"
                                    value="{{ form.address or '' }}" placeholder="例) 埼玉県さいたま市大宮区高鼻町1丁目 付近">
                             {# 緯度・経度は撮影時の位置情報。なければ report_form.js が端末の位置情報で設定する #}
+                            {# どちらもなければ、送信時に発生場所の住所から位置を検索する（report_service.create_report） #}
+                            {# 位置情報があり発生場所が空欄なら、送信時に位置情報から求めた住所を発生場所にする #}
                             <input type="hidden" id="latitude" name="latitude" value="{{ form.latitude or '' }}">
                             <input type="hidden" id="longitude" name="longitude" value="{{ form.longitude or '' }}">
                             <div id="locationStatus" class="form-text"></div>

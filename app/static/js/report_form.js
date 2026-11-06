@@ -9,13 +9,21 @@
             onDone(false);
             return;
         }
-        navigator.geolocation.getCurrentPosition(function (position) {
-            latitudeInput.value = position.coords.latitude.toFixed(7);
-            longitudeInput.value = position.coords.longitude.toFixed(7);
-            onDone(true);
-        }, function () {
-            onDone(false);
-        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+        function request(highAccuracy) {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                latitudeInput.value = position.coords.latitude.toFixed(7);
+                longitudeInput.value = position.coords.longitude.toFixed(7);
+                onDone(true);
+            }, function (error) {
+                // 高精度（GPS）で取れない場合は、精度を下げて（Wi-Fi・基地局）1回だけ取り直す。許可されていない場合は取り直さない
+                if (highAccuracy && error.code !== error.PERMISSION_DENIED) {
+                    request(false);
+                    return;
+                }
+                onDone(false);
+            }, { enableHighAccuracy: highAccuracy, timeout: 10000, maximumAge: 60000 });
+        }
+        request(true);
     }
 
     // 写真撮影画面：カメラ映像を表示し、「撮影する」で1枚撮影して送信する
@@ -25,13 +33,20 @@
         const fileInput = document.getElementById('cameraFile');
         const shutter = document.getElementById('cameraShutter');
         let stream = null;
+        // 位置情報の取得中は Promise を持つ（取得が終わったら null に戻す）
+        let locationPending = null;
 
         // 位置情報確認モーダル：許可されたら撮影時の位置情報（写真に GPS 情報がない場合にサーバーで使う）を取得する
+        // カメラ映像から作る写真（canvas）には EXIF の GPS 情報がないため、この位置情報が撮影地点になる
         const modalElement = document.getElementById('locationModal');
         const locationModal = new bootstrap.Modal(modalElement);
         function useLocation() {
             locationModal.hide();
-            fillLocation(document.getElementById('cameraLatitude'), document.getElementById('cameraLongitude'), function () {});
+            locationPending = new Promise(function (resolve) {
+                fillLocation(document.getElementById('cameraLatitude'), document.getElementById('cameraLongitude'), resolve);
+            }).then(function () {
+                locationPending = null;
+            });
         }
         // キャンセル・× は報告画面に戻る（履歴を増やさない。navigation.js）
         function cancelLocation() {
@@ -63,23 +78,43 @@
             })
             .catch(showFileInput);
 
+        // 位置情報の取得が終わってから送信する（終わる前に送ると緯度・経度が空になり、位置情報の確認画面でエラーになる）
+        function submitAfterLocation() {
+            // submit イベントを発生させて navigation.js で送信する（履歴を増やさない）
+            if (!locationPending) {
+                form.requestSubmit();
+                return;
+            }
+            const label = shutter.textContent;
+            shutter.textContent = '位置情報を取得しています…';
+            locationPending.then(function () {
+                shutter.textContent = label;
+                form.requestSubmit();
+            });
+        }
+
         shutter.addEventListener('click', function (event) {
-            // カメラ映像がない、または写真を選択済みならそのまま送信する
-            if (!stream || fileInput.files.length > 0) {
+            // カメラ映像がない、または写真を選択済みなら撮影しない
+            const capture = stream && fileInput.files.length === 0;
+            // 撮影せず、位置情報の取得も終わっていればそのまま送信する
+            if (!capture && !locationPending) {
                 return;
             }
             event.preventDefault();
+            shutter.disabled = true;
+            if (!capture) {
+                submitAfterLocation();
+                return;
+            }
             canvas.width = video.videoWidth;
             canvas.height = video.videoHeight;
             canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
-            shutter.disabled = true;
             canvas.toBlob(function (blob) {
                 const transfer = new DataTransfer();
                 transfer.items.add(new File([blob], 'camera.jpg', { type: 'image/jpeg' }));
                 fileInput.files = transfer.files;
                 stream.getTracks().forEach(function (track) { track.stop(); });
-                // submit イベントを発生させて navigation.js で送信する（履歴を増やさない）
-                form.requestSubmit();
+                submitAfterLocation();
             }, 'image/jpeg', 0.9);
         });
 
@@ -94,15 +129,17 @@
     function setupReportForm(latitudeInput) {
         const longitudeInput = document.getElementById('longitude');
         const status = document.getElementById('locationStatus');
+        // 位置情報がある場合、発生場所が空欄なら送信時にサーバーが位置情報から住所を入れる（report_service.create_report）
         if (latitudeInput.value && longitudeInput.value) {
-            status.textContent = '撮影時の位置情報を使用します。';
+            status.textContent = '撮影時の位置情報を使用します。発生場所が空欄の場合は位置情報の住所を使用します。';
             return;
         }
         status.textContent = '端末の位置情報を取得しています…';
         fillLocation(latitudeInput, longitudeInput, function (succeeded) {
+            // 取得できなくても、送信時にサーバーが発生場所の住所から位置を検索する
             status.textContent = succeeded
-                ? '端末の位置情報を取得しました。'
-                : '位置情報を取得できませんでした。端末の位置情報の利用を許可するか、位置情報付きの写真を添付してください。';
+                ? '端末の位置情報を取得しました。発生場所が空欄の場合は位置情報の住所を使用します。'
+                : '位置情報を取得できませんでした。入力した発生場所の住所から位置を特定します。';
         });
     }
 

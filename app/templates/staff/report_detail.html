@@ -64,12 +64,36 @@
 
                             <div class="row mb-3">
                                 <div class="col-md-6">
+                                    {# 市民が入力した住所（未入力の場合は GPS の位置の住所） #}
                                     <small class="text-muted d-block">発生場所</small>
                                     <span class="fw-bold"><i class="bi bi-geo-alt me-1 text-danger"></i>{{ report.address }}</span>
                                 </div>
                                 <div class="col-md-6">
                                     <small class="text-muted d-block">報告日時</small>
                                     <span><i class="bi bi-clock me-1"></i>{{ report.date }}</span>
+                                </div>
+                            </div>
+
+                            <!-- 位置情報の照合：発生場所（市民の入力）と、GPS の位置から求めた住所を比べて確認する -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">位置情報の取得元</small>
+                                    <span class="badge {{ 'bg-primary' if report.is_gps else 'bg-secondary' }}">{{ report.location_source }}</span>
+                                </div>
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">位置情報（GPS）の住所</small>
+                                    {% if report.gps_address %}
+                                    <span class="fw-bold"><i class="bi bi-crosshair me-1 text-primary"></i>{{ report.gps_address }}</span>
+                                    {% elif report.is_gps %}
+                                    <span class="text-muted">住所を求められませんでした（埼玉県外など）</span>
+                                    {% else %}
+                                    <span class="text-muted">GPS の位置情報はありません</span>
+                                    {% endif %}
+                                    <div class="small text-muted">
+                                        緯度 {{ '%.6f'|format(report.latitude) }} / 経度 {{ '%.6f'|format(report.longitude) }}
+                                        <a href="https://www.openstreetmap.org/?mlat={{ report.latitude }}&amp;mlon={{ report.longitude }}#map=18/{{ report.latitude }}/{{ report.longitude }}"
+                                           target="_blank" rel="noopener noreferrer" class="ms-1">地図で確認</a>
+                                    </div>
                                 </div>
                             </div>
 

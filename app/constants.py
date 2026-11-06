@@ -68,6 +68,17 @@ class DuplicateGroupStatus(LabeledEnum):
     DISMISSED = ('dismissed', '重複なし')
 
 
+class LocationSource(LabeledEnum):
+    """報告の緯度・経度の取得元（reports.location_source）。PHOTO・DEVICE が GPS"""
+    PHOTO = ('photo', '写真の位置情報（GPS）')
+    DEVICE = ('device', '端末の位置情報（GPS）')
+    ADDRESS = ('address', '発生場所の住所から検索')
+
+    @classmethod
+    def gps_values(cls):
+        return [cls.PHOTO.value, cls.DEVICE.value]
+
+
 # 緊急度の補足説明（ダッシュボード・地図の凡例で共通利用）
 URGENCY_DESCRIPTIONS = {
     Urgency.HIGH: '即時対応',
@@ -142,6 +153,8 @@ MSG_TITLE_REQUIRED = '件名を入力してください。'
 MSG_TITLE_TOO_LONG = '件名は100文字以内で入力してください。'
 MSG_DESCRIPTION_TOO_LONG = '詳細内容は1000文字以内で入力してください。'
 MSG_ADDRESS_TOO_LONG = '発生場所は255文字以内で入力してください。'
+# GPS 情報がなく、発生場所の住所からも位置を検索できない場合
+MSG_ADDRESS_NOT_FOUND = '発生場所の住所から位置を特定できませんでした。住所を確認してください。'
 MSG_PHOTO_TOO_MANY = '写真は{max}枚まで添付できます。'
 MSG_PHOTO_INVALID = '写真は JPEG・PNG・WebP 形式の画像ファイルを選択してください。'
 MSG_PHOTO_TOO_LARGE = '写真は1枚{max_mb}MB以下にしてください。'
