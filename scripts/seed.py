@@ -12,6 +12,7 @@
 import argparse
 
 from app import create_app
+from app.constants import TEST_ACCOUNT_PW
 from app.extensions import db
 from app.models import Category, Department, User
 
@@ -27,11 +28,11 @@ CATEGORIES = [
     ('other', 'その他', '市民生活課'),
 ]
 
-# 開発用テストアカウント（本番環境では使用しないこと）
+# 開発用テストアカウント（本番環境では使用しないこと）。パスワードは remove-test-users と共通の TEST_ACCOUNT_PW
 TEST_USERS = [
-    ('taro@example.com', '山田 太郎', User.ROLE_CITIZEN, 'password123'),
-    ('staff01', '鈴木 健一', User.ROLE_STAFF, 'password123'),
-    ('admin01', 'システム管理者', User.ROLE_ADMIN, 'password123'),
+    ('taro@example.com', '山田 太郎', User.ROLE_CITIZEN, TEST_ACCOUNT_PW),
+    ('staff01', '鈴木 健一', User.ROLE_STAFF, TEST_ACCOUNT_PW),
+    ('admin01', 'システム管理者', User.ROLE_ADMIN, TEST_ACCOUNT_PW),
 ]
 
 

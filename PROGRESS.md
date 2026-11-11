@@ -9,8 +9,8 @@
 | GĐ | Nội dung | Trạng thái |
 |---|---|---|
 | 0 | Nền test & DB thật | Đã nghiệm thu 2026-11-11 |
-| 1 | Bảo mật nền: CSRF Flask-WTF, logout POST, cookie SECURE/SAMESITE, seed chỉ chạy ở dev | Đang chờ nghiệm thu |
-| 2 | Tài khoản: `auth_service`, reset mật khẩu thật, パスワード変更 cho 市民, đăng ký 職員 lưu DB (`users.department_id`), xoá tài khoản thử taro/staff01/admin01 ở local và EC2 | Chưa làm |
+| 1 | Bảo mật nền: CSRF Flask-WTF, logout POST, cookie SECURE/SAMESITE, seed chỉ chạy ở dev | Đã nghiệm thu 2026-11-11 |
+| 2 | Tài khoản: `auth_service`, reset mật khẩu thật, パスワード変更 cho 市民, đăng ký 職員 lưu DB (`users.department_id`), xoá tài khoản thử taro/staff01/admin01 ở local và EC2. Tách 2a (khoá tạm, CLI, gỡ tài khoản thử, ProxyFix, session) và 2b (email reset, パスワード変更, đăng ký 職員) | Đang làm (2a) |
 | 3 | Quản trị: ユーザー一覧, khoá/mở tài khoản, quản lý 部署/カテゴリ, bỏ dữ liệu viết cứng ở ポータル | Chưa làm |
 | 4 | 市民 còn thiếu: route trả ảnh có kiểm quyền, 対応状況を表示, 報告を取り消す | Chưa làm |
 | 5 | 職員 còn thiếu: 担当部署, AI再実行, `urgency_code` + `_urgency_badge`, phân trang, tự phát hiện trùng | Chưa làm |
@@ -84,6 +84,34 @@
 - `make_report` không tạo `report_status_histories` (lịch sử bắt đầu từ 0).
 - Gọi seed an toàn trong test: `scripts.seed.seed()` trên app test, và `main()` với `create_app` monkeypatch. Không chạy `python -m scripts.seed` trong test.
 
+## Giai đoạn 2a – Tài khoản: khoá tạm đăng nhập & gỡ tài khoản thử (2026-11-11)
+
+**Đã làm**
+- Migration `2422f95d18ff` (sau `069ae4f17650`): `users.failed_login_count` (NOT NULL, mặc định 0), `users.locked_until`, `users.department_id` (FK `departments` RESTRICT, index, NULL với dữ liệu cũ), bảng `password_reset_tokens` (dùng ở 2b). Có `downgrade`. Chưa `db upgrade` trên DB dev.
+- `auth_service.authenticate()` (kiểm tra đầu vào theo Excel, tách theo vai trò, khoá tạm 5 lần sai / 15 phút bằng UPDATE nguyên tử, `_now()` để test patch) và `set_password_by_operator()`. `auth/routes.py` chỉ gọi service; `session.clear()` khi đăng nhập (trước `login_user`) và đăng xuất (trước `logout_user`, để cookie "ghi nhớ" vẫn bị xoá).
+- Đăng ký 市民 kiểm tra email có `@` phía server (`MSG_EMAIL_NO_AT`).
+- `utils/validators.validate_new_password()`; 12 hằng `MSG_*` mới trong `constants.py`; `config.py` và `.env.example`: `LOGIN_MAX_FAILURES`, `LOGIN_LOCK_MINUTES`, `PROXY_FIX_HOPS`.
+- ProxyFix trong `create_app()` khi `PROXY_FIX_HOPS > 0` (mặc định tắt; `x_host=0`).
+- Lệnh CLI: `create-admin`, `set-password`, `remove-test-users` (`app/cli.py`, `user_service.create_admin/remove_test_users`). README mục 1, 4, 7, 8 đã cập nhật; bảng tài khoản thử đã bỏ khỏi README.
+- Sửa sau review (security/architecture): `config._env_int` (LOGIN_*, PROXY_FIX_HOPS sai kiểu/dưới mức tối thiểu ⇒ app không khởi động); đếm lượt sai và đăng nhập thành công đều là UPDATE có điều kiện "chưa bị khoá" (request song song không lọt qua khi vừa bị khoá); `remove-test-users`: khớp cả ID lẫn role, tài khoản đã vô hiệu mà vẫn dùng mật khẩu thử thì không bỏ qua (xoá, hoặc giữ vô hiệu và đổi mật khẩu: 「無効化済み・パスワード変更」); `create-admin`/`set-password` từ chối mật khẩu thử đã công khai; `create_admin` kiểm ID ≤255 ký tự và rollback khi lỗi DB bất ngờ; `TEST_ACCOUNT_PW` chuyển sang `app/constants.py` (seed dùng chung); register dùng `MSG_PASSWORD_MISMATCH`.
+
+**Kết quả test thật** (2026-11-11, toàn suite tuần tự bằng .venv): `396 passed, 3 warnings in 169.73s` — 0 failed, 0 skipped. 243 test cũ + 153 ca mới trong 8 file: `test_auth_lockout.py`, `test_auth.py`, `test_cli_accounts.py`, `test_proxy_fix.py`, `test_schema_2a.py`, `test_config_env.py`, `test_auth_race.py`, `test_cli_hardening.py`. 3 warning là DeprecationWarning `utcnow` của flask_login. arch_check: 0 lỗi, 0 cảnh báo.
+- Giới hạn test: race chỉ mô phỏng bằng kết nối DB thứ hai trong cùng tiến trình (không phải 2 worker thật); schema kiểm bằng `db.create_all()` + đọc script migration (backend đã tự chạy upgrade→downgrade→upgrade trên DB test rỗng); chưa thử trên trình duyệt.
+
+**Review**: architecture-reviewer ĐẠT (6 điểm thấp; đã sửa 4: `_env_int`, `MSG_PASSWORD_MISMATCH` ở register, `TEST_ACCOUNT_PW` một nguồn trong constants, `raise _record_failure`). security-reviewer CẦN SỬA nhẹ → đã sửa: kiểm cấu hình LOGIN_*/PROXY_FIX_HOPS, `remove-test-users` xử lý cả tài khoản thử đã vô hiệu còn password123 (`ACTION_DISABLED_PW_RESET`), khoá kiểm nguyên tử trong UPDATE (cả nhánh sai và đúng), CLI từ chối password123 + ID >255, khớp ID + role. Không làm: dummy hash cost, xoá file icon khi xoá user, `LOGIN_ID_LABELS` sang constants.
+
+**Câu thông báo mới không có trong Excel**: `MSG_LOGIN_LOCKED`, `MSG_PASSWORD_PUBLIC`, `MSG_ID_TOO_LONG`, `MSG_ACCOUNT_SAVE_FAILED`, `MSG_USER_NOT_FOUND`, `MSG_NO_ADMIN_LEFT`, `MSG_ID_TAKEN`.
+
+**Chi phí**: ước tính $5.31 (3.19–8.50), ngân sách $8.5; thực tế theo sổ token **$6.11** (subagent $4.51, luồng PM $1.61; sổ có thể chưa đủ phần PM).
+
+**Việc người dùng làm sau nghiệm thu (local trước, rồi EC2)**
+1. `flask --app run db upgrade`.
+2. `flask --app run create-admin` (tạo 管理者 thật).
+3. `flask --app run remove-test-users --dry-run`, xem kết quả, rồi chạy không có `--dry-run`.
+4. EC2: kiểm tra Nginx có `proxy_set_header Host $host;` và `X-Forwarded-Proto $scheme;`, gunicorn bind `127.0.0.1` hoặc socket; đúng thì đặt `PROXY_FIX_HOPS=1` và restart. Nếu mọi form báo 「セッションの有効期限…」 thì đặt `WTF_CSRF_SSL_STRICT=false`.
+
+**Chưa làm (2b / giai đoạn 3)**: email và reset 2 bước của 市民, パスワード変更, đăng ký 職員 lưu DB, màn hình mở khoá/đặt lại mật khẩu cho admin, rate limit theo IP, đăng xuất mọi phiên khi đổi mật khẩu, chuẩn hoá ID 職員 về chữ thường.
+
 ## Hướng dẫn thử như khách hàng
 
 Chạy local: `python run.py` (interpreter `task-app\.venv\Scripts\python.exe`), mở http://localhost:5000.
@@ -94,7 +122,7 @@ Chạy local: `python run.py` (interpreter `task-app\.venv\Scripts\python.exe`),
 4. Điền đủ, đính ảnh JPEG (có GPS càng tốt), gửi → màn hoàn tất hiện 緊急度.
 5. 履歴 (`/citizen/reports`): báo cáo mới ở trạng thái 未対応.
 6. Thử file .txt hoặc ảnh >10MB → báo lỗi, không ra 500.
-7. Đăng xuất (nút POST), đăng nhập `/login/staff` bằng `staff01` / mật khẩu thử trong README (tài khoản thử chỉ có sau `python -m scripts.seed --with-test-users`) → dashboard có báo cáo mới.
+7. Đăng xuất (nút POST), đăng nhập `/login/staff` bằng `staff01` / mật khẩu thử trong `scripts/seed.py` (tài khoản thử chỉ có sau `python -m scripts.seed --with-test-users`) → dashboard có báo cáo mới.
 8. 報告一覧 → 詳細: đổi sang 対応中 kèm ghi chú → thông báo thành công. Gửi ghi chú rỗng → cảnh báo.
 9. Mở 地図, 統計 (thử tải PDF/CSV), AI分析.
 10. Đăng nhập lại 市民: 履歴 hiện 対応中. Gõ `/staff/dashboard` → 403.

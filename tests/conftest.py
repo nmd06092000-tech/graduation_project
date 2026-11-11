@@ -3,7 +3,11 @@ import io
 import os
 import re
 
+from datetime import datetime, timezone
+from unittest import mock
+
 import pytest
+from flask import g
 from PIL import Image
 from sqlalchemy.engine import make_url
 from werkzeug.datastructures import FileStorage
@@ -67,6 +71,8 @@ def csrf_client(csrf_app):
 
 def get_csrf_token(client, path):
     """path を GET し、HTML の hidden 入力 csrf_token の値を取り出す（同じクライアントのセッションに紐づく）"""
+    # ログイン時の session.clear() でトークンが変わるため、同じ app_context に残った古い g.csrf_token は捨てる
+    g.pop('csrf_token', None)
     html = client.get(path).get_data(as_text=True)
     match = re.search(r'name="csrf_token"\s+value="([^"]+)"', html)
     assert match, f'{path} に csrf_token の hidden 入力がありません'
@@ -93,6 +99,33 @@ def staff(app):
 @pytest.fixture
 def citizen(app):
     return _make_user('taro@example.com', '山田 太郎', User.ROLE_CITIZEN)
+
+
+@pytest.fixture
+def admin(app):
+    return _make_user('admin01', '佐藤 管理', User.ROLE_ADMIN)
+
+
+@pytest.fixture
+def runner(app):
+    """flask コマンド（app.cli）をテスト DB のアプリで実行する CliRunner"""
+    return app.test_cli_runner()
+
+
+@pytest.fixture
+def fake_now():
+    """auth_service._now を固定する関数（fake_now(datetime) で差し替え、テスト終了後に元へ戻る）"""
+    patchers = []
+
+    def _set(value=None):
+        value = value or datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        patcher = mock.patch('app.services.auth_service._now', return_value=value)
+        patcher.start()
+        patchers.append(patcher)
+        return value
+    yield _set
+    for patcher in patchers:
+        patcher.stop()
 
 
 @pytest.fixture

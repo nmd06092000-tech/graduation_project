@@ -226,3 +226,32 @@ MSG_EMAIL_TAKEN = 'このメールアドレスは既に登録されています�
 MSG_ICON_REQUIRED = '画像ファイルを選択してください。'
 MSG_ICON_UPDATED = 'プロフィールアイコンを更新しました。'
 MSG_ICON_DELETED = 'プロフィールアイコンを削除しました。'
+
+
+# ログイン・アカウント作成・パスワード（ユースケース記述の文言どおり）
+# {label} は ID 欄の名前（市民: メールアドレス / 職員: 職員ID / 管理者: 管理者ID）
+# ログイン 代替フロー（全て未入力）
+MSG_ID_OR_PASSWORD_REQUIRED = '{label}またはパスワードを入力してください'
+# ログイン 代替フロー（ID 未入力・パスワード未入力・8文字未満・職員/管理者 ID に ＠）
+MSG_ID_REQUIRED = '{label}を入力してください。'
+MSG_PASSWORD_REQUIRED = 'パスワードを入力してください。'
+MSG_PASSWORD_TOO_SHORT = 'このテキストは8文字以上で入力してください（現在は{length}文字です）。'
+MSG_ID_HAS_AT = "{label}に'＠'は使用できません。"
+# 設計書にない業務エラー（ログイン失敗・利用停止・一時ロック）
+MSG_LOGIN_FAILED = '{label}またはパスワードが正しくありません'
+MSG_ACCOUNT_DISABLED = 'このアカウントは利用停止されています'
+MSG_LOGIN_LOCKED = 'ログインに連続して失敗したため、アカウントを一時的にロックしました。{minutes}分後にもう一度お試しください。'
+# 設計書にない入力チェック・業務エラー（パスワード確認・flask コマンドによるアカウント操作）
+MSG_PASSWORD_MISMATCH = 'パスワードが一致しません。'
+MSG_ID_TAKEN = 'この{label}は既に登録されています。'
+MSG_USER_NOT_FOUND = '「{login_id}」のアカウントが見つかりません。'
+MSG_NO_ADMIN_LEFT = '有効な管理者アカウントが他に残らないため、実行できません。先に create-admin で管理者を作成してください。'
+# 以下 3 つは設計書にない新規の文言（flask コマンドの create-admin / set-password）
+MSG_PASSWORD_PUBLIC = 'このパスワードは公開されているため使用できません。'
+MSG_ID_TOO_LONG = '{label}は255文字以内で入力してください。'
+MSG_ACCOUNT_SAVE_FAILED = 'アカウントを保存できませんでした。しばらくしてからもう一度お試しください。'
+
+# 開発用テストアカウントの公開パスワード（README に載っていた値。秘密ではない）。
+# remove-test-users の対象判定と scripts/seed.py のテストアカウント作成で共用し、
+# create-admin / set-password ではこの値を新しいパスワードとして受け付けない
+TEST_ACCOUNT_PW = 'password123'

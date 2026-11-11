@@ -29,6 +29,28 @@ def _env_bool(name, default):
     )
 
 
+def _env_int(name, default, minimum):
+    """環境変数を整数として読む
+
+    未設定・空は default。整数でない値、または minimum 未満の値は ValueError にして起動時に気づけるようにする
+    （打ち間違いでロック回数が 0 になるなど、保護が黙って無効になるのを防ぐ）。
+    """
+    raw = os.environ.get(name, '').strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        raise ValueError(
+            f'環境変数 {name} の値 {os.environ.get(name)!r} は不正です。整数を指定してください'
+        ) from None
+    if value < minimum:
+        raise ValueError(
+            f'環境変数 {name} の値 {value} は不正です。{minimum} 以上の整数を指定してください'
+        )
+    return value
+
+
 class Config:
     # 未設定の場合は起動時にエラーにする（秘密情報をコードに直書きしない）
     SECRET_KEY = os.environ['SECRET_KEY']
@@ -51,6 +73,18 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     REMEMBER_COOKIE_SAMESITE = 'Lax'
+
+    # ログインの一時ロック：同じアカウントで連続して失敗した回数がこの値（1 以上）に達したら、
+    # LOGIN_LOCK_MINUTES 分ログインできなくする（回数・期限は DB の users に保存。ログイン成功で 0 に戻る）
+    # （どちらも整数で 1 以上。違反は起動時に ValueError）
+    LOGIN_MAX_FAILURES = _env_int('LOGIN_MAX_FAILURES', 5, 1)
+    LOGIN_LOCK_MINUTES = _env_int('LOGIN_LOCK_MINUTES', 15, 1)
+
+    # リバースプロキシ（Nginx）の段数。0 なら ProxyFix を使わない（既定）。
+    # 1 以上にすると X-Forwarded-For / X-Forwarded-Proto を信頼し、request.is_secure などが HTTPS で正しくなる
+    # （X-Forwarded-Host は信頼しない）。Nginx が必ずこれらのヘッダを上書きして付ける構成でのみ設定すること
+    # （整数で 0 以上。違反は起動時に ValueError）
+    PROXY_FIX_HOPS = _env_int('PROXY_FIX_HOPS', 0, 0)
 
     # AI分析画面「要人間チェック（低信頼度）」とみなす信頼度のしきい値（0〜1）
     AI_LOW_CONFIDENCE_THRESHOLD = float(os.environ.get('AI_LOW_CONFIDENCE_THRESHOLD', '0.7'))

@@ -1,20 +1,21 @@
 import re
-from datetime import datetime, timezone
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash
+from flask import Blueprint, render_template, request, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, current_user
 from sqlalchemy.exc import IntegrityError
 
+from app.constants import MSG_EMAIL_NO_AT, MSG_PASSWORD_MISMATCH
 from app.extensions import db
 from app.models import User
+from app.services import ServiceError, ValidationError, auth_service
 
 auth_bp = Blueprint('auth', __name__)
 
 # ロールごとの設定（ログイン画面・ID入力欄・ログイン後の遷移先）
 LOGIN_SETTINGS = {
-    User.ROLE_CITIZEN: {'template': 'auth/login_citizen.html', 'id_field': 'email', 'label': 'メールアドレス', 'home': 'citizen.mypage'},
-    User.ROLE_STAFF: {'template': 'auth/login_staff.html', 'id_field': 'staff_id', 'label': '職員ID', 'home': 'staff.dashboard'},
-    User.ROLE_ADMIN: {'template': 'auth/login_admin.html', 'id_field': 'admin_id', 'label': '管理者ID', 'home': 'admin.portal'},
+    User.ROLE_CITIZEN: {'template': 'auth/login_citizen.html', 'id_field': 'email', 'home': 'citizen.mypage'},
+    User.ROLE_STAFF: {'template': 'auth/login_staff.html', 'id_field': 'staff_id', 'home': 'staff.dashboard'},
+    User.ROLE_ADMIN: {'template': 'auth/login_admin.html', 'id_field': 'admin_id', 'home': 'admin.portal'},
 }
 
 
@@ -26,46 +27,22 @@ def _handle_login(role):
         return redirect(url_for(setting['home']))
 
     if request.method == 'POST':
-        login_id = request.form.get(setting['id_field'], '').strip()
-        password = request.form.get('password', '')
         remember = request.form.get('remember') == 'on'
-
-        # 未入力チェック（両方未入力の場合は1つのメッセージにまとめる）
-        errors = []
-        if not login_id and not password:
-            errors.append(f"{setting['label']}またはパスワードを入力してください")
-        else:
-            if not login_id:
-                errors.append(f"{setting['label']}を入力してください。")
-            if not password:
-                errors.append('パスワードを入力してください。')
-            elif len(password) < 8:
-                # パスワード文字数チェック（8文字未満はエラー）
-                errors.append(f'このテキストは8文字以上で指定してください（現在は{len(password)}文字です）。')
-        if errors:
-            for error in errors:
-                flash(error, 'danger')
+        try:
+            user = auth_service.authenticate(
+                role, request.form.get(setting['id_field'], ''), request.form.get('password', ''))
+        except ValidationError as e:
+            # 入力エラー・ロック中（メッセージごとに色分け）
+            for category, message in e.messages:
+                flash(message, category)
+            return render_template(setting['template'])
+        except ServiceError as e:
+            # ID またはパスワード違い・利用停止
+            flash(str(e), 'danger')
             return render_template(setting['template'])
 
-        if role == User.ROLE_CITIZEN:
-            # メールアドレスは大文字・小文字を区別しない
-            login_id = login_id.lower()
-        elif '@' in login_id:
-            # 職員・管理者IDに @ は使用不可（既存仕様）
-            flash(f"{setting['label']}に @ は使用できません", 'danger')
-            return render_template(setting['template'])
-
-        user = User.query.filter_by(login_id=login_id, role=role).first()
-        if user is None or not user.check_password(password):
-            flash(f"{setting['label']}またはパスワードが正しくありません", 'danger')
-            return render_template(setting['template'])
-
-        if not user.is_active:
-            flash('このアカウントは利用停止されています', 'danger')
-            return render_template(setting['template'])
-
-        user.last_login_at = datetime.now(timezone.utc)
-        db.session.commit()
+        # 前のログインの残り（報告の下書き・CSRF トークンなど）を引き継がないよう、セッションを作り直す
+        session.clear()
         login_user(user, remember=remember)
         return redirect(url_for(setting['home']))
 
@@ -93,6 +70,9 @@ def login_admin():
 # ログアウト（CSRF 対策のため POST のみ。GET は 405）
 @auth_bp.route('/logout', methods=['POST'])
 def logout():
+    # 次の人に下書き・CSRF トークンなどを引き継がないよう、セッションを空にする。
+    # logout_user より先に clear する：logout_user が付ける「保持 Cookie を消す」印をあとから消さないため
+    session.clear()
     logout_user()
     return redirect(url_for('public.index'))
 
@@ -110,8 +90,13 @@ def register():
         confirm_password = request.form.get('confirm_password', '')
 
         error = None
+        category = 'danger'
         if not name or not email or not postal_code or not address or not password or not confirm_password:
             error = 'お名前、メールアドレス、郵便番号、住所、パスワードのいずれかが未入力です。'
+        elif '@' not in email:
+            # 市民のメールアドレスに @ が必須（職員・管理者の ID と重ならないようにする。ブラウザ側の検査だけに頼らない）
+            error = MSG_EMAIL_NO_AT.format(email=email)
+            category = 'warning'
         elif len(name) > 100:
             error = 'お名前は100文字以内で入力してください。'
         elif not re.fullmatch(r'[0-9]{3}-?[0-9]{4}', postal_code):
@@ -121,12 +106,12 @@ def register():
         elif len(password) < 8:
             error = 'パスワードは8文字以上で入力してください。'
         elif password != confirm_password:
-            error = 'パスワードが一致しません。'
+            error = MSG_PASSWORD_MISMATCH
         elif User.query.filter_by(login_id=email).first():
             error = 'このメールアドレスは既に登録されています。'
 
         if error:
-            flash(error, 'danger')
+            flash(error, category)
             return render_template('auth/register.html', name=name, email=email,
                                    postal_code=postal_code, address=address)
 

@@ -2,6 +2,7 @@ from urllib.parse import quote, urlsplit
 
 from flask import Flask, flash, jsonify, redirect, request, url_for
 from flask_wtf.csrf import CSRFError
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from app.constants import MSG_CSRF_EXPIRED
@@ -38,6 +39,12 @@ def create_app(config_class=Config):
     """アプリケーションファクトリ：設定・拡張機能・Blueprint をまとめて初期化する"""
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    # Nginx などの背後で動かすとき、X-Forwarded-For / X-Forwarded-Proto を信頼して
+    # request.remote_addr・is_secure を正しくする。X-Forwarded-Host は信頼しない（x_host=0）
+    proxy_hops = app.config['PROXY_FIX_HOPS']
+    if proxy_hops > 0:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_hops, x_proto=proxy_hops, x_host=0)
 
     db.init_app(app)
     login_manager.init_app(app)

@@ -32,9 +32,17 @@ class User(UserMixin, db.Model):
     # アイコン画像の保存パス（UPLOAD_FOLDER からの相対パス）。NULL の場合は既定アイコン
     icon_path = db.Column(db.String(255))
     last_login_at = db.Column(db.DateTime(timezone=True))
+    # 連続ログイン失敗回数（成功・ロック発動で 0 に戻す。加算は auth_service が UPDATE 文で原子的に行う）
+    failed_login_count = db.Column(db.Integer, nullable=False, default=0, server_default=sa.text('0'))
+    # この日時までログイン不可（NULL またはすでに過ぎていればロックなし）
+    locked_until = db.Column(db.DateTime(timezone=True))
+    # 職員の担当部署（旧データ・市民・管理者は NULL。使うのは職員アカウントの管理画面から）
+    department_id = db.Column(db.BigInteger, db.ForeignKey('departments.id', ondelete='RESTRICT'), index=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=sa.func.now())
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False,
                            server_default=sa.func.now(), onupdate=sa.func.now())
+
+    department = db.relationship('Department')
 
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
