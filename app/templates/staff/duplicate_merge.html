@@ -49,6 +49,7 @@
                             </p>
 
                             <form method="POST" action="{{ url_for('staff.duplicate_merge', group_id=group.group_id) }}" data-nav="replace">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <div class="mb-4">
                                     {% for r in group.reports %}
                                     <div class="form-check p-3 border rounded mb-3 bg-light">

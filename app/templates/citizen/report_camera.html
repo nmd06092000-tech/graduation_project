@@ -14,6 +14,7 @@
         <div class="card-body text-center p-4">
             {# カメラ映像（report_form.js が表示する）。カメラを使えない端末では写真の選択欄を表示する #}
             <form id="cameraForm" action="{{ url_for('citizen.report_camera') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="bg-dark text-white rounded d-flex align-items-center justify-content-center mb-4 overflow-hidden" style="height: 300px;">
                     <video id="cameraVideo" class="w-100 h-100 d-none" style="object-fit: cover;" autoplay playsinline muted></video>
                     <p id="cameraPlaceholder" class="fs-5 mb-0">撮影画面</p>

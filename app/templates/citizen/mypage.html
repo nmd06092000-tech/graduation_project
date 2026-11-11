@@ -35,6 +35,9 @@
                 <a href="{{ url_for('citizen.report_new') }}" class="btn btn-primary fw-bold citizen-new-report">+ 新規報告</a>
             </div>
 
+            <!-- CSRF エラーなどのメッセージ表示エリア -->
+            {% include 'components/_flash.html' %}
+
             <!-- サマリーカード -->
             <div class="row g-3 mb-4 citizen-summary">
                 <div class="col-md-4">
@@ -93,7 +96,10 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
+                <form method="post" action="{{ url_for('auth.logout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger px-4">ログアウト</button>
+                </form>
             </div>
         </div>
     </div>

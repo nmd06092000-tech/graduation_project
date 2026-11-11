@@ -60,6 +60,7 @@
                             </div>
 
                             <form action="{{ url_for('citizen.profile_icon') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <!-- 画像アルバムから選択 -->
                                 <div class="mb-3 text-start">
                                     <label class="form-label small fw-bold">画像アルバムから選択</label>
@@ -106,6 +107,7 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
                 <form action="{{ url_for('citizen.profile_icon_delete') }}" method="POST" data-nav="replace">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger px-4">削除</button>
                 </form>
             </div>
@@ -127,7 +129,10 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
+                <form method="post" action="{{ url_for('auth.logout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger px-4">ログアウト</button>
+                </form>
             </div>
         </div>
     </div>

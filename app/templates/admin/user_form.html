@@ -12,6 +12,8 @@
 
     <div class="row justify-content-center">
         <div class="col-md-8 col-lg-6">
+            <!-- サーバー側のメッセージ表示エリア -->
+            {% include 'components/_flash.html' %}
             <!-- 画面側の入力チェックのエラー表示エリア -->
             <div id="input-errors"></div>
             <div class="card border-0 shadow-sm">
@@ -20,6 +22,7 @@
                 </div>
                 <div class="card-body p-4">
                     <form action="{{ url_for('admin.user_register') }}" method="POST" data-nav="replace">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="mb-3">
                             <label for="staff_name" class="form-label fw-bold small">職員氏名 <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="staff_name" name="staff_name" placeholder="例: 埼玉県 太郎" required>

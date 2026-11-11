@@ -21,6 +21,7 @@
                 <div class="card-body p-4">
                     <!-- 未入力・文字数チェックは画面側（下の script）で行い、エラー時は送信しない（履歴に残さないため）。サーバー側でも同じチェックを行う -->
                     <form action="{{ url_for('auth.login_staff') }}" method="POST">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="mb-3">
                             <label class="form-label small fw-bold">職員ID</label>
                             <div class="input-group">

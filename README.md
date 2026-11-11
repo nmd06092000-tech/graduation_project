@@ -18,8 +18,10 @@ cp .env.example .env
 # 3. Tạo hoặc cập nhật bảng bằng migration (chạy ở thư mục task-app)
 flask --app run db upgrade
 
-# 4. Thêm dữ liệu master (部署, カテゴリ) và tài khoản test. Chạy lại nhiều lần cũng không bị trùng
+# 4. Thêm dữ liệu master (部署, カテゴリ). Chạy lại nhiều lần cũng không bị trùng
 python -m scripts.seed
+#    Chỉ khi phát triển ở máy local: thêm cờ --with-test-users để tạo cả 3 tài khoản test
+python -m scripts.seed --with-test-users
 
 # 5. Chạy server: http://localhost:5000
 python run.py
@@ -58,7 +60,9 @@ WantedBy=timers.target
 
 Bật bằng `sudo systemctl daemon-reload && sudo systemctl enable --now task-app-rejudge.timer`, xem log bằng `journalctl -u task-app-rejudge`.
 
-Tài khoản test do `scripts/seed.py` tạo, chỉ dùng khi phát triển:
+**Seed và tài khoản test.** Mặc định `python -m scripts.seed` chỉ tạo dữ liệu master (部署, カテゴリ). Tài khoản test chỉ được tạo khi thêm cờ `--with-test-users`, vì mật khẩu thử đã công khai trong file này, không được để server thật (EC2) có các tài khoản đó. **Không chạy seed với `--with-test-users` trên server.** Trong code, `scripts.seed.seed(with_test_users=False)` là hàm dùng được từ test (gọi trên app test), `main(argv)` là lối vào dòng lệnh.
+
+Tài khoản test (chỉ có sau khi seed với `--with-test-users`, chỉ dùng khi phát triển):
 
 | Vai trò | ID | Mật khẩu |
 |---|---|---|
@@ -66,14 +70,24 @@ Tài khoản test do `scripts/seed.py` tạo, chỉ dùng khi phát triển:
 | 職員 | staff01 | password123 |
 | 管理者 | admin01 | password123 |
 
+Cấu hình bảo mật trong `.env` (xem `.env.example`): `SESSION_COOKIE_SECURE` (`true` khi chạy HTTPS như EC2, mặc định `false` cho `http://localhost`) và `WTF_CSRF_SSL_STRICT` (mặc định `true`). Giá trị gõ sai (ví dụ `ture`) làm app **không khởi động** với thông báo lỗi nêu tên biến, để không vô tình tắt Secure.
+
 **Chạy test.** Test dùng một DB PostgreSQL riêng, mỗi test tạo rồi xoá toàn bộ bảng. Không bao giờ trỏ vào DB dev (conftest sẽ dừng nếu `TEST_DATABASE_URL` trùng `DATABASE_URL`). Chưa đặt `TEST_DATABASE_URL` thì các test dùng DB bị bỏ qua.
 
+`saitama_app` **không có quyền CREATEDB**, nên phải tạo DB test bằng tài khoản `postgres`, một lần. Lệnh trên Windows (PowerShell):
+
+```powershell
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -U postgres -h localhost -c "CREATE DATABASE saitama_help_test OWNER saitama_app"
+```
+
+`TEST_DATABASE_URL` giống `DATABASE_URL`, chỉ đổi `/saitama_help` thành `/saitama_help_test`. Thêm vào `.env`, rồi chạy test:
+
 ```bash
-# Tạo DB test một lần bằng tài khoản có quyền CREATEDB (ví dụ postgres)
-psql -U postgres -c "CREATE DATABASE saitama_help_test OWNER saitama_app"
-# Thêm vào .env: TEST_DATABASE_URL=postgresql+psycopg://saitama_app:<mật khẩu>@localhost:5432/saitama_help_test
+# TEST_DATABASE_URL=postgresql+psycopg://saitama_app:<mật khẩu>@localhost:5432/saitama_help_test
 python -m pytest
 ```
+
+conftest từ chối chạy nếu tên DB test không kết thúc bằng `_test`. Thư mục `docs/` nằm trong `.gitignore`, nên không có trong git (chỉ có trên máy đã tạo ra nó).
 
 Công nghệ: Flask 3, Flask-SQLAlchemy, Flask-Migrate (Alembic), Flask-Login, PostgreSQL (psycopg 3), reportlab (PDF), Bootstrap 5, Chart.js.
 
@@ -119,10 +133,11 @@ task-app/
 ├── docs/sequence/               ✅ sơ đồ sequence (PlantUML): auth/ (đăng nhập, đăng ký), citizen/, staff/, admin/, common/ (dùng chung)
 ├── docs/class/                  sơ đồ class: auth/ ✅, citizen/ staff/ admin/ ⬜. Mỗi thư mục con của sequence là một sơ đồ <グループ名>_クラス図 (.drawio, .json, .png)
 ├── scripts/
-│   └── seed.py                  ✅ dữ liệu master (部署, カテゴリ) và tài khoản test
+│   └── seed.py                  ✅ dữ liệu master (部署, カテゴリ); tài khoản test chỉ khi có `--with-test-users`
 ├── tests/                       pytest (cần TEST_DATABASE_URL, xem mục 1)
 │   ├── conftest.py              ✅ app, DB test, user/カテゴリ/報告 mẫu
 │   ├── test_auth.py             ⬜
+│   ├── test_security.py         ✅ CSRF (token, redirect về trang trước, logout POST), cờ cookie, `_env_bool`, seed
 │   ├── test_report_service.py   ✅ 職員 (一覧, 詳細, AI分析), 市民 (報告する, 写真撮影, 位置情報, マイページ)
 │   ├── test_user_service.py     ✅ プロフィール設定, アイコン
 │   ├── test_status_service.py   ✅ cập nhật trạng thái, 緊急度の判定, 一括変更
@@ -177,14 +192,14 @@ task-app/
 
 ### Gốc dự án
 - **run.py**: chỉ gọi `create_app()` và chạy server. Không viết route ở đây.
-- **config.py**: lớp `Config` đọc `.env`, `TestingConfig` cho pytest (đọc `TEST_DATABASE_URL`). Đã có `AI_LOW_CONFIDENCE_THRESHOLD` (mặc định 0.7, ngưỡng 要人間チェック ở AI分析), `AI_REJUDGE_HOURS` (mặc định 12, số giờ trước khi phán định lại báo cáo 未対応), `GOOGLE_MAPS_API_KEY` và `GOOGLE_MAPS_MAP_ID` (bản đồ 地図表示), `GEOCODER_URL` và `GEOCODER_TIMEOUT` (tìm tọa độ từ 発生場所 khi báo cáo không có GPS), `REVERSE_GEOCODER_URL` (đổi tọa độ GPS thành địa chỉ). Dự định tách thêm `DevelopmentConfig`, `ProductionConfig`, và thêm các key `AI_PROVIDER`, `AI_API_KEY`, `UPLOAD_FOLDER`, `MAX_CONTENT_LENGTH`, `DUPLICATE_RADIUS_M`.
+- **config.py**: lớp `Config` đọc `.env`, `TestingConfig` cho pytest (đọc `TEST_DATABASE_URL`). Đã có `AI_LOW_CONFIDENCE_THRESHOLD` (mặc định 0.7, ngưỡng 要人間チェック ở AI分析), `AI_REJUDGE_HOURS` (mặc định 12, số giờ trước khi phán định lại báo cáo 未対応), `GOOGLE_MAPS_API_KEY` và `GOOGLE_MAPS_MAP_ID` (bản đồ 地図表示), `GEOCODER_URL` và `GEOCODER_TIMEOUT` (tìm tọa độ từ 発生場所 khi báo cáo không có GPS), `REVERSE_GEOCODER_URL` (đổi tọa độ GPS thành địa chỉ). Đã có `AI_PROVIDER` (`gemini` hoặc `rule_based`), nhóm `GEMINI_*` (`GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_TIMEOUT_MS`, `GEMINI_MAX_RETRIES`, `GEMINI_TEMPERATURE`, `GEMINI_MAX_OUTPUT_TOKENS`, `GEMINI_THINKING_LEVEL`), `UPLOAD_FOLDER` (mặc định `instance/uploads`) và `MAX_CONTENT_LENGTH` (32MB một request). Bảo mật: `WTF_CSRF_TIME_LIMIT = None` (token sống cùng session), `WTF_CSRF_SSL_STRICT` (đọc từ `.env`, mặc định true), `SESSION_COOKIE_SECURE` (đọc từ `.env`, mặc định false, `REMEMBER_COOKIE_SECURE` theo cùng giá trị), cờ `HttpOnly` và `SameSite=Lax` cho cookie session và remember. Hàm `_env_bool(name, default)`: `1/true/yes/on` là True, `0/false/no/off` là False, không đặt hoặc rỗng là default, giá trị khác thì `raise ValueError` (fail fast lúc khởi động). `TestingConfig` đặt `WTF_CSRF_ENABLED = False`. Dự định tách thêm `DevelopmentConfig`, `ProductionConfig`, và thêm `DUPLICATE_RADIUS_M`.
 - **instance/uploads/**: nơi lưu ảnh. Ảnh **không** đặt trong `static/` vì có thể chứa thông tin cá nhân. Chỉ người báo cáo và nhân viên được xem, thông qua một route có kiểm tra quyền.
 - **scripts/**: script chạy tay như seed hay import dữ liệu. Chạy bằng `python -m scripts.<tên>` từ thư mục task-app.
-- **tests/**: `conftest.py` tạo app với `TestingConfig` và DB riêng. Mỗi service có một file test.
+- **tests/**: `conftest.py` tạo app với `TestingConfig` và DB riêng. Mỗi service có một file test. Lưu ý môi trường test: `TestingConfig` tắt CSRF; fixture `app` giữ một app context suốt test nên `g.csrf_token` dùng chung giữa các client (muốn token của "session khác" phải `g.pop('csrf_token')`). Test CSRF dùng fixture `csrf_app`, `csrf_client`, `csrf_login` và helper `get_csrf_token`. `make_report` không tạo `report_status_histories` (lịch sử bắt đầu từ 0). Gọi seed trong test bằng `scripts.seed.seed()` trên app test, và `main()` với `create_app` được monkeypatch; không chạy `python -m scripts.seed` trong test.
 
 ### app/ lõi
-- **app/\_\_init\_\_.py**: `create_app()`. Khi thêm blueprint mới, hãy import và `register_blueprint` ở đây. Error handler 403/404/500 và filter Jinja cũng đăng ký ở đây.
-- **extensions.py**: khởi tạo mọi extension ở một chỗ để tránh import vòng. Đã có `migrate = Migrate()`. Sau này sẽ thêm `csrf = CSRFProtect()`.
+- **app/\_\_init\_\_.py**: `create_app()`. Khi thêm blueprint mới, hãy import và `register_blueprint` ở đây. Đã có `csrf.init_app(app)` và error handler cho `CSRFError`: ghi log, `flash(MSG_CSRF_EXPIRED, 'warning')` rồi redirect về trang trước (`_previous_page_path()`; request có `X-Replace-History` được `after_request` đổi thành JSON `{redirect: ...}`). `_previous_page_path()` chỉ lấy path và query của `Referer` (bỏ host để tránh open redirect), mã hoá lại bằng `quote` (ký tự điều khiển, dấu cách thành `%xx`, `%xx` sẵn có giữ nguyên), Referer không có, bắt đầu bằng `//` hoặc chứa `\` thì về `public.index`. Error handler 403/404/500 và filter Jinja sẽ đăng ký ở đây (chưa có, các file `templates/errors/` mới là file giữ chỗ).
+- **extensions.py**: khởi tạo mọi extension ở một chỗ để tránh import vòng. Đã có `db`, `login_manager`, `migrate = Migrate()` và `csrf = CSRFProtect()`.
 - **constants.py**: định nghĩa trạng thái, độ khẩn cấp và vai trò bằng Enum. Mã lưu trong DB là tiếng Anh, nhãn hiển thị là tiếng Nhật. Template và service đều lấy nhãn từ đây, không viết tay.
   - Lấy nhãn: `ReportStatus.label_of(code)`. Lấy trạng thái kế tiếp hợp lệ: `next_statuses(current, role)`.
   - `CHECK` của model lấy danh sách giá trị qua `XXX.check_sql('cột')`. Khi thêm giá trị vào Enum, phải tạo migration để cập nhật `CHECK`.
@@ -234,7 +249,7 @@ Chỉ `status_service.py` được đổi trạng thái. Mỗi lần đổi ph�
 - 一括対応ステータス変更: bỏ qua báo cáo đã 取り消し và báo cáo đã ở trạng thái đích. Nếu còn báo cáo nào không chuyển được (ví dụ 対応済み → 対応中) thì không đổi báo cáo nào và báo lỗi kèm ID.
 - 代表案件に統合: chỉ nhóm `open`. Đặt `duplicate_of_id` cho các báo cáo còn lại, nhóm chuyển `merged`, không đổi trạng thái nên không ghi lịch sử. Xong thì quay về 重複確認.
 - Câu thông báo lấy nguyên văn từ Excel, đặt trong `constants.py` (`MSG_*`). Lỗi nghiệp vụ dùng `ServiceError` (`app/services/__init__.py`), route bắt rồi `flash`.
-- Thống kê và dashboard không tính báo cáo 取り消し. Bản đồ chỉ hiện báo cáo chưa xong (未対応, 対応中).
+- Thống kê và dashboard không tính báo cáo 取り消し. Bản đồ hiện báo cáo chưa xong, tức theo `OPEN_STATUSES` (gồm cả 保留, 業者対応中, 完了確認中).
 - 地図表示 dùng **Google Maps JavaScript API**. Điền `GOOGLE_MAPS_API_KEY` vào `.env` là chạy. Ghim (`AdvancedMarkerElement`) đặt tại `latitude`/`longitude` của báo cáo. Khi gửi 報告する, `report_service.create_report()` ưu tiên GPS (tọa độ trên form, tức vị trí lúc chụp hoặc của thiết bị → tọa độ trong draft → EXIF của ảnh đính kèm). Nếu không có GPS, nó tìm tọa độ của 発生場所 (`address`) bằng API tìm địa chỉ của 国土地理院 (`utils/geo.search_address()`, `msearch.gsi.go.jp/address-search/AddressSearch`, miễn phí, không cần key, ghi 「出典：国土地理院」 dưới bản đồ) rồi lưu vào `latitude`/`longitude`. Không tìm được thì báo `MSG_ADDRESS_NOT_FOUND` (câu này không có trong Excel). Nguồn tọa độ lưu ở `reports.location_source`. Khi có GPS, server đổi tọa độ thành địa chỉ (`utils/geo.reverse_geocode()`, 逆ジオコーダー của 国土地理院) và lưu vào `reports.gps_address`. Nếu 発生場所 bỏ trống thì dùng địa chỉ này làm 発生場所, nên có GPS thì 発生場所 không còn bắt buộc. 報告詳細 của 職員 hiện 位置情報の取得元, 位置情報（GPS）の住所, 緯度経度 và link xem bản đồ, để đối chiếu khi người dân nhập sai địa chỉ. API này là API nội bộ của 地理院地図, có thể đổi hoặc dừng không báo trước; khi đó báo cáo không có GPS sẽ không gửi được. Đổi URL bằng `GEOCODER_URL`, để trống thì tắt tìm kiếm (test đặt trống, không gọi API thật). Màu ghim theo 緊急度 (đỏ 高, vàng 中, xanh 低 hoặc chưa phân loại). Bấm ghim hiện 件名, 住所, 危険度 và link 詳細を見る. `AdvancedMarkerElement` cần map ID (`GOOGLE_MAPS_MAP_ID`, mặc định `DEMO_MAP_ID` chỉ để dev). Không có key thì hiện ảnh tĩnh `static/images/map.avif` như trước. Key được gửi xuống trình duyệt nên phải giới hạn HTTP referrer và chỉ bật Maps JavaScript API trong Google Cloud.
 - AI緊急度の再判定 (thêm theo thiết kế màn hình, không có trong Excel): báo cáo còn 未対応 và đã tạo quá `AI_REJUDGE_HOURS` giờ (mặc định 12) được AI phán định lại một lần (`report_service.rejudge_stale_reports()`, ghi `ai_analyses.trigger_type = 'rejudge'`). AI lỗi cũng tính là đã phán định lại, không thử lại. Kết quả phán định lại **không đổi** `reports` (kể cả khi `urgency` đang NULL). Mỗi báo cáo tạo một thông báo trên dashboard: AI ra 緊急度 khác hiện tại thì nhắc xem lại ở 緊急度の判定, giống thì ghi 変更なし, lỗi thì ghi 失敗. AI分析 hiện quy tắc này và cột 再判定状況.
 - レポート出力: `GET /staff/stats/export/<pdf|csv>` (`staff.stats_export`) trả file tải về, nội dung giống màn hình 統計 (サマリー, カテゴリ別, 月別). Nút 確定 trong modal tải file bằng `fetch`, xong mới hiện 「PDF形式での出力が完了しました。」/「CSV形式での出力が完了しました。」. CSV là UTF-8 có BOM để mở bằng Excel không lỗi font. PDF tạo bằng reportlab, nhúng font IPAexゴシック (`app/fonts/ipaexg.ttf`, giấy phép IPA kèm cùng thư mục, chỉ nhúng các ký tự đã dùng).
@@ -290,9 +305,9 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 
 | Actor | Use case | URL | Endpoint | Service |
 |---|---|---|---|---|
-| 市民 | アカウント作成 | `/register` | ✅ `auth.register` | user_service |
-| Chung | ログイン, ログアウト | `/login/<role>`, `/logout` | ✅ `auth.login_*`, `auth.logout` | auth_service |
-| Chung | パスワード再設定 | `/reset-password`, `/login/staff/reset-password`, `/login/admin/reset-password` | ✅ `auth.reset_password*` | auth_service |
+| 市民 | アカウント作成 | `/register` | ✅ `auth.register` | chưa có service, logic nằm ở `auth/routes.py` (dự kiến user_service) |
+| Chung | ログイン, ログアウト | `/login/<role>`, `/logout` | ✅ `auth.login_*`, `auth.logout` | chưa có service, logic nằm ở `auth/routes.py` (dự kiến auth_service) |
+| Chung | パスワード再設定 | `/reset-password`, `/login/staff/reset-password`, `/login/admin/reset-password` | ✅ `auth.reset_password*` | chỉ kiểm tra form ở `auth/routes.py`, chưa đổi mật khẩu (dự kiến auth_service) |
 | 市民 | マイページ | `/citizen/mypage` | ✅ `citizen.mypage` | report_service |
 | 市民 | 報告する | `/citizen/report` | ✅ `citizen.report_new` | report_service, ai |
 | 市民 | 写真撮影 | `/citizen/report/camera` | ✅ `citizen.report_camera` | report_service, storage_service, ai |
@@ -329,7 +344,7 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 
 ### app/templates/, app/static/
 - **layouts/base.html**: khung HTML chung, nạp Bootstrap, Bootstrap Icons, Chart.js và các file CSS. Các layout theo vai trò sẽ kế thừa base và chứa navbar, sidebar. Trang con chỉ viết phần nội dung.
-- **components/**: các mảnh dùng lại bằng `{% include %}`. Màu badge trạng thái và độ khẩn cấp chỉ định nghĩa ở đây.
+- **components/**: các mảnh dùng lại bằng `{% include %}`. Màu badge trạng thái chỉ định nghĩa ở đây (`_status_badge.html`). Màu badge 緊急度 hiện còn viết ở 4 template (`staff/dashboard.html`, `report_list.html`, `report_detail.html`, `ai_analysis.html`), sẽ gom vào `_urgency_badge.html` ở giai đoạn 6.
 - **staff/mockup_report_triage.html**: mockup giao diện màn hình phân loại báo cáo, chưa có route. Dùng làm tham khảo khi làm `staff/report_list.html` và `staff/report_detail.html`, làm xong thì xóa.
 - **static/css/**: `tokens.css` chứa biến màu và khoảng cách, `base.css` chứa style chung, `components.css` chứa style cho từng thành phần, `responsive.css` chứa style cho điện thoại (nạp cuối cùng trong `base.html`, dùng các class như `citizen-page`, `report-page`, `guide-page`). Không căn giữa cả `body`. Màn hình nào cần căn giữa trên điện thoại thì dùng class riêng (`login-page-container`, `reset-password-container`, `report-camera-container`, `camera-page-container`…). Style cho sidebar của 県民 phải đặt dưới `.citizen-page` để không ảnh hưởng tới 職員 và 管理者.
 - **Lịch sử trình duyệt (`static/js/navigation.js`, nạp trong `base.html`).** Đi qua lại giữa màn cha và màn con, hoặc gửi form, không được làm nút Back của trình duyệt quay về màn con hay hiện lại cùng một màn hình. Quy ước:
@@ -337,7 +352,7 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
   - Link di chuyển trong màn con, hoặc từ màn con về màn cha, thêm `data-nav="replace"`. Khi về màn cha mà mục lịch sử ngay trước đó chính là màn cha, script gọi `history.back()` rồi tải lại màn cha để hiện nội dung mới (ảnh vừa chụp, flash). Trường hợp khác thì dùng `location.replace`. Từ JS thì gọi `window.historyNav.go(url)`.
   - Form thêm `data-nav="replace"` sẽ được gửi bằng `fetch` kèm header `X-Replace-History`. `create_app()` đổi response redirect thành JSON `{"redirect": url}` (flash vẫn giữ trong session), rồi script chuyển trang mà không thêm mục lịch sử. Vì vậy route của các form này **luôn trả redirect, kể cả khi lỗi** (flash + redirect, PRG). Nội dung đã nhập thì giữ trong session (`report_form`, `profile_form`) để hiện lại. Không render template ngay trong POST.
   - Link mở màn con từ màn cha và link giữa các màn độc lập (sidebar, 一覧 → 詳細) vẫn là link thường.
-- **static/js/**: `report_form.js` lấy GPS và hiện ảnh xem trước (ở 写真撮影, chỉ lấy GPS sau khi người dân chọn 今回だけ使用 hoặc オンにする trong modal 位置情報確認, キャンセル thì quay về 報告する; ảnh chụp từ canvas không có EXIF GPS nên nút 撮影する chờ lấy xong vị trí rồi mới gửi; GPS độ chính xác cao lỗi/timeout thì lấy lại 1 lần với độ chính xác thấp), `map.js` vẽ Google Maps với ghim theo 緊急度 (đỏ 高, vàng 中, xanh 低), dữ liệu lấy từ `<script id="mapReports">` trong `staff/map.html`, `charts.js` vẽ biểu đồ Chart.js từ API.
+- **static/js/**: `report_form.js` lấy GPS (ảnh xem trước do server render, trỏ tới `citizen.report_photo_image`, JS không vẽ; ở 写真撮影, chỉ lấy GPS sau khi người dân chọn 今回だけ使用 hoặc オンにする trong modal 位置情報確認, キャンセル thì quay về 報告する; ảnh chụp từ canvas không có EXIF GPS nên nút 撮影する chờ lấy xong vị trí rồi mới gửi; GPS độ chính xác cao lỗi/timeout thì lấy lại 1 lần với độ chính xác thấp), `map.js` vẽ Google Maps với ghim theo 緊急度 (đỏ 高, vàng 中, xanh 低), dữ liệu lấy từ `<script id="mapReports">` trong `staff/map.html`, `charts.js` còn rỗng (chỉ một dòng chú thích). Biểu đồ Chart.js hiện viết inline trong `staff/stats.html` và `staff/dashboard.html`; sau này chuyển sang `charts.js` và lấy dữ liệu từ API.
 
 ---
 
@@ -364,6 +379,7 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 - Email người dân lưu ở dạng chữ thường. ID nhân viên và admin không chứa `@`.
 - Không commit `.env` và ảnh trong `instance/uploads/`.
 - Không đặt bí mật như API key hay mật khẩu DB trong code. Luôn đọc qua `config.py` từ `.env`.
+- **Mọi form POST phải có `csrf_token`**: `<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">` (kể cả form đăng xuất và form tự submit bằng JS). Request `fetch` gửi token qua header `X-CSRFToken`. Route thay đổi dữ liệu chỉ nhận POST, không dùng GET (đăng xuất là `POST /logout`, GET trả 405). Thiếu hoặc sai token thì server flash `MSG_CSRF_EXPIRED` rồi quay về trang trước. Khi thêm form mới, thêm token ngay, và trang hiển thị flash phải include `components/_flash.html`.
 
 ---
 
@@ -371,9 +387,9 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 
 1. ✅ Tách app thành package, dùng `create_app()` và blueprint theo actor.
 2. ✅ Thêm **Flask-Migrate**. Đã khai báo trong `extensions.py` và có thư mục `migrations/`. Seed không còn gọi `create_all`.
-3. ⬜ Thêm **Flask-WTF** để có CSRF cho mọi form.
+3. ✅ Thêm **Flask-WTF** (`CSRFProtect`) để có CSRF cho mọi form POST, đăng xuất bằng POST, cờ cookie, seed tài khoản test chỉ khi có `--with-test-users` (giai đoạn 1, đang chờ nghiệm thu). Còn lại: rate limit, ProxyFix (xem mục 8).
 4. ⬜ Viết lại **đặt lại mật khẩu**: người dân nhận token qua email, nhân viên và admin được admin cấp lại.
-5. ✅ Viết `constants.py` và các model phòng ban, danh mục, báo cáo, ảnh, lịch sử, kết quả AI, nhóm trùng, kèm migration và dữ liệu seed. Các service vẫn trả dữ liệu mẫu, sẽ chuyển sang DB ở các bước 6 và 7.
+5. ✅ Viết `constants.py` và các model phòng ban, danh mục, báo cáo, ảnh, lịch sử, kết quả AI, nhóm trùng, kèm migration và dữ liệu seed. Các service đã đọc và ghi DB thật (bước 6 và 7).
 6. ✅ Làm luồng báo cáo của người dân (chụp ảnh, GPS, đoán địa chỉ, gửi báo cáo, AI phán định), マイページ, 報告一覧, プロフィール, アイコン. Có cả `rule_based.py` và Gemini.
 7. ✅ Làm danh sách, chi tiết, cập nhật trạng thái và lịch sử cho nhân viên. Thay số liệu hard-code trên dashboard bằng dữ liệu thật. Kèm AI分析 (chỉ đọc kết quả), 重複確認, 統合, 一括変更, 統計. Còn lại: xem mục 8.
 8. Bản đồ Google Maps ✅. ⬜ Thêm blueprint `api` và biểu đồ.
@@ -384,7 +400,8 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 ## 8. Vấn đề đã biết
 
 - **Đặt lại mật khẩu chưa thực sự đổi mật khẩu.** Ba route reset chỉ kiểm tra form rồi chuyển trang. Không được lưu mật khẩu theo form hiện tại, vì ai biết email người khác cũng sẽ đổi được mật khẩu của họ. Xem bước 4 của lộ trình.
-- **Chưa có CSRF.** Xem bước 3.
+- **`WTF_CSRF_SSL_STRICT` chưa có tác dụng thực tế sau Nginx.** Chưa có ProxyFix nên `request.is_secure` luôn False, bước kiểm Referer/Host chỉ cho HTTPS không chạy; token CSRF vẫn được kiểm đầy đủ. Khi thêm ProxyFix (giai đoạn 2), phải kiểm lại Host/Origin để form không bị từ chối.
+- **Chưa có rate limit** cho đăng nhập và đăng ký. Tài khoản test cũ trên EC2 (`taro@example.com`, `staff01`, `admin01`, mật khẩu `password123`) vẫn đăng nhập được cho đến khi xoá (giai đoạn 2). Session chưa được đổi sau khi đăng nhập (session fixation, rủi ro thấp).
 - **Luồng báo cáo của người dân.** Ảnh chụp, tọa độ và địa chỉ đoán được giữ trong `session['report_draft']` cho đến khi gửi 報告する. Ảnh chụp được lưu tạm ở `instance/uploads/drafts/`, khi gửi thì chuyển sang `reports/`. Còn thiếu:
   - Camera và GPS của trình duyệt chỉ chạy trên **HTTPS** hoặc `localhost`. Nếu chạy HTTP thì trang 写真撮影 chuyển sang ô chọn ảnh, còn GPS chỉ lấy được từ EXIF của ảnh. Khi không có GPS, tọa độ được tìm từ 発生場所 mà người dân nhập (API 国土地理院), nên vẫn gửi được báo cáo nếu địa chỉ tìm được. Server EC2 đã bật HTTPS tại `https://team3app.duckdns.org` (Nginx + Let's Encrypt/Certbot, tự gia hạn bằng `certbot.timer`, HTTP chuyển hướng 301 sang HTTPS). Nếu Learner Lab đổi Public IP thì phải cập nhật IP trên DuckDNS, nếu không trang web và việc gia hạn chứng chỉ sẽ lỗi. Người dùng từ chối quyền vị trí và ảnh không có GPS thì tọa độ lấy từ 発生場所. Độ chính xác chỉ đến mức địa chỉ (thường là 丁目). Nguồn tọa độ lưu ở `reports.location_source`, hiện ở 報告詳細. Có thể làm thêm phần chọn điểm trên bản đồ (Google Maps).
   - Ở 報告する, nếu chưa có tọa độ lúc chụp thì `report_form.js` lấy vị trí hiện tại của thiết bị, và vị trí này được ưu tiên hơn địa chỉ đã nhập. Nếu người dân báo cáo khi đã rời khỏi chỗ xảy ra sự cố, ghim sẽ nằm ở vị trí lúc gửi (報告詳細 hiện 端末の位置情報（GPS） và địa chỉ của vị trí đó để 職員 nhận ra).
@@ -399,14 +416,14 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 - **Màn hình nhân viên đã đọc và ghi DB thật, nhưng còn thiếu:**
   - Nút AIモデル再実行 ở AI分析 chưa hoạt động (có thể gọi `report_service.analyze_report()`).
   - Chưa có bước phát hiện nhóm trùng khi tạo báo cáo (`duplicate_service`, `utils/geo.py`), nên 重複確認 chỉ hiện nhóm đã có trong `duplicate_groups`.
-  - 添付写真 ở 報告詳細 chưa hiện vì chưa có `storage_service` và route trả ảnh có kiểm tra quyền.
+  - 添付写真 ở 報告詳細 chưa hiện vì chưa có route trả ảnh có kiểm tra quyền (`storage_service` đã có).
   - 担当部署を設定する (`POST /staff/reports/<id>/department`) chưa có route.
   - Danh sách 報告一覧 và AI分析 chưa phân trang. AI分析 chỉ hiện 50 lần phân tích mới nhất.
 - **Khi không có `GOOGLE_MAPS_API_KEY`, ghim bản đồ đặt theo phép chiếu gần đúng.** `stats_service.map_points()` vẫn trả `top`/`left` (%) trên ảnh tĩnh theo khung `MAP_BOUNDS` cho trường hợp này. Vị trí chỉ gần đúng.
 - **Cờ `ai_detected` trong dữ liệu mẫu của `duplicate_service`** quyết định nút AI確認 hay 個別確認. Đã chốt như sau:
   - Không có báo cáo do AI tạo. Người báo cáo luôn là người dân.
-  - Khi chuyển service sang DB, `ai_detected` là giá trị tính được: báo cáo có `ai_analyses` thành công thì `ai_detected` đúng.
-  - Dữ liệu mẫu có người báo cáo "AIシステム" sẽ bỏ khi chuyển.
+  - `ai_detected` là giá trị tính được từ `ai_analyses` (`duplicate_service._group_dict`): báo cáo có `ai_analyses` thành công thì `ai_detected` đúng.
+  - Dữ liệu mẫu có người báo cáo "AIシステム" đã bỏ khi chuyển sang DB.
 - **Nút パスワードを変更する ở プロフィール設定** vẫn trỏ tới trang reset công khai `auth.reset_password` (sẽ đổi sang `/citizen/password`). お名前, メールアドレス và アイコン đã lưu DB.
 - **Màn hình 新規職員アカウント登録 chưa lưu gì.** Route `admin.user_register` chỉ chuyển sang trang hoàn tất. Khi làm `user_service` cần:
   - Kiểm tra ID không chứa `@`, mật khẩu tối thiểu 8 ký tự, mật khẩu xác nhận khớp, ID chưa tồn tại.

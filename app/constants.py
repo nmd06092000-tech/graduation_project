@@ -155,6 +155,10 @@ def next_statuses(current, role):
     return [status for status, roles in allowed.items() if Role(role) in roles]
 
 
+# 共通：CSRF トークンが無い・不正・セッション切れのとき（設計書にない業務外のエラー）
+MSG_CSRF_EXPIRED = 'セッションの有効期限が切れました。もう一度操作してください。'
+
+
 # 職員画面のメッセージ（ユースケース記述_行政職員 の文言どおり）
 # 詳細・対応更新画面 基本フロー3・代替フロー2a-1
 MSG_STATUS_UPDATED = '報告 #{report_id} のステータスを「{status}」に更新しました！'

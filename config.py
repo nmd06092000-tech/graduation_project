@@ -9,6 +9,26 @@ load_dotenv()
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
 
+def _env_bool(name, default):
+    """環境変数を真偽値として読む
+
+    True: 1 / true / yes / on、False: 0 / false / no / off（大文字小文字は区別しない）。
+    未設定・空は default。それ以外（例: ture）は ValueError にして起動時に気づけるようにする
+    （打ち間違いで SESSION_COOKIE_SECURE が黙って False になるのを防ぐ）。
+    """
+    value = os.environ.get(name, '').strip().lower()
+    if not value:
+        return default
+    if value in ('1', 'true', 'yes', 'on'):
+        return True
+    if value in ('0', 'false', 'no', 'off'):
+        return False
+    raise ValueError(
+        f'環境変数 {name} の値 {os.environ.get(name)!r} は不正です。'
+        'true / false（または 1 / 0, yes / no, on / off）のいずれかを指定してください'
+    )
+
+
 class Config:
     # 未設定の場合は起動時にエラーにする（秘密情報をコードに直書きしない）
     SECRET_KEY = os.environ['SECRET_KEY']
@@ -17,6 +37,20 @@ class Config:
 
     # 「ログイン状態を保持する」の有効期間
     REMEMBER_COOKIE_DURATION = timedelta(days=14)
+
+    # CSRF 対策（Flask-WTF）。トークンはセッションと同じ期間有効にする（時間で期限切れにしない）
+    WTF_CSRF_TIME_LIMIT = None
+    # HTTPS のとき Referer の同一オリジンを検査する。Nginx の背後でオリジンが食い違う場合の
+    # 逃げ道として .env の WTF_CSRF_SSL_STRICT=false で止められる（既定は有効）
+    WTF_CSRF_SSL_STRICT = _env_bool('WTF_CSRF_SSL_STRICT', True)
+
+    # Cookie の属性。Secure は HTTPS 配信時のみ .env で true にする（開発の http://localhost では false）
+    SESSION_COOKIE_SECURE = _env_bool('SESSION_COOKIE_SECURE', False)
+    REMEMBER_COOKIE_SECURE = SESSION_COOKIE_SECURE
+    SESSION_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
 
     # AI分析画面「要人間チェック（低信頼度）」とみなす信頼度のしきい値（0〜1）
     AI_LOW_CONFIDENCE_THRESHOLD = float(os.environ.get('AI_LOW_CONFIDENCE_THRESHOLD', '0.7'))
@@ -60,6 +94,11 @@ class Config:
 class TestingConfig(Config):
     # pytest 用。開発 DB とは別の PostgreSQL（テストのたびにテーブルを作り直す）
     TESTING = True
+    # テストでは CSRF を無効にする（CSRF のテストだけ app.config['WTF_CSRF_ENABLED'] = True にする）
+    WTF_CSRF_ENABLED = False
+    # テストクライアントは http のため Secure Cookie を使わない
+    SESSION_COOKIE_SECURE = False
+    REMEMBER_COOKIE_SECURE = False
     SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL', '')
     # テストでは Gemini を呼ばない
     AI_PROVIDER = 'rule_based'

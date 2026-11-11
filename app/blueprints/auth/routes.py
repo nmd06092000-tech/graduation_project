@@ -90,8 +90,8 @@ def login_admin():
     return _handle_login(User.ROLE_ADMIN)
 
 
-# ログアウト
-@auth_bp.route('/logout')
+# ログアウト（CSRF 対策のため POST のみ。GET は 405）
+@auth_bp.route('/logout', methods=['POST'])
 def logout():
     logout_user()
     return redirect(url_for('public.index'))

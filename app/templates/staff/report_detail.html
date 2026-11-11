@@ -166,6 +166,7 @@
                         <div class="card-body">
                             {# 更新後の詳細画面は履歴を置き換えて表示する（js/navigation.js） #}
                             <form action="{{ url_for('staff.report_status_update', report_id=report.id) }}" method="POST" data-nav="replace">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <!-- 緊急度の判定（AI判定と職員の最終判断） -->
                                 <div class="border rounded p-3 mb-4">
                                     <h6 class="fw-bold mb-3"><i class="bi bi-robot me-2"></i>緊急度の判定</h6>
@@ -247,7 +248,10 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
-                <a href="{{ url_for('auth.logout') }}" class="btn btn-danger px-4">ログアウト</a>
+                <form method="post" action="{{ url_for('auth.logout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger px-4">ログアウト</button>
+                </form>
             </div>
         </div>
     </div>

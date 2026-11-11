@@ -49,6 +49,7 @@
                             </p>
 
                             <form method="POST" action="{{ url_for('staff.duplicate_batch_status', group_id=group.group_id) }}" data-nav="replace">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <!-- ステータス選択（README の状態遷移で、グループ内の報告を一括で進められる 対応中・対応完了） -->
                                 <div class="mb-4 p-3 border rounded bg-light">
                                     <label class="form-label fw-bold text-dark mb-2">変更後の対応ステータス</label>

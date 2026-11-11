@@ -2,6 +2,8 @@ Flask>=3.0
 Flask-SQLAlchemy>=3.1
 Flask-Login>=0.6.3
 Flask-Migrate>=4.0
+# CSRF 対策（全 POST に csrf_token を要求する）
+Flask-WTF>=1.2
 psycopg[binary]>=3.2
 python-dotenv>=1.0
 # 統計レポートの PDF 出力（日本語フォントは app/fonts/ipaexg.ttf を埋め込む）

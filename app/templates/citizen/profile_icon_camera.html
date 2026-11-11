@@ -10,8 +10,12 @@
             <h3 class="fw-bold mb-3"><i class="bi bi-camera-fill me-2"></i>プロフィールアイコンの撮影</h3>
             <p class="text-muted mb-4">アイコンに使用する写真を撮影してください。</p>
 
+            {# CSRF エラーなどのメッセージ表示エリア #}
+            {% include 'components/_flash.html' %}
+
             {# 撮影した写真はアイコン設定と同じ送信先で保存する（保存後はプロフィール設定、エラー時はアイコン設定に戻る） #}
             <form id="iconCameraForm" action="{{ url_for('citizen.profile_icon') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <!-- カメラ表示領域（カメラを使えない端末では写真の選択欄を表示する） -->
                 <div class="bg-dark text-white rounded d-flex align-items-center justify-content-center mb-4 overflow-hidden" style="height: 300px;">
                     <video id="iconCameraVideo" class="w-100 h-100 d-none" style="object-fit: cover;" autoplay playsinline muted></video>

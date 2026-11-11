@@ -1,12 +1,16 @@
-"""開発用の初期データ投入スクリプト（担当部署・カテゴリのマスタとテストアカウント）
+"""初期データ投入スクリプト（担当部署・カテゴリのマスタ。開発用テストアカウントは任意）
 
 テーブルは Flask-Migrate で作成するため、先にマイグレーションを適用しておくこと。
 実行方法（task-app 直下で）:
     flask --app run db upgrade
-    python -m scripts.seed
+    python -m scripts.seed                    # マスタのみ（本番・EC2 はこちら）
+    python -m scripts.seed --with-test-users  # マスタ＋テストアカウント（開発のみ）
 
+テストアカウントは既定では登録しない（公開済みのパスワードで本番に入られないようにするため）。
 何度実行しても同じデータが重複して登録されることはない。
 """
+import argparse
+
 from app import create_app
 from app.extensions import db
 from app.models import Category, Department, User
@@ -57,10 +61,32 @@ def seed_users():
         db.session.add(user)
 
 
-if __name__ == '__main__':
+def seed(with_test_users=False):
+    """現在のアプリケーションコンテキストの DB にマスタを登録して commit する
+
+    with_test_users=True のときだけテストアカウントも登録する（開発・テスト用）。
+    """
+    seed_master()
+    if with_test_users:
+        seed_users()
+    db.session.commit()
+
+
+def main(argv=None):
+    """コマンドライン入口：アプリを作成して seed() を呼ぶ"""
+    parser = argparse.ArgumentParser(description='担当部署・カテゴリのマスタを登録する')
+    parser.add_argument('--with-test-users', action='store_true',
+                        help='開発用テストアカウント（taro@example.com / staff01 / admin01）も登録する')
+    args = parser.parse_args(argv)
+
     app = create_app()
     with app.app_context():
-        seed_master()
-        seed_users()
-        db.session.commit()
+        seed(with_test_users=args.with_test_users)
+    if args.with_test_users:
         print('マスタデータとテストユーザーを登録しました')
+    else:
+        print('マスタデータを登録しました（テストユーザーは登録していません）')
+
+
+if __name__ == '__main__':
+    main()

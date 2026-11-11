@@ -13,6 +13,7 @@
                     {# 必須チェックはサーバー側で行い、設計書のメッセージを表示する（ブラウザの required は付けない） #}
                     {# 入力エラー・送信完了の画面は履歴を置き換えて表示する（js/navigation.js） #}
                     <form action="{{ url_for('citizen.report_new') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="mb-3">
                             <label class="form-label fw-bold">写真撮影 <span class="text-danger">*</span></label>
                             {# 撮影 → 写真の確認 → 位置情報の確認 の順に進み、推定した住所を持って報告画面に戻る #}
