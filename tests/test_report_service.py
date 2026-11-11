@@ -1,4 +1,5 @@
 # 報告の作成・一覧・検索のテスト
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -11,7 +12,7 @@ from app.constants import (
     MSG_PHOTO_TOO_MANY, MSG_REPORT_ALL_REQUIRED, MSG_TITLE_REQUIRED, AiAnalysisStatus,
 )
 from app.extensions import db
-from app.models import AiAnalysis, ReportStatusHistory
+from app.models import AiAnalysis, ReportStatusHistory, StaffNotification
 from app.services import ServiceError, ValidationError, report_service, status_service, storage_service
 from app.services.report_service import InappropriatePhotoError
 from app.utils import geo
@@ -62,7 +63,9 @@ def test_get_for_staff(staff, make_report, road):
 
     detail = report_service.get_for_staff(report.id)
 
-    assert detail['status_options'] == [('in_progress', '対応中'), ('resolved', '対応済み')]
+    assert detail['status_options'] == [
+        ('in_progress', '対応中'), ('contractor', '業者対応中'), ('confirming', '完了確認中'), ('resolved', '対応完了'),
+        ('on_hold', '保留・他部署へ引継ぎ'), ('watching', '保留・経過観察')]
     assert detail['ai_department'] == '道路管理課'
     assert detail['ai_confidence'] == '92%'
     assert detail['department'] is None
@@ -106,7 +109,7 @@ def test_ai_summary(make_report, road):
     _analysis(recovered, road, '0.40')
     _analysis(recovered, road, '0.90')    # 最新は高信頼度 → 対象外
     resolved = make_report(status='resolved')
-    _analysis(resolved, road, '0.30')     # 対応済み → 対象外
+    _analysis(resolved, road, '0.30')     # 対応完了 → 対象外
 
     summary = report_service.ai_summary()
 
@@ -426,12 +429,65 @@ def test_estimate_location_failures(app):
 def test_citizen_lists(citizen, staff, make_report):
     make_report(title='古い')
     make_report(title='対応中', status='in_progress')
+    make_report(title='業者対応中', status='contractor')
     newest = make_report(title='新しい', status='resolved')
     other = make_report(citizen_id=staff.id, title='他人の報告')
 
-    assert [r['title'] for r in report_service.list_by_citizen(citizen.id)] == ['新しい', '対応中', '古い']
+    rows = report_service.list_by_citizen(citizen.id)
+    assert [r['title'] for r in rows] == ['新しい', '業者対応中', '対応中', '古い']
+    # 市民にも業者対応中などのステータスをそのまま表示する
+    assert (rows[1]['status'], rows[1]['status_code']) == ('業者対応中', 'contractor')
     assert len(report_service.list_by_citizen(citizen.id, limit=2)) == 2
-    assert report_service.citizen_summary(citizen.id) == {'total': 3, 'in_progress': 1, 'resolved': 1}
+    # 対応中は 対応中・業者対応中・完了確認中 の合計
+    assert report_service.citizen_summary(citizen.id) == {'total': 4, 'in_progress': 2, 'resolved': 1}
     assert report_service.get_complete_info(newest.id, citizen.id)['urgency'] == '高'
     # 他人の報告の完了画面は表示しない
     assert report_service.get_complete_info(other.id, citizen.id) is None
+
+
+# ---- AI緊急度の再判定ルール ----
+
+def _hours_ago(hours):
+    return datetime.now(timezone.utc) - timedelta(hours=hours)
+
+
+# 未対応のまま 12 時間たった報告だけを1回だけ再判定し、職員へ通知する。報告の緊急度は変更しない
+def test_rejudge_stale_reports(make_report, road):
+    stale = make_report(urgency='low', created_at=_hours_ago(13))
+    make_report(created_at=_hours_ago(11))                                   # 12 時間たっていない
+    make_report(status='in_progress', created_at=_hours_ago(13))             # 未対応ではない
+
+    assert report_service.rejudge_stale_reports() == 1
+
+    [analysis] = db.session.query(AiAnalysis).filter_by(report_id=stale.id).all()
+    assert analysis.trigger_type == 'rejudge' and analysis.status == 'succeeded'
+    assert stale.urgency == 'low'
+    [notification] = db.session.query(StaffNotification).all()
+    assert notification.report_id == stale.id and f'#{stale.id}' in notification.message
+    # 再判定済みの報告は次の実行で対象にしない
+    assert report_service.rejudge_stale_reports() == 0
+
+
+# AI の判定が失敗した場合も再判定済みとし、失敗を通知する
+def test_rejudge_stale_reports_ai_failed(make_report, road, monkeypatch):
+    stale = make_report(created_at=_hours_ago(13))
+
+    def failing_classify(*args, **kwargs):
+        raise AIError('テスト用の失敗', kind='timeout')
+    monkeypatch.setattr(report_service, '_classify', failing_classify)
+
+    assert report_service.rejudge_stale_reports() == 1
+    assert all(a.trigger_type == 'rejudge' and a.status == 'failed'
+               for a in db.session.query(AiAnalysis).filter_by(report_id=stale.id))
+    [notification] = db.session.query(StaffNotification).all()
+    assert '失敗' in notification.message
+    assert report_service.rejudge_stale_reports() == 0
+
+
+# AI分析画面の再判定状況
+def test_list_ai_analyses_trigger(make_report, road):
+    report = make_report()
+    report_service.analyze_report(report.id)
+    report_service.analyze_report(report.id, trigger_type='rejudge')
+
+    assert [log['trigger'] for log in report_service.list_ai_analyses()] == ['再判定済み', '初回判定']

@@ -129,17 +129,17 @@
     function setupReportForm(latitudeInput) {
         const longitudeInput = document.getElementById('longitude');
         const status = document.getElementById('locationStatus');
-        // 位置情報がある場合、発生場所が空欄なら送信時にサーバーが位置情報から住所を入れる（report_service.create_report）
+        // GPS がある場合、位置情報欄が空欄なら送信時にサーバーが GPS から住所を入れる（report_service.create_report）
         if (latitudeInput.value && longitudeInput.value) {
-            status.textContent = '撮影時の位置情報を使用します。発生場所が空欄の場合は位置情報の住所を使用します。';
+            status.textContent = '撮影時の位置情報（GPS）を使用します。位置情報欄が空欄の場合は GPS の住所を使用します。';
             return;
         }
-        status.textContent = '端末の位置情報を取得しています…';
+        status.textContent = '端末の位置情報（GPS）を取得しています…';
         fillLocation(latitudeInput, longitudeInput, function (succeeded) {
-            // 取得できなくても、送信時にサーバーが発生場所の住所から位置を検索する
+            // 取得できなくても、送信時にサーバーが位置情報欄の住所から位置を検索する
             status.textContent = succeeded
-                ? '端末の位置情報を取得しました。発生場所が空欄の場合は位置情報の住所を使用します。'
-                : '位置情報を取得できませんでした。入力した発生場所の住所から位置を特定します。';
+                ? '端末の位置情報（GPS）を取得しました。位置情報欄が空欄の場合は GPS の住所を使用します。'
+                : '端末の位置情報（GPS）を取得できませんでした。入力した住所から位置を特定します。';
         });
     }
 

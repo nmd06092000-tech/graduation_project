@@ -3,7 +3,7 @@
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 
-from app.constants import AiAnalysisStatus, Urgency
+from app.constants import AiAnalysisStatus, AiAnalysisTrigger, Urgency
 from app.extensions import db
 
 
@@ -12,6 +12,7 @@ class AiAnalysis(db.Model):
 
     __table_args__ = (
         sa.CheckConstraint(AiAnalysisStatus.check_sql('status'), name='ck_ai_analyses_status'),
+        sa.CheckConstraint(AiAnalysisTrigger.check_sql('trigger_type'), name='ck_ai_analyses_trigger_type'),
         sa.CheckConstraint(f"urgency IS NULL OR {Urgency.check_sql('urgency')}", name='ck_ai_analyses_urgency'),
         sa.CheckConstraint('confidence IS NULL OR confidence BETWEEN 0 AND 1', name='ck_ai_analyses_confidence'),
         # 判定成功時は分類結果がそろっていること
@@ -27,6 +28,9 @@ class AiAnalysis(db.Model):
     report_id = db.Column(db.BigInteger, db.ForeignKey('reports.id', ondelete='RESTRICT'), nullable=False)
     # 判定の成否（succeeded / failed）
     status = db.Column(db.String(20), nullable=False)
+    # 判定のきっかけ（initial = 新規報告時、rejudge = 未対応のまま一定時間たった報告の再判定）
+    trigger_type = db.Column(db.String(20), nullable=False,
+                        default=AiAnalysisTrigger.INITIAL.value, server_default=AiAnalysisTrigger.INITIAL.value)
     # AI 分類カテゴリ・判定緊急度・推定担当部署
     category_id = db.Column(db.BigInteger, db.ForeignKey('categories.id', ondelete='RESTRICT'), index=True)
     urgency = db.Column(db.String(20))

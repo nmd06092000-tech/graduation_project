@@ -131,6 +131,7 @@
                     <div class="card border-0 shadow-sm">
                         <div class="card-header bg-white py-3">
                             <h5 class="card-title fs-6 fw-bold mb-0"><i class="bi bi-clock-history me-2"></i>対応・更新履歴</h5>
+                            <p class="text-muted small mb-0 mt-2">職員による緊急度の変更や、その判断理由も履歴に記録されます。</p>
                         </div>
                         <div class="card-body">
                             <ul class="list-group list-group-flush small">
@@ -139,6 +140,9 @@
                                     <div>
                                         <span class="fw-bold me-2">{{ item.user }}</span>
                                         <span class="text-secondary">{{ item.action }}</span>
+                                        {% if item.urgency_reason %}
+                                        <div class="text-muted mt-1"><i class="bi bi-robot me-1"></i>判断変更理由：{{ item.urgency_reason }}</div>
+                                        {% endif %}
                                         {% if item.comment %}
                                         <div class="text-muted mt-1"><i class="bi bi-chat-left-text me-1"></i>{{ item.comment }}</div>
                                         {% endif %}
@@ -162,6 +166,46 @@
                         <div class="card-body">
                             {# 更新後の詳細画面は履歴を置き換えて表示する（js/navigation.js） #}
                             <form action="{{ url_for('staff.report_status_update', report_id=report.id) }}" method="POST" data-nav="replace">
+                                <!-- 緊急度の判定（AI判定と職員の最終判断） -->
+                                <div class="border rounded p-3 mb-4">
+                                    <h6 class="fw-bold mb-3"><i class="bi bi-robot me-2"></i>緊急度の判定</h6>
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold small">AI判定緊急度</label>
+                                        <div>
+                                            {% if report.ai_urgency_code == 'high' %}
+                                                <span class="badge bg-danger fs-6">{{ report.ai_urgency }}</span>
+                                            {% elif report.ai_urgency_code == 'medium' %}
+                                                <span class="badge bg-warning text-dark fs-6">{{ report.ai_urgency }}</span>
+                                            {% elif report.ai_urgency_code == 'low' %}
+                                                <span class="badge bg-success fs-6">{{ report.ai_urgency }}</span>
+                                            {% else %}
+                                                <span class="badge bg-light text-dark border fs-6">未判定</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="urgency" class="form-label fw-bold small">職員の最終判断</label>
+                                        {# 現在の確定緊急度（reports.urgency）を初期値にする。未判定のときは「変更しない」を選べる #}
+                                        <select id="urgency" name="urgency" class="form-select">
+                                            {% if not report.urgency_code %}
+                                            <option value="" selected>未判定（変更しない）</option>
+                                            {% endif %}
+                                            {% for code, label in report.urgency_options %}
+                                            <option value="{{ code }}" {% if code == report.urgency_code %}selected{% endif %}>{{ label }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="urgency_reason" class="form-label fw-bold small">判断変更理由</label>
+                                        <textarea id="urgency_reason" name="urgency_reason" class="form-control" rows="3"
+                                                  placeholder="AIの判定を変更した場合、その理由を入力してください。"></textarea>
+                                        <div class="form-text">緊急度を変更した場合は、変更理由を記録します。</div>
+                                    </div>
+                                    <div class="alert alert-info small mb-0">
+                                        AI判定と職員判断が異なる場合は、職員の判断を優先します。
+                                    </div>
+                                </div>
+
                                 <div class="mb-3">
                                     <label class="form-label fw-bold small">現在のステータス</label>
                                     {# 選択肢は現在のステータスと、README の状態遷移で変更できる次のステータスのみ #}

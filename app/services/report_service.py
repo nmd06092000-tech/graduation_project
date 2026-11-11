@@ -15,8 +15,9 @@ from app.constants import (
     MSG_DESCRIPTION_TOO_LONG,
     MSG_GPS_NOT_FOUND, MSG_LOCATION_REQUIRED, MSG_PHOTO_INAPPROPRIATE, MSG_PHOTO_OUT_OF_FOCUS,
     MSG_PHOTO_REQUIRED, MSG_PHOTO_TOO_MANY, MSG_REPORT_ALL_REQUIRED, MSG_TITLE_REQUIRED, MSG_TITLE_TOO_LONG,
-    OPEN_STATUSES, URGENCY_DESCRIPTIONS, AiAnalysisStatus, LocationSource, ReportStatus, Role, Urgency,
-    next_statuses,
+    MSG_NOTICE_REJUDGE_FAILED, MSG_NOTICE_REJUDGED_CHANGED, MSG_NOTICE_REJUDGED_SAME,
+    OPEN_STATUSES, URGENCY_DESCRIPTIONS, WORKING_STATUSES, AiAnalysisStatus, AiAnalysisTrigger, LocationSource,
+    ReportStatus, Role, Urgency, next_statuses,
 )
 from app.extensions import db
 from app.models import AiAnalysis, Category, Department, Report, ReportPhoto, ReportStatusHistory
@@ -217,11 +218,12 @@ def create_report(*, citizen_id, title, description, address, latitude, longitud
     return report
 
 
-def analyze_report(report_id):
+def analyze_report(report_id, trigger_type=AiAnalysisTrigger.INITIAL.value):
     """報告を AI で分類し、結果を ai_analyses に1行追加する。新規報告 基本フロー3
 
     Gemini が失敗した場合は失敗の行を残し、キーワード判定（rule_based）で判定し直す。
-    報告のカテゴリ・緊急度・担当部署が未設定なら AI の結果を初期値にする（職員の設定値は上書きしない）。
+    新規報告時（initial）は、報告のカテゴリ・緊急度・担当部署が未設定なら AI の結果を初期値にする（職員の設定値は上書きしない）。
+    再判定（rejudge）では報告の値を変更しない（変更するかは職員が判断する）。
     """
     report = db.session.get(Report, report_id)
     choices = _classification_choices()
@@ -233,7 +235,7 @@ def analyze_report(report_id):
         result = _classify(classifier, text, photos, choices)
     except AIError as e:
         current_app.logger.warning('AI 判定に失敗しました report=%s kind=%s', report_id, e.kind)
-        _add_failed_analysis(report, classifier.model_name, e)
+        _add_failed_analysis(report, classifier.model_name, e, trigger_type)
         fallback = ai.get_fallback_classifier()
         if fallback.model_name == classifier.model_name:
             db.session.commit()
@@ -241,13 +243,58 @@ def analyze_report(report_id):
         try:
             result = _classify(fallback, text, photos, choices)
         except AIError as fallback_error:
-            _add_failed_analysis(report, fallback.model_name, fallback_error)
+            _add_failed_analysis(report, fallback.model_name, fallback_error, trigger_type)
             db.session.commit()
             return None
 
-    analysis = _add_succeeded_analysis(report, result)
+    analysis = _add_succeeded_analysis(report, result, trigger_type)
     db.session.commit()
     return analysis
+
+
+def rejudge_stale_reports(*, now=None):
+    """未対応のまま AI_REJUDGE_HOURS 時間たった報告を AI で再判定し、職員へ通知する。AI緊急度の再判定ルール
+
+    再判定は1報告につき1回（失敗しても再試行しない）。報告の緊急度などの確定値は変更せず、
+    AI の判定が現在の緊急度と違えば見直しを促す通知にする。戻り値は再判定した報告の件数。
+    flask --app run rejudge-urgency（app/cli.py）から定期実行する。
+    """
+    # 通知サービスは report_service の日時の書式を使うため、循環 import を避けてここで読み込む
+    from app.services import notification_service
+
+    now = now or datetime.now(timezone.utc)
+    deadline = now - timedelta(hours=current_app.config['AI_REJUDGE_HOURS'])
+    rejudged = select(AiAnalysis.report_id).where(AiAnalysis.trigger_type == AiAnalysisTrigger.REJUDGE.value)
+    report_ids = db.session.execute(
+        select(Report.id)
+        .where(Report.status == ReportStatus.RECEIVED.value, Report.created_at <= deadline,
+               Report.id.not_in(rejudged))
+        .order_by(Report.created_at, Report.id)).scalars().all()
+
+    count = 0
+    for report_id in report_ids:
+        try:
+            analysis = analyze_report(report_id, trigger_type=AiAnalysisTrigger.REJUDGE.value)
+            report = db.session.get(Report, report_id)
+            notification_service.create(report_id, _rejudge_message(report, analysis))
+            db.session.commit()
+            count += 1
+        except Exception:
+            # 1件の想定外のエラーで他の報告の再判定を止めない（再判定の行がなければ次回また対象になる）
+            db.session.rollback()
+            current_app.logger.exception('AI 再判定で想定外のエラーが発生しました report=%s', report_id)
+    return count
+
+
+# 再判定の結果を職員に知らせる通知の本文
+def _rejudge_message(report, analysis):
+    values = {'report_id': report.id, 'title': report.title}
+    if analysis is None:
+        return MSG_NOTICE_REJUDGE_FAILED.format(**values)
+    values['ai_urgency'] = Urgency.label_of(analysis.urgency)
+    if analysis.urgency == report.urgency:
+        return MSG_NOTICE_REJUDGED_SAME.format(**values)
+    return MSG_NOTICE_REJUDGED_CHANGED.format(urgency=Urgency.label_of(report.urgency, '未判定'), **values)
 
 
 def list_by_citizen(user_id, limit=None):
@@ -263,17 +310,22 @@ def list_by_citizen(user_id, limit=None):
         'location': r.address,
         'date': format_datetime(r.created_at),
         'status': ReportStatus.label_of(r.status),
+        # バッジの色分け用（components/_status_badge.html）
+        'status_code': r.status,
         'description': r.description,
     } for r in db.session.execute(stmt).scalars()]
 
 
 def citizen_summary(user_id):
-    """マイページのサマリー（報告した件数・対応中・対応済み）"""
+    """マイページのサマリー（報告した件数・対応中・対応完了）
+
+    対応中は 対応中・業者対応中・完了確認中 の合計。
+    """
     counts = dict(db.session.execute(
         select(Report.status, func.count()).where(Report.citizen_id == user_id).group_by(Report.status)).all())
     return {
         'total': sum(counts.values()),
-        'in_progress': counts.get(ReportStatus.IN_PROGRESS.value, 0),
+        'in_progress': sum(counts.get(s.value, 0) for s in WORKING_STATUSES),
         'resolved': counts.get(ReportStatus.RESOLVED.value, 0),
     }
 
@@ -360,12 +412,12 @@ def _classify(classifier, text, photos, choices):
     return result
 
 
-def _add_failed_analysis(report, model_name, error):
+def _add_failed_analysis(report, model_name, error, trigger_type=AiAnalysisTrigger.INITIAL.value):
     db.session.add(AiAnalysis(report=report, status=AiAnalysisStatus.FAILED.value, model_name=model_name,
-                              error_message=f'[{error.kind}] {error}'))
+                              error_message=f'[{error.kind}] {error}', trigger_type=trigger_type))
 
 
-def _add_succeeded_analysis(report, result):
+def _add_succeeded_analysis(report, result, trigger_type=AiAnalysisTrigger.INITIAL.value):
     category = db.session.execute(select(Category).filter_by(code=result.category_code)).scalar_one()
     department = (db.session.get(Department, int(result.department_code))
                   if result.department_code else None) or category.default_department
@@ -378,8 +430,12 @@ def _add_succeeded_analysis(report, result):
         confidence=Decimal(str(round(result.confidence, 3))),
         model_name=result.model_name[:100],
         raw_response=result.raw_response,
+        trigger_type=trigger_type,
     )
     db.session.add(analysis)
+    # 再判定では確定値を変更しない（職員が報告詳細で判断する）
+    if trigger_type != AiAnalysisTrigger.INITIAL.value:
+        return analysis
     # 未設定の確定値だけ AI の結果で埋める
     if report.category_id is None:
         report.category_id = category.id
@@ -435,6 +491,11 @@ def get_for_staff(report_id):
         'description': report.description,
         'status_code': report.status,
         'status_options': [(s.value, s.label) for s in status_options],
+        # 緊急度の判定：最新の AI 判定緊急度と、職員が最終判断として選べる緊急度（確定値は reports.urgency）
+        'urgency_code': report.urgency,
+        'ai_urgency_code': latest_ai.urgency if ai_succeeded else None,
+        'ai_urgency': Urgency.label_of(latest_ai.urgency) if ai_succeeded else None,
+        'urgency_options': [(u.value, u.label) for u in Urgency],
         # 確定した担当部署（職員が設定）と、最新の AI 判定での推定担当部署
         'department': report.department.name if report.department else None,
         'ai_department': latest_ai.department.name if ai_succeeded and latest_ai.department else None,
@@ -469,6 +530,9 @@ def list_ai_analyses(search='', report_id=None):
         'urgency': Urgency.label_of(a.urgency),
         'confidence': format_percent(a.confidence),
         'status': AiAnalysisStatus.label_of(a.status),
+        # 再判定状況（初回判定 / 再判定済み）
+        'trigger_type': a.trigger_type,
+        'trigger': AiAnalysisTrigger.label_of(a.trigger_type),
         'date': format_datetime(a.created_at),
     } for a in db.session.execute(stmt).scalars()]
 
@@ -531,25 +595,33 @@ def _staff_row(report):
         'location': report.address,
         'urgency': Urgency.label_of(report.urgency),
         'status': ReportStatus.label_of(report.status),
+        # バッジの色分け用（components/_status_badge.html）
+        'status_code': report.status,
         'date': format_datetime(report.created_at),
     }
 
 
-# 対応履歴の1行（変更者・内容・担当者メモ・日時）
+# 対応履歴の1行（変更者・内容・担当者メモ・判断変更理由・日時）
 def _history_row(history):
     to_label = ReportStatus.label_of(history.to_status)
+    actions = []
     if history.from_status is None:
-        action = '新規報告を受信'
-    elif history.from_status == history.to_status:
-        action = f'コメントを追加（{to_label}）'
-    else:
-        action = f'ステータスを「{ReportStatus.label_of(history.from_status)}」から「{to_label}」に変更'
+        actions.append('新規報告を受信')
+    elif history.from_status != history.to_status:
+        actions.append(f'ステータスを「{ReportStatus.label_of(history.from_status)}」から「{to_label}」に変更')
+    # to_urgency がある行は、職員が緊急度を変更した（from_urgency の NULL は未判定から）
+    if history.to_urgency:
+        actions.append(f'緊急度を「{Urgency.label_of(history.from_urgency, "未判定")}」から'
+                       f'「{Urgency.label_of(history.to_urgency)}」に変更')
+    if not actions:
+        actions.append(f'コメントを追加（{to_label}）')
     return {
         'date': format_datetime(history.created_at),
         # changed_by_id が NULL の場合はシステムによる自動処理
         'user': history.changed_by.name if history.changed_by else 'システム',
-        'action': action,
+        'action': ' / '.join(actions),
         'comment': history.comment or '',
+        'urgency_reason': history.urgency_reason or '',
     }
 
 

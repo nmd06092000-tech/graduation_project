@@ -26,6 +26,7 @@ class Choice:
     """AI が選べる候補（code は DB に保存する値、label は表示名）"""
     code: str
     label: str
+    
 
 
 @dataclass(frozen=True)

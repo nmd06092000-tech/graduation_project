@@ -19,7 +19,7 @@
                     <form action="{{ url_for('auth.register') }}" method="POST">
                         <div class="mb-3">
                             <label for="name" class="form-label small fw-bold">お名前</label>
-                            <input type="text" id="name" name="name" class="form-control" placeholder="例) 埼玉 太郎" value="{{ name or '' }}" maxlength="100" required>
+                            <input type="text" id="name" name="name" class="form-control" placeholder="例）埼玉 太郎" value="{{ name or '' }}" maxlength="100" required>
                         </div>
                         <div class="mb-3">
                             <label for="email" class="form-label small fw-bold">メールアドレス</label>
@@ -27,13 +27,13 @@
                         </div>
                         <div class="mb-3">
                             <label for="postal_code" class="form-label small fw-bold">郵便番号</label>
-                            <input type="text" id="postal_code" name="postal_code" class="form-control" placeholder="例) 330-9301"
+                            <input type="text" id="postal_code" name="postal_code" class="form-control" placeholder="例）330-9301"
                                    inputmode="numeric" pattern="[0-9]{3}-?[0-9]{4}" maxlength="8" autocomplete="postal-code"
                                    value="{{ postal_code or '' }}" required>
                         </div>
                         <div class="mb-3">
                             <label for="address" class="form-label small fw-bold">住所（埼玉県内）</label>
-                            <input type="text" id="address" name="address" class="form-control" placeholder="例) 埼玉県さいたま市浦和区高砂"
+                            <input type="text" id="address" name="address" class="form-control" placeholder="例）埼玉県さいたま市浦和区高砂"
                                    maxlength="255" autocomplete="street-address" value="{{ address or '' }}" required>
                             <small class="text-muted">埼玉県内の住所を入力してください。</small>
                         </div>
@@ -44,7 +44,7 @@
                         </div>
                         <div class="mb-4">
                             <label for="confirm_password" class="form-label small fw-bold">パスワード（確認用）</label>
-                            <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="もう一度入力してください" minlength="8" required>
+                            <input type="password" id="confirm_password" name="confirm_password" class="form-control" placeholder="もう一度入力してください" required>
                         </div>
                         <button type="submit" class="btn btn-primary w-100 py-2 fw-bold">アカウントを作成する</button>
                     </form>
@@ -101,8 +101,9 @@
       else if (!/^[0-9]{3}-?[0-9]{4}$/.test(postalCode)) postalCodeInput.setCustomValidity('郵便番号を正しく入力してください。（例：330-9301）');
       if (!address) addressInput.setCustomValidity('住所を入力してください。');
       if (!password) passwordInput.setCustomValidity('パスワードを入力してください。');
-      else if (password.length < 8) passwordInput.setCustomValidity('このテキストは8文字以上で指定してください（現在は' + password.length + '文字です）。');
-      if (!confirm) confirmInput.setCustomValidity('パスワード（確認用）を入力してください。');
+      else if (password.length < 8) passwordInput.setCustomValidity('このテキストは8文字以上で入力してください（現在は' + password.length + '文字です）。');
+      // 確認用パスワードの未入力も同じメッセージ（代替フロー2g-1）
+      if (!confirm) confirmInput.setCustomValidity('パスワードを入力してください。');
       else if (password.length >= 8 && password !== confirm) confirmInput.setCustomValidity('パスワードが一致しません。');
     });
   });

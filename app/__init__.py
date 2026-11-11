@@ -29,6 +29,10 @@ def create_app(config_class=Config):
     app.register_blueprint(staff_bp)
     app.register_blueprint(admin_bp)
 
+    # 定期実行するコマンド（flask --app run rejudge-urgency）
+    from app.cli import register_commands
+    register_commands(app)
+
     # 履歴を増やさない form（static/js/navigation.js が fetch で送信する）には、
     # リダイレクトの代わりに移動先の URL を JSON で返す（flash は移動先の画面で表示される）
     @app.after_request

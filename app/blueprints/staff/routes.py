@@ -8,7 +8,9 @@ from app.constants import (
     MSG_NO_DUPLICATES, MSG_STATUS_UPDATED, ReportStatus,
 )
 from app.models import User
-from app.services import ServiceError, report_service, duplicate_service, stats_service, status_service
+from app.services import (
+    ServiceError, duplicate_service, notification_service, report_service, stats_service, status_service,
+)
 from app.utils.decorators import role_required
 
 staff_bp = Blueprint('staff', __name__, url_prefix='/staff')
@@ -22,7 +24,26 @@ def dashboard():
                            status_counts=stats_service.dashboard_summary(),
                            category_stats=stats_service.count_by_category(),
                            urgency_stats=stats_service.count_by_urgency(),
-                           priority_reports=stats_service.priority_reports())
+                           priority_reports=stats_service.priority_reports(),
+                           notifications=notification_service.list_unread(),
+                           unread_count=notification_service.count_unread())
+
+
+# 行政職員 通知を既読にする（既読は職員全員で共通）
+@staff_bp.route('/notifications/<int:notification_id>/read', methods=['POST'])
+@role_required(User.ROLE_STAFF)
+def notification_read(notification_id):
+    if not notification_service.mark_read(notification_id, actor_id=current_user.id):
+        abort(404)
+    return redirect(url_for('staff.dashboard'))
+
+
+# 行政職員 未読の通知をすべて既読にする
+@staff_bp.route('/notifications/read', methods=['POST'])
+@role_required(User.ROLE_STAFF)
+def notifications_read_all():
+    notification_service.mark_all_read(actor_id=current_user.id)
+    return redirect(url_for('staff.dashboard'))
 
 
 # 行政職員 報告一覧画面（タイトル検索・ID 指定での絞り込み）
@@ -48,14 +69,15 @@ def report_detail(report_id):
     return render_template('staff/report_detail.html', report=report)
 
 
-# 行政職員 対応状況の更新（ステータス変更と担当者メモを対応履歴に記録する）
+# 行政職員 対応状況の更新（ステータス・緊急度の変更と担当者メモ・判断変更理由を対応履歴に記録する）
 @staff_bp.route('/reports/<int:report_id>/status', methods=['POST'])
 @role_required(User.ROLE_STAFF)
 def report_status_update(report_id):
     new_status = request.form.get('status', '')
     try:
         report = status_service.update_report_status(
-            report_id, new_status, actor_id=current_user.id, comment=request.form.get('comment', ''))
+            report_id, new_status, actor_id=current_user.id, comment=request.form.get('comment', ''),
+            urgency=request.form.get('urgency', ''), urgency_reason=request.form.get('urgency_reason', ''))
     except ServiceError as e:
         flash(str(e), 'warning')
         return redirect(url_for('staff.report_detail', report_id=report_id))
@@ -94,7 +116,8 @@ def ai_analysis():
     elif search_query and not ai_logs:
         flash(MSG_AI_LOG_NOT_FOUND, 'danger')
     return render_template('staff/ai_analysis.html', ai_logs=ai_logs, search_query=search_query,
-                           ai_summary=report_service.ai_summary())
+                           ai_summary=report_service.ai_summary(),
+                           rejudge_hours=current_app.config['AI_REJUDGE_HOURS'])
 
 
 # 行政職員 対応管理・重複確認画面

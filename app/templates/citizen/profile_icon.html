@@ -1,14 +1,16 @@
 {% extends 'layouts/base.html' %}
 
-{# プロフィール設定の子画面（保存・戻るで履歴を増やさない） #}
+{# プロフィール設定の子画面（保存・戻る・撮影画面への移動で履歴を増やさない） #}
 {% block nav_parent %}{{ url_for('citizen.profile') }}{% endblock %}
 
 {% block layout %}
+<div class="citizen-page">
 <!-- ヘッダー -->
-<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4">
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4 citizen-header">
     <span class="navbar-brand fw-bold text-primary"><i class="bi bi-geo-alt-fill me-1"></i>埼玉県の困りごと報告システム</span>
     <div class="ms-auto d-flex align-items-center">
         <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <!-- モーダル呼び出しボタン -->
         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
             ログアウト
         </button>
@@ -18,7 +20,7 @@
 <div class="container-fluid">
     <div class="row">
         <!-- 左サイドバー -->
-        <div class="col-md-2 sidebar p-3">
+        <div class="col-12 col-md-2 sidebar p-3">
             <a href="{{ url_for('citizen.mypage') }}"><i class="bi bi-speedometer2 me-2"></i>マイページ</a>
             <a href="{{ url_for('citizen.report_new') }}"><i class="bi bi-plus-circle me-2"></i>新規報告</a>
             <a href="{{ url_for('citizen.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
@@ -26,40 +28,61 @@
         </div>
 
         <!-- メイン領域 -->
-        <div class="col-md-10 p-4">
+        <div class="col-12 col-md-10 p-3 p-md-4 citizen-icon-page">
             <div class="row justify-content-center">
-                <div class="col-md-6">
+                <div class="col-12 col-lg-6">
                     <div class="card border-0 shadow-sm">
                         <div class="card-body p-4 text-center">
                             <h4 class="fw-bold mb-3"><i class="bi bi-camera me-2"></i>プロフィールアイコンの設定</h4>
                             <p class="text-muted small mb-4">新しいアイコン画像を選択してください。</p>
 
                             {% include 'components/_flash.html' %}
-                            <!-- アイコンを選んだまま保存せずに戻ろうとした場合のメッセージ（プロフィール設定 代替フロー2a-1） -->
+                            <!-- アイコンを選んだまま保存せずに移動しようとした場合のメッセージ（プロフィール設定 代替フロー2a-1） -->
                             <div id="iconNotSavedMessage" class="alert alert-danger d-none text-start" role="alert">
                                 <i class="bi bi-exclamation-triangle-fill me-2"></i>{{ msg_icon_not_saved }}
                             </div>
 
-                            <div class="mb-4">
+                            <!-- アイコン表示（アイコン設定済みのときだけ削除ボタンを表示する） -->
+                            <div class="mb-4 position-relative d-flex justify-content-center">
                                 {% if current_user.icon_path %}
                                 <img id="iconPreview" src="{{ url_for('citizen.profile_icon_image') }}" class="rounded-circle" alt="プロフィールアイコン" style="width: 100px; height: 100px; object-fit: cover;">
+                                <button type="button" class="btn btn-outline-secondary btn-sm text-dark position-absolute icon-delete-btn"
+                                        style="left: calc(50% + 50px); bottom: 0;" data-bs-toggle="modal" data-bs-target="#iconDeleteModal">
+                                    <i class="bi bi-trash me-1"></i>削除
+                                </button>
                                 {% else %}
                                 <img id="iconPreview" class="rounded-circle d-none" alt="プロフィールアイコン" style="width: 100px; height: 100px; object-fit: cover;">
-                                <div id="iconPlaceholder" class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center mx-auto" style="width: 100px; height: 100px; font-size: 2.5rem;">
+                                <!-- 初期アイコン -->
+                                <div id="iconPlaceholder" class="bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center" style="width: 100px; height: 100px; font-size: 2.5rem;">
                                     <i class="bi bi-person-fill"></i>
                                 </div>
                                 {% endif %}
                             </div>
 
                             <form action="{{ url_for('citizen.profile_icon') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
-                                <div class="mb-4 text-start">
-                                    <label for="icon" class="form-label small fw-bold">画像ファイルを選択</label>
-                                    <input type="file" id="icon" name="icon" class="form-control" accept="image/jpeg,image/png,image/webp">
+                                <!-- 画像アルバムから選択 -->
+                                <div class="mb-3 text-start">
+                                    <label class="form-label small fw-bold">画像アルバムから選択</label>
+                                    <!-- アルバムを開く（ファイル選択欄はボタンの裏に隠す） -->
+                                    <label for="icon" class="btn btn-outline-primary w-100">
+                                        <i class="bi bi-images me-2"></i>アルバムを開く
+                                    </label>
+                                    <input type="file" id="icon" name="icon" class="d-none" accept="image/jpeg,image/png,image/webp">
                                 </div>
-                                <button type="submit" class="btn btn-primary w-100 py-2 fw-bold mb-2">アイコンを保存する</button>
+
+                                <!-- 3つのボタンの間隔を均等にする -->
+                                <div class="d-grid gap-3 mb-3">
+                                    <!-- カメラ撮影画面へ（履歴を増やさない） -->
+                                    <a href="{{ url_for('citizen.profile_icon_camera') }}" class="btn btn-outline-primary py-2 fw-bold icon-leave-link" data-nav="replace">
+                                        <i class="bi bi-camera-fill me-1"></i>カメラで撮影する
+                                    </a>
+                                    <button type="submit" class="btn btn-primary py-2 fw-bold">
+                                        <i class="bi bi-check-circle me-1"></i>アイコンを保存する
+                                    </button>
+                                </div>
                             </form>
 
-                            <a id="iconBackLink" href="{{ url_for('citizen.profile') }}" class="small text-muted text-decoration-none" data-nav="replace">← プロフィール設定に戻る</a>
+                            <a href="{{ url_for('citizen.profile') }}" class="small text-muted text-decoration-none icon-leave-link" data-nav="replace">← プロフィール設定に戻る</a>
                         </div>
                     </div>
                 </div>
@@ -67,6 +90,29 @@
         </div>
     </div>
 </div>
+
+{% if current_user.icon_path %}
+<!-- アイコン削除確認モーダル -->
+<div class="modal fade" id="iconDeleteModal" tabindex="-1" aria-labelledby="iconDeleteModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="iconDeleteModalLabel">アイコン削除確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                プロフィールアイコンを削除しますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <form action="{{ url_for('citizen.profile_icon_delete') }}" method="POST" data-nav="replace">
+                    <button type="submit" class="btn btn-danger px-4">削除</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- ログアウト確認モーダル -->
 <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
@@ -86,11 +132,12 @@
         </div>
     </div>
 </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    // 選んだ画像をプレビューし、保存せずに戻ろうとしたらメッセージを表示して止める（代替フロー2a-1）
+    // 選んだ画像をプレビューし、保存せずに移動しようとしたらメッセージを表示して止める（代替フロー2a-1）
     const iconInput = document.getElementById('icon');
     iconInput.addEventListener('change', function () {
         const file = iconInput.files[0];
@@ -106,11 +153,14 @@
         }
         document.getElementById('iconNotSavedMessage').classList.add('d-none');
     });
-    document.getElementById('iconBackLink').addEventListener('click', function (event) {
-        if (iconInput.files.length > 0) {
-            event.preventDefault();
-            document.getElementById('iconNotSavedMessage').classList.remove('d-none');
-        }
+    // 「プロフィール設定に戻る」「カメラで撮影する」（navigation.js より先に止める）
+    document.querySelectorAll('.icon-leave-link').forEach(function (link) {
+        link.addEventListener('click', function (event) {
+            if (iconInput.files.length > 0) {
+                event.preventDefault();
+                document.getElementById('iconNotSavedMessage').classList.remove('d-none');
+            }
+        });
     });
 </script>
 {% endblock %}

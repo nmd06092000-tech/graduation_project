@@ -2,14 +2,28 @@
 from app.services import stats_service, status_service
 
 
-# ダッシュボード：取り消し済みは数えない
+# ダッシュボード：対応中・保留中はまとめて数え、取り消し済み・対象外は数えない
 def test_dashboard_summary(make_report):
     make_report()
     make_report(status='in_progress')
+    make_report(status='contractor')
+    make_report(status='confirming')
+    make_report(status='on_hold')
+    make_report(status='watching')
     make_report(status='resolved')
+    make_report(status='not_applicable')
     make_report(status='cancelled')
 
-    assert stats_service.dashboard_summary() == {'received': 1, 'in_progress': 1, 'resolved': 1}
+    assert stats_service.dashboard_summary() == {'received': 1, 'working': 3, 'hold': 2, 'resolved': 1}
+
+
+# 地図・優先対応案件は保留中も未完了として扱い、対象外は含めない
+def test_open_statuses_on_map(make_report):
+    make_report(status='on_hold')
+    make_report(status='contractor')
+    make_report(status='not_applicable')
+
+    assert len(stats_service.map_points()) == 2
 
 
 def test_count_by_urgency_and_priority(make_report):

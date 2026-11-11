@@ -1,1 +1,15 @@
-{# ステータスのバッジ（未対応・対応中・対応済み・取り消し） #}
+{# ステータスのバッジ（未対応・対応中・業者対応中・完了確認中・保留・対応完了・対象外・取り消し） #}
+{# 色はステータスのコードで決め、表示名は constants.py のラベルを使う #}
+{# 使い方: {% with status_code=..., status_label=..., badge_class='px-3 py-2' %}{% include 'components/_status_badge.html' %}{% endwith %} #}
+{%- set status_colors = {
+    'received': 'bg-danger',
+    'in_progress': 'bg-warning text-dark',
+    'contractor': 'bg-primary',
+    'confirming': 'bg-info text-dark',
+    'on_hold': 'bg-dark',
+    'watching': 'bg-secondary',
+    'resolved': 'bg-success',
+    'not_applicable': 'bg-light text-dark border',
+    'cancelled': 'bg-light text-muted border',
+} -%}
+<span class="badge {{ status_colors.get(status_code, 'bg-secondary') }} {{ badge_class or '' }}">{{ status_label }}</span>

@@ -16,18 +16,18 @@
     {% else %}
     <!-- AIによる推定結果の案内 -->
     <div class="alert alert-info mb-4">
-        <i class="bi bi-geo-alt-fill me-2"></i>AIが写真の位置情報から推定した住所です。
+        <i class="bi bi-geo-alt-fill me-2"></i>AIが写真から推定した位置情報です。
     </div>
     {% endif %}
 
     <!-- 位置情報カード -->
     <div class="card shadow-sm">
         <div class="card-body p-4">
-            <!-- 推定された住所 -->
-            <label for="address" class="form-label fw-bold">推定された住所</label>
-            <input type="text" class="form-control mb-4" id="address" value="{{ draft.address or '' }}" readonly>
-            <!-- 住所が違う場合の案内文 -->
-            <p class="text-muted small mt-2">住所が違う場合は、報告画面で修正できます。</p>
+            <!-- 推定された位置情報（AI が推定した住所） -->
+            <label for="location" class="form-label fw-bold">推定された位置情報</label>
+            <input type="text" class="form-control mb-4" id="location" value="{{ draft.address or '' }}" readonly>
+            <!-- 位置情報が違う場合の案内文 -->
+            <p class="text-muted small mt-2">位置情報が違う場合は、報告画面で修正できます。</p>
 
             <!-- 地図の確認エリア（写真の位置にピンを表示する） -->
             <div class="border rounded-4 p-4" style="background-color: #f8f9fa; border-color: #dee2e6 !important;">

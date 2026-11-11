@@ -69,3 +69,16 @@ def update_icon(user_id, file_storage):
         raise
     storage_service.delete(old_path)
     return user
+
+
+def delete_icon(user_id):
+    """プロフィールアイコンを削除し、初期アイコンに戻す（アイコン未設定のときは何もしない）"""
+    user = db.session.get(User, user_id)
+    old_path = user.icon_path
+    if not old_path:
+        return user
+    user.icon_path = None
+    db.session.commit()
+    # DB の更新が確定してからファイルを消す（失敗時に画像だけ消えるのを防ぐ）
+    storage_service.delete(old_path)
+    return user

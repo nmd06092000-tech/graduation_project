@@ -93,15 +93,7 @@
                                         {% endif %}
                                     </td>
                                     <td>
-                                        {% if report.status == '未対応' %}
-                                            <span class="badge bg-danger">未対応</span>
-                                        {% elif report.status == '対応中' %}
-                                            <span class="badge bg-warning text-dark">対応中</span>
-                                        {% elif report.status == '対応済み' %}
-                                            <span class="badge bg-success">対応済み</span>
-                                        {% else %}
-                                            <span class="badge bg-secondary">{{ report.status }}</span>
-                                        {% endif %}
+                                        {% with status_code=report.status_code, status_label=report.status %}{% include 'components/_status_badge.html' %}{% endwith %}
                                     </td>
                                     <td><small class="text-muted">{{ report.date }}</small></td>
                                     <td class="text-end pe-3">

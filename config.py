@@ -20,6 +20,9 @@ class Config:
 
     # AI分析画面「要人間チェック（低信頼度）」とみなす信頼度のしきい値（0〜1）
     AI_LOW_CONFIDENCE_THRESHOLD = float(os.environ.get('AI_LOW_CONFIDENCE_THRESHOLD', '0.7'))
+    # AI緊急度の再判定ルール：未対応のまま、報告からこの時間（時間単位）たった報告を AI で再判定する
+    # （flask --app run rejudge-urgency を定期実行する）
+    AI_REJUDGE_HOURS = int(os.environ.get('AI_REJUDGE_HOURS', '12'))
 
     # 写真・アイコンの保存先（個人情報を含むため static ではなく instance/uploads に置く）
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'instance', 'uploads'))

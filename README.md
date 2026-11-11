@@ -34,6 +34,30 @@ flask --app run db upgrade
 
 **DB đã tạo bằng `db.create_all()` trước khi có Flask-Migrate.** Chạy `flask --app run db stamp 8d99a80ec994` một lần, sau đó mới `db upgrade`. Revision `8d99a80ec994` chính là bảng `users` cũ.
 
+**Chạy định kỳ (AI緊急度の再判定).** Lệnh `flask --app run rejudge-urgency` phán định lại các báo cáo 未対応 đã quá `AI_REJUDGE_HOURS` giờ. Trên EC2, chạy mỗi giờ bằng systemd timer (cùng cách `certbot.timer`). Sửa `User`, `WorkingDirectory` và đường dẫn `.venv` cho đúng server:
+
+```ini
+# /etc/systemd/system/task-app-rejudge.service
+[Unit]
+Description=task-app AI緊急度の再判定
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/task-app
+ExecStart=/home/ubuntu/task-app/.venv/bin/flask --app run rejudge-urgency
+
+# /etc/systemd/system/task-app-rejudge.timer
+[Unit]
+Description=task-app AI緊急度の再判定（1時間ごと）
+[Timer]
+OnCalendar=hourly
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+Bật bằng `sudo systemctl daemon-reload && sudo systemctl enable --now task-app-rejudge.timer`, xem log bằng `journalctl -u task-app-rejudge`.
+
 Tài khoản test do `scripts/seed.py` tạo, chỉ dùng khi phát triển:
 
 | Vai trò | ID | Mật khẩu |
@@ -101,12 +125,14 @@ task-app/
 │   ├── test_auth.py             ⬜
 │   ├── test_report_service.py   ✅ 職員 (一覧, 詳細, AI分析), 市民 (報告する, 写真撮影, 位置情報, マイページ)
 │   ├── test_user_service.py     ✅ プロフィール設定, アイコン
-│   ├── test_status_service.py   ✅ cập nhật trạng thái, 一括変更
+│   ├── test_status_service.py   ✅ cập nhật trạng thái, 緊急度の判定, 一括変更
+│   ├── test_notification_service.py ✅ thông báo cho 職員 (未読, 既読)
 │   ├── test_duplicate_service.py ✅ 重複確認, 統合
 │   ├── test_stats_service.py    ✅ dashboard, 地図, 統計
 │   └── test_ai_classifier.py    ✅ rule_based, Gemini (client giả, không gọi API thật)
 └── app/
-    ├── __init__.py              ✅ create_app(): config, extensions, đăng ký blueprint
+    ├── __init__.py              ✅ create_app(): config, extensions, đăng ký blueprint và lệnh CLI
+    ├── cli.py                   ✅ lệnh chạy định kỳ: `flask --app run rejudge-urgency` (AI再判定)
     ├── extensions.py            ✅ db, login_manager, migrate
     ├── constants.py             ✅ Role, ReportStatus, Urgency, AiAnalysisStatus, DuplicateGroupStatus, luồng trạng thái, nhãn tiếng Nhật
     ├── models/
@@ -117,7 +143,8 @@ task-app/
     │   ├── report.py            ✅ Report, ReportPhoto
     │   ├── status_history.py    ✅ 対応履歴
     │   ├── ai_analysis.py       ✅ kết quả AI
-    │   └── duplicate_group.py   ✅ nhóm báo cáo nghi trùng
+    │   ├── duplicate_group.py   ✅ nhóm báo cáo nghi trùng
+    │   └── notification.py      ✅ thông báo cho 職員 (AI再判定), 既読 chung
     ├── services/                nghiệp vụ (xem mục 4). ✅ phần 職員 và 市民 của report/status/duplicate/stats/storage/user. ⬜ auth_service, assignment_service, đăng ký và quản lý tài khoản trong user_service
     ├── ai/                      ✅ AI: Gemini và phân loại theo từ khóa (xem mục 4)
     ├── forms/                   ⬜ Flask-WTF forms
@@ -135,7 +162,7 @@ task-app/
     │   └── api/                 ⬜ JSON cho bản đồ, biểu đồ (chưa đăng ký trong create_app)
     ├── templates/
     │   ├── layouts/             base.html ✅, public/citizen/staff/admin.html ⬜
-    │   ├── components/          _flash.html ✅, badge/pagination/card ⬜
+    │   ├── components/          _flash.html ✅, _status_badge.html ✅, _urgency_badge/pagination/card ⬜
     │   ├── public/ auth/ citizen/ staff/ admin/   template theo từng blueprint
     │   └── errors/              ⬜ 403, 404, 500
     └── static/
@@ -150,7 +177,7 @@ task-app/
 
 ### Gốc dự án
 - **run.py**: chỉ gọi `create_app()` và chạy server. Không viết route ở đây.
-- **config.py**: lớp `Config` đọc `.env`, `TestingConfig` cho pytest (đọc `TEST_DATABASE_URL`). Đã có `AI_LOW_CONFIDENCE_THRESHOLD` (mặc định 0.7, ngưỡng 要人間チェック ở AI分析), `GOOGLE_MAPS_API_KEY` và `GOOGLE_MAPS_MAP_ID` (bản đồ 地図表示), `GEOCODER_URL` và `GEOCODER_TIMEOUT` (tìm tọa độ từ 発生場所 khi báo cáo không có GPS), `REVERSE_GEOCODER_URL` (đổi tọa độ GPS thành địa chỉ). Dự định tách thêm `DevelopmentConfig`, `ProductionConfig`, và thêm các key `AI_PROVIDER`, `AI_API_KEY`, `UPLOAD_FOLDER`, `MAX_CONTENT_LENGTH`, `DUPLICATE_RADIUS_M`.
+- **config.py**: lớp `Config` đọc `.env`, `TestingConfig` cho pytest (đọc `TEST_DATABASE_URL`). Đã có `AI_LOW_CONFIDENCE_THRESHOLD` (mặc định 0.7, ngưỡng 要人間チェック ở AI分析), `AI_REJUDGE_HOURS` (mặc định 12, số giờ trước khi phán định lại báo cáo 未対応), `GOOGLE_MAPS_API_KEY` và `GOOGLE_MAPS_MAP_ID` (bản đồ 地図表示), `GEOCODER_URL` và `GEOCODER_TIMEOUT` (tìm tọa độ từ 発生場所 khi báo cáo không có GPS), `REVERSE_GEOCODER_URL` (đổi tọa độ GPS thành địa chỉ). Dự định tách thêm `DevelopmentConfig`, `ProductionConfig`, và thêm các key `AI_PROVIDER`, `AI_API_KEY`, `UPLOAD_FOLDER`, `MAX_CONTENT_LENGTH`, `DUPLICATE_RADIUS_M`.
 - **instance/uploads/**: nơi lưu ảnh. Ảnh **không** đặt trong `static/` vì có thể chứa thông tin cá nhân. Chỉ người báo cáo và nhân viên được xem, thông qua một route có kiểm tra quyền.
 - **scripts/**: script chạy tay như seed hay import dữ liệu. Chạy bằng `python -m scripts.<tên>` từ thư mục task-app.
 - **tests/**: `conftest.py` tạo app với `TestingConfig` và DB riêng. Mỗi service có một file test.
@@ -170,10 +197,11 @@ Mỗi file là một nhóm bảng. Khi thêm model mới, phải import nó tron
 | `users` | Đã có. Thêm `icon_path` cho アイコン設定, `postal_code` (dạng `123-4567`) và `address` cho アカウント作成 (chỉ người dân, NULL với nhân viên và admin). `department_id` cho nhân viên để sau, khi có màn hình dùng tới |
 | `departments` | 担当部署. Tạm thời có 道路管理課, 道路照明課, 公園緑地課, 環境課, 市民生活課 |
 | `categories` | `code` (khoá cố định cho AI), `name` (道路, 街灯, 公園, 不法投棄, その他), `default_department_id` |
-| `reports` | `citizen_id`, `title` (件名), `description`, `latitude`, `longitude`, `address`, `location_source` (nguồn tọa độ: `photo`/`device` là GPS, `address` là tìm từ 発生場所), `gps_address` (địa chỉ suy ra từ GPS để 職員 đối chiếu), `status`, `category_id`, `urgency`, `department_id`, `duplicate_group_id`, `duplicate_of_id`, thời gian. `category_id`, `urgency`, `department_id` là giá trị đã chốt, NULL nghĩa là chưa phân loại |
+| `reports` | `citizen_id`, `title` (件名), `description`, `latitude`, `longitude`, `address` (ô 位置情報 trên màn hình 報告する của người dân, phía 職員 gọi là 発生場所), `location_source` (nguồn tọa độ: `photo`/`device` là GPS, `address` là tìm từ 発生場所), `gps_address` (địa chỉ suy ra từ GPS để 職員 đối chiếu), `status`, `category_id`, `urgency`, `department_id`, `duplicate_group_id`, `duplicate_of_id`, thời gian. `category_id`, `urgency`, `department_id` là giá trị đã chốt, NULL nghĩa là chưa phân loại |
 | `report_photos` | `report_id`, `file_path` (tên ngẫu nhiên), `content_type` |
-| `report_status_histories` | `from_status` (NULL là mới tiếp nhận), `to_status`, `changed_by_id` (NULL là hệ thống), `comment` (ghi chú nội bộ), `public_message` (lời nhắn gửi người dân), thời điểm. Đây là 対応履歴, chỉ thêm dòng |
-| `ai_analyses` | Mỗi lần AI phân tích: `status` (succeeded/failed), category, urgency, department, `confidence` (0 đến 1), `raw_response` (JSONB), `model_name`, `error_message` |
+| `report_status_histories` | `from_status` (NULL là mới tiếp nhận), `to_status`, `changed_by_id` (NULL là hệ thống), `from_urgency`/`to_urgency` (職員 đổi 緊急度; `to_urgency` NULL là không đổi, `from_urgency` NULL là từ 未判定), `urgency_reason` (判断変更理由), `comment` (ghi chú nội bộ), `public_message` (lời nhắn gửi người dân), thời điểm. Đây là 対応履歴, chỉ thêm dòng |
+| `ai_analyses` | Mỗi lần AI phân tích: `status` (succeeded/failed), `trigger_type` (`initial` khi tạo báo cáo, `rejudge` khi phán định lại), category, urgency, department, `confidence` (0 đến 1), `raw_response` (JSONB), `model_name`, `error_message` |
+| `staff_notifications` | Thông báo cho 職員: `report_id`, `message`, `created_at`, `read_at`/`read_by_id` (NULL là chưa đọc). 既読 dùng chung cho mọi 職員 |
 | `duplicate_groups` | Nhóm báo cáo nghi trùng: `status` (open/merged/dismissed), `similarity`, người và thời điểm xử lý |
 
 Không lưu `priority`. 対応優先度 tính từ `urgency` và trạng thái chưa xong. Mọi báo cáo đều do người dân gửi (`citizen_id NOT NULL`).
@@ -185,33 +213,44 @@ Kết quả AI được lưu ở bảng riêng, không ghi đè lên `reports`. 
 ### Luồng trạng thái
 
 ```
-received (未対応) -> in_progress (対応中) -> resolved (対応済み)
-received (未対応) -> resolved (対応済み)     # chỉ nhân viên
-received (未対応) -> cancelled (取り消し)    # chỉ người dân, chỉ khi chưa xử lý
+received (未対応)      -> in_progress (対応中) / on_hold (保留・他部署へ引継ぎ) / watching (保留・経過観察)
+                       / not_applicable (対象外・対応不要) / resolved (対応完了)
+received (未対応)      -> cancelled (取り消し)   # chỉ người dân, chỉ khi chưa xử lý
+in_progress (対応中)   -> contractor (業者対応中) / confirming (完了確認中) / resolved / on_hold / watching
+contractor (業者対応中) -> confirming / in_progress
+confirming (完了確認中) -> resolved / in_progress
+on_hold                -> in_progress
+watching               -> in_progress / resolved / not_applicable
+resolved, not_applicable, cancelled: trạng thái cuối, không đổi tiếp
 ```
+
+Mọi bước chuyển, trừ `cancelled`, đều do nhân viên thực hiện. Các trạng thái chưa xong (`OPEN_STATUSES`) gồm tất cả, trừ `resolved`, `not_applicable` và `cancelled`. Nhóm 「対応中」 trên thẻ thống kê gồm `in_progress`, `contractor`, `confirming` (`WORKING_STATUSES`), nhóm 「保留中」 gồm `on_hold`, `watching` (`HOLD_STATUSES`). Người dân thấy đúng nhãn của từng trạng thái. Màu badge của trạng thái chỉ định nghĩa ở `components/_status_badge.html`.
 
 Chỉ `status_service.py` được đổi trạng thái. Mỗi lần đổi phải ghi một dòng vào `report_status_histories`.
 
 **Quy tắc đã cài cho 職員** (theo `docs/ユースケース図_行政職員 4.xlsx`):
 - 詳細・対応更新: bắt buộc nhập 担当者メモ・進捗コメント (2a-1). Ô chọn chỉ có trạng thái hiện tại và trạng thái kế tiếp hợp lệ. Chọn lại trạng thái hiện tại nghĩa là chỉ thêm ghi chú, vẫn ghi một dòng lịch sử với `from_status = to_status`.
+- 緊急度の判定 (không có trong Excel, thêm theo thiết kế màn hình): nằm trong cùng form với 対応状況の更新 và dùng chung một nút lưu. 職員の最終判断 được lưu vào `reports.urgency`; kết quả AI vẫn giữ nguyên ở `ai_analyses`. Nếu chọn 緊急度 khác với lần AI phán định thành công gần nhất thì bắt buộc nhập 判断変更理由 (`MSG_URGENCY_REASON_REQUIRED`). Chọn lại đúng kết quả AI, hoặc báo cáo chưa có kết quả AI, thì không cần lý do. Thay đổi được ghi vào cùng dòng 対応履歴 với lần cập nhật (`status_service.update_report_status`).
 - 一括対応ステータス変更: bỏ qua báo cáo đã 取り消し và báo cáo đã ở trạng thái đích. Nếu còn báo cáo nào không chuyển được (ví dụ 対応済み → 対応中) thì không đổi báo cáo nào và báo lỗi kèm ID.
 - 代表案件に統合: chỉ nhóm `open`. Đặt `duplicate_of_id` cho các báo cáo còn lại, nhóm chuyển `merged`, không đổi trạng thái nên không ghi lịch sử. Xong thì quay về 重複確認.
 - Câu thông báo lấy nguyên văn từ Excel, đặt trong `constants.py` (`MSG_*`). Lỗi nghiệp vụ dùng `ServiceError` (`app/services/__init__.py`), route bắt rồi `flash`.
 - Thống kê và dashboard không tính báo cáo 取り消し. Bản đồ chỉ hiện báo cáo chưa xong (未対応, 対応中).
 - 地図表示 dùng **Google Maps JavaScript API**. Điền `GOOGLE_MAPS_API_KEY` vào `.env` là chạy. Ghim (`AdvancedMarkerElement`) đặt tại `latitude`/`longitude` của báo cáo. Khi gửi 報告する, `report_service.create_report()` ưu tiên GPS (tọa độ trên form, tức vị trí lúc chụp hoặc của thiết bị → tọa độ trong draft → EXIF của ảnh đính kèm). Nếu không có GPS, nó tìm tọa độ của 発生場所 (`address`) bằng API tìm địa chỉ của 国土地理院 (`utils/geo.search_address()`, `msearch.gsi.go.jp/address-search/AddressSearch`, miễn phí, không cần key, ghi 「出典：国土地理院」 dưới bản đồ) rồi lưu vào `latitude`/`longitude`. Không tìm được thì báo `MSG_ADDRESS_NOT_FOUND` (câu này không có trong Excel). Nguồn tọa độ lưu ở `reports.location_source`. Khi có GPS, server đổi tọa độ thành địa chỉ (`utils/geo.reverse_geocode()`, 逆ジオコーダー của 国土地理院) và lưu vào `reports.gps_address`. Nếu 発生場所 bỏ trống thì dùng địa chỉ này làm 発生場所, nên có GPS thì 発生場所 không còn bắt buộc. 報告詳細 của 職員 hiện 位置情報の取得元, 位置情報（GPS）の住所, 緯度経度 và link xem bản đồ, để đối chiếu khi người dân nhập sai địa chỉ. API này là API nội bộ của 地理院地図, có thể đổi hoặc dừng không báo trước; khi đó báo cáo không có GPS sẽ không gửi được. Đổi URL bằng `GEOCODER_URL`, để trống thì tắt tìm kiếm (test đặt trống, không gọi API thật). Màu ghim theo 緊急度 (đỏ 高, vàng 中, xanh 低 hoặc chưa phân loại). Bấm ghim hiện 件名, 住所, 危険度 và link 詳細を見る. `AdvancedMarkerElement` cần map ID (`GOOGLE_MAPS_MAP_ID`, mặc định `DEMO_MAP_ID` chỉ để dev). Không có key thì hiện ảnh tĩnh `static/images/map.avif` như trước. Key được gửi xuống trình duyệt nên phải giới hạn HTTP referrer và chỉ bật Maps JavaScript API trong Google Cloud.
+- AI緊急度の再判定 (thêm theo thiết kế màn hình, không có trong Excel): báo cáo còn 未対応 và đã tạo quá `AI_REJUDGE_HOURS` giờ (mặc định 12) được AI phán định lại một lần (`report_service.rejudge_stale_reports()`, ghi `ai_analyses.trigger_type = 'rejudge'`). AI lỗi cũng tính là đã phán định lại, không thử lại. Kết quả phán định lại **không đổi** `reports` (kể cả khi `urgency` đang NULL). Mỗi báo cáo tạo một thông báo trên dashboard: AI ra 緊急度 khác hiện tại thì nhắc xem lại ở 緊急度の判定, giống thì ghi 変更なし, lỗi thì ghi 失敗. AI分析 hiện quy tắc này và cột 再判定状況.
 - レポート出力: `GET /staff/stats/export/<pdf|csv>` (`staff.stats_export`) trả file tải về, nội dung giống màn hình 統計 (サマリー, カテゴリ別, 月別). Nút 確定 trong modal tải file bằng `fetch`, xong mới hiện 「PDF形式での出力が完了しました。」/「CSV形式での出力が完了しました。」. CSV là UTF-8 có BOM để mở bằng Excel không lỗi font. PDF tạo bằng reportlab, nhúng font IPAexゴシック (`app/fonts/ipaexg.ttf`, giấy phép IPA kèm cùng thư mục, chỉ nhúng các ký tự đã dùng).
 
 ### app/services/
 | File | Nhiệm vụ |
 |---|---|
 | `auth_service.py` | Đăng nhập, đổi mật khẩu khi đã đăng nhập, tạo và kiểm tra token reset mật khẩu |
-| `user_service.py` | Đăng ký người dân, admin tạo, khóa và mở khóa tài khoản nhân viên. ✅ Cập nhật プロフィール (tên, email) và アイコン của người dân |
+| `user_service.py` | Đăng ký người dân, admin tạo, khóa và mở khóa tài khoản nhân viên. ✅ Cập nhật プロフィール (tên, email), lưu và xoá アイコン của người dân |
 | `report_service.py` | Tạo báo cáo theo thứ tự lưu ảnh, gọi AI, kiểm tra trùng. Danh sách theo người dân. Tìm kiếm, lọc, phân trang cho nhân viên |
-| `status_service.py` | Nơi duy nhất đổi trạng thái: kiểm tra luồng hợp lệ, ghi lịch sử, xử lý 取り消し |
+| `status_service.py` | Nơi duy nhất đổi trạng thái: kiểm tra luồng hợp lệ, ghi lịch sử, xử lý 取り消し. Cũng là nơi ghi việc 職員 đổi 緊急度 (vì cùng ghi vào 対応履歴) |
 | `assignment_service.py` | Gán phòng ban theo gợi ý AI hoặc do nhân viên chọn |
 | `duplicate_service.py` | Tìm báo cáo cùng category, gần nhau, chưa xong, gửi gần đây. Chỉ đánh dấu ứng viên trùng, nhân viên xác nhận |
 | `storage_service.py` | ✅ Kiểm tra định dạng thật (Pillow: JPEG, PNG, WebP) và dung lượng (10MB một ảnh), đặt tên ngẫu nhiên, lưu vào `UPLOAD_FOLDER` (`reports/`, `drafts/`, `icons/`), đọc GPS từ EXIF |
 | `stats_service.py` | Đếm theo trạng thái, category, urgency, khu vực cho dashboard, bản đồ, thống kê |
+| `notification_service.py` | ✅ Thông báo cho 職員: tạo, danh sách chưa đọc, 既読 (chung cho mọi 職員) |
 
 ### app/ai/
 | File | Nhiệm vụ |
@@ -266,6 +305,8 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 市民 | パスワード変更 | `/citizen/password` | ⬜ | auth_service |
 | 市民 | プロフィール設定 | `/citizen/profile` | ✅ `citizen.profile` | user_service |
 | 市民 | アイコン設定 | `/citizen/profile/icon`, ảnh: `/citizen/profile/icon/image` | ✅ `citizen.profile_icon`, `citizen.profile_icon_image` | user_service, storage_service |
+| 市民 | アイコン撮影 | `/citizen/profile/icon/camera` (ảnh chụp gửi tới `citizen.profile_icon`) | ✅ `citizen.profile_icon_camera` | user_service, storage_service |
+| 市民 | アイコン削除 | `POST /citizen/profile/icon/delete` | ✅ `citizen.profile_icon_delete` | user_service, storage_service |
 | 職員 | ダッシュボード | `/staff/dashboard` | ✅ `staff.dashboard` | stats_service |
 | 職員 | 報告一覧 | `/staff/reports` | ✅ `staff.report_list` | report_service |
 | 職員 | 報告内容, 対応状況, 対応履歴 | `/staff/reports/<id>` | ✅ `staff.report_detail` | report_service, status_service |
@@ -273,6 +314,8 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 職員 | 担当部署を設定する | `POST /staff/reports/<id>/department` | ⬜ | assignment_service |
 | 職員 | AI 分類, 緊急度判定 | tự động khi tạo, `POST /staff/reports/<id>/reanalyze` | ⬜ | ai |
 | 職員 | AI分析・自動判定ログ | `/staff/ai-analysis` | ✅ `staff.ai_analysis` | report_service |
+| Hệ thống | AI緊急度の再判定 | lệnh `flask --app run rejudge-urgency` (chạy định kỳ) | ✅ `app/cli.py` | report_service, notification_service, ai |
+| 職員 | お知らせを既読にする | `POST /staff/notifications/<id>/read`, `POST /staff/notifications/read` | ✅ `staff.notification_read`, `staff.notifications_read_all` | notification_service |
 | 職員 | 地図表示 | `/staff/map` ✅, `/api/reports/map` ⬜ | ✅ `staff.report_map` | stats_service |
 | 職員 | 対応管理・重複確認 | `/staff/duplicates` | ✅ `staff.duplicates` | duplicate_service |
 | 職員 | 代表案件に統合する | `/staff/duplicates/<group_id>/merge` | ✅ `staff.duplicate_merge` | duplicate_service |
@@ -288,9 +331,9 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 - **layouts/base.html**: khung HTML chung, nạp Bootstrap, Bootstrap Icons, Chart.js và các file CSS. Các layout theo vai trò sẽ kế thừa base và chứa navbar, sidebar. Trang con chỉ viết phần nội dung.
 - **components/**: các mảnh dùng lại bằng `{% include %}`. Màu badge trạng thái và độ khẩn cấp chỉ định nghĩa ở đây.
 - **staff/mockup_report_triage.html**: mockup giao diện màn hình phân loại báo cáo, chưa có route. Dùng làm tham khảo khi làm `staff/report_list.html` và `staff/report_detail.html`, làm xong thì xóa.
-- **static/css/**: `tokens.css` chứa biến màu và khoảng cách, `base.css` chứa style chung, `components.css` chứa style cho từng thành phần, `responsive.css` chứa style cho điện thoại (nạp cuối cùng trong `base.html`, dùng các class như `citizen-page`, `report-page`, `guide-page`).
+- **static/css/**: `tokens.css` chứa biến màu và khoảng cách, `base.css` chứa style chung, `components.css` chứa style cho từng thành phần, `responsive.css` chứa style cho điện thoại (nạp cuối cùng trong `base.html`, dùng các class như `citizen-page`, `report-page`, `guide-page`). Không căn giữa cả `body`. Màn hình nào cần căn giữa trên điện thoại thì dùng class riêng (`login-page-container`, `reset-password-container`, `report-camera-container`, `camera-page-container`…). Style cho sidebar của 県民 phải đặt dưới `.citizen-page` để không ảnh hưởng tới 職員 và 管理者.
 - **Lịch sử trình duyệt (`static/js/navigation.js`, nạp trong `base.html`).** Đi qua lại giữa màn cha và màn con, hoặc gửi form, không được làm nút Back của trình duyệt quay về màn con hay hiện lại cùng một màn hình. Quy ước:
-  - Màn con khai báo màn cha bằng `{% block nav_parent %}{{ url_for('...') }}{% endblock %}`. Hiện có: 写真撮影, 撮影写真の確認, 位置情報の確認 (cha là 報告する), アイコン設定 (cha là プロフィール設定), 代表案件に統合, 一括対応ステータス変更 (cha là 重複確認), 新規職員アカウント登録 và màn hoàn tất (cha là ポータル).
+  - Màn con khai báo màn cha bằng `{% block nav_parent %}{{ url_for('...') }}{% endblock %}`. Hiện có: 写真撮影, 撮影写真の確認, 位置情報の確認 (cha là 報告する), アイコン設定, アイコン撮影 (cha là プロフィール設定), 代表案件に統合, 一括対応ステータス変更 (cha là 重複確認), 新規職員アカウント登録 và màn hoàn tất (cha là ポータル).
   - Link di chuyển trong màn con, hoặc từ màn con về màn cha, thêm `data-nav="replace"`. Khi về màn cha mà mục lịch sử ngay trước đó chính là màn cha, script gọi `history.back()` rồi tải lại màn cha để hiện nội dung mới (ảnh vừa chụp, flash). Trường hợp khác thì dùng `location.replace`. Từ JS thì gọi `window.historyNav.go(url)`.
   - Form thêm `data-nav="replace"` sẽ được gửi bằng `fetch` kèm header `X-Replace-History`. `create_app()` đổi response redirect thành JSON `{"redirect": url}` (flash vẫn giữ trong session), rồi script chuyển trang mà không thêm mục lịch sử. Vì vậy route của các form này **luôn trả redirect, kể cả khi lỗi** (flash + redirect, PRG). Nội dung đã nhập thì giữ trong session (`report_form`, `profile_form`) để hiện lại. Không render template ngay trong POST.
   - Link mở màn con từ màn cha và link giữa các màn độc lập (sidebar, 一覧 → 詳細) vẫn là link thường.
@@ -349,9 +392,10 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
   - Địa chỉ do Gemini đoán từ tọa độ có thể sai. Người dân sửa được ở 報告する. Nếu cần chính xác thì nên dùng API reverse geocoding (ví dụ của 国土地理院).
   - Ảnh tạm trong `drafts/` của người bỏ dở giữa chừng chưa được tự động xoá.
   - Chưa phát hiện nhóm trùng khi tạo báo cáo (`duplicate_service`).
-  - Thông báo ở アカウント作成 và ログイン (`auth`) chưa giống hệt câu chữ trong Excel 県民. Màn hình パスワード変更 (đặt lại bằng email) chưa làm, xem bước 4.
+  - Thông báo kiểm tra phía trình duyệt (JS) ở ログイン, アカウント作成, パスワード再設定 của 県民 đã theo câu chữ Excel 県民. Thông báo phía server trong `auth/routes.py` chưa giống hẳn (ví dụ còn 「このテキストは8文字以上で指定してください」, câu khi bỏ trống hết ở アカウント作成 và パスワード再設定). Màn hình của 職員, 管理者 vẫn dùng 「指定してください」. Màn hình パスワード変更 (đặt lại bằng email) chưa làm, xem bước 4.
 - **Màn hình `auth` (ログイン, アカウント作成, パスワード再設定) chưa dùng `navigation.js`.** Khi nhập sai, route render lại template ngay trong POST, nên lịch sử có thêm một mục của cùng màn hình. Muốn sửa thì chuyển sang PRG như form của 市民 (xem mục 4, static/js).
-- **`responsive.css` căn giữa `body` theo chiều dọc trên màn hình dưới 768px** (`display: flex` cho `body`). Quy tắc này áp dụng cho mọi màn hình, kể cả 職員 và 管理者.
+- **緊急度の判定, AI再判定, trạng thái mới (2026-11-10) chưa có trong [docs/db/db_design.md](docs/db/db_design.md) và sơ đồ trong `docs/`.** Cột `report_status_histories.from_urgency/to_urgency/urgency_reason`, `ai_analyses.trigger_type`, bảng `staff_notifications` và 5 trạng thái mới mới chỉ được mô tả trong README này.
+- **AI再判定:** `analyze_report()` commit kết quả AI trước, sau đó mới tạo thông báo. Nếu bước tạo thông báo lỗi, báo cáo vẫn tính là đã phán định lại, nên thông báo đó bị mất. Nút 「すべて既読にする」 đánh dấu mọi thông báo chưa đọc, kể cả những cái nằm ngoài 10 dòng đang hiện.
 - **Màn hình nhân viên đã đọc và ghi DB thật, nhưng còn thiếu:**
   - Nút AIモデル再実行 ở AI分析 chưa hoạt động (có thể gọi `report_service.analyze_report()`).
   - Chưa có bước phát hiện nhóm trùng khi tạo báo cáo (`duplicate_service`, `utils/geo.py`), nên 重複確認 chỉ hiện nhóm đã có trong `duplicate_groups`.
@@ -359,7 +403,6 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
   - 担当部署を設定する (`POST /staff/reports/<id>/department`) chưa có route.
   - Danh sách 報告一覧 và AI分析 chưa phân trang. AI分析 chỉ hiện 50 lần phân tích mới nhất.
 - **Khi không có `GOOGLE_MAPS_API_KEY`, ghim bản đồ đặt theo phép chiếu gần đúng.** `stats_service.map_points()` vẫn trả `top`/`left` (%) trên ảnh tĩnh theo khung `MAP_BOUNDS` cho trường hợp này. Vị trí chỉ gần đúng.
-- **Trạng thái 保留 và 対象外 trong bản thiết kế chưa có trong luồng trạng thái.** Bản thiết kế có thêm 保留・他部署へ引継ぎ, 保留・経過観察, 対象外・対応不要. Màn hình hiện chỉ dùng 未対応, 対応中, 対応済み theo mục 4. Nếu cần các trạng thái này, phải sửa luồng trạng thái trong README trước.
 - **Cờ `ai_detected` trong dữ liệu mẫu của `duplicate_service`** quyết định nút AI確認 hay 個別確認. Đã chốt như sau:
   - Không có báo cáo do AI tạo. Người báo cáo luôn là người dân.
   - Khi chuyển service sang DB, `ai_detected` là giá trị tính được: báo cáo có `ai_analyses` thành công thì `ai_detected` đúng.

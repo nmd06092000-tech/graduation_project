@@ -54,3 +54,21 @@ def test_update_icon(citizen):
 def test_update_icon_requires_file(citizen):
     with pytest.raises(ServiceError, match=MSG_ICON_REQUIRED):
         user_service.update_icon(citizen.id, None)
+
+
+# アイコンを削除すると初期アイコン（icon_path なし）に戻り、ファイルも消す
+def test_delete_icon(citizen):
+    user_service.update_icon(citizen.id, upload(jpeg_bytes()))
+    path = citizen.icon_path
+
+    user_service.delete_icon(citizen.id)
+
+    assert citizen.icon_path is None
+    assert not storage_service.exists(path)
+
+
+# アイコン未設定でもエラーにしない（二重送信など）
+def test_delete_icon_without_icon(citizen):
+    user_service.delete_icon(citizen.id)
+
+    assert citizen.icon_path is None

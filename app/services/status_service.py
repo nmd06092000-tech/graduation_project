@@ -1,7 +1,8 @@
 # ステータス変更の唯一の窓口：遷移チェック・対応履歴の記録・報告の取り消し
+# 職員による緊急度の変更も対応履歴に記録するため、ここで行う
 from app.constants import (
-    MSG_COMMENT_REQUIRED, MSG_GROUP_INVALID_STATUS, MSG_INVALID_STATUS,
-    ReportStatus, next_statuses,
+    MSG_COMMENT_REQUIRED, MSG_GROUP_INVALID_STATUS, MSG_INVALID_STATUS, MSG_INVALID_URGENCY,
+    MSG_URGENCY_REASON_REQUIRED, AiAnalysisStatus, ReportStatus, Urgency, next_statuses,
 )
 from app.extensions import db
 from app.models import DuplicateGroup, Report, ReportStatusHistory, User
@@ -16,44 +17,64 @@ def record_received(report, *, actor_id):
     return report
 
 
-def change_status(report, to_status, *, actor, comment=None, public_message=None):
+def change_status(report, to_status, *, actor, comment=None, public_message=None,
+                  urgency=None, urgency_reason=None):
     """報告のステータスを変更し、対応履歴を1行追加する（コミットは呼び出し側）
 
     to_status が現在と同じ場合はコメントのみの更新として履歴だけを残す。
+    urgency が現在の緊急度と異なる場合は、緊急度も変更して同じ履歴の行に記録する。
     """
     to_status = ReportStatus(to_status)
     if to_status != report.status and to_status not in next_statuses(report.status, actor.role):
         raise ServiceError(MSG_INVALID_STATUS.format(
             current=ReportStatus.label_of(report.status), status=to_status.label))
 
-    db.session.add(ReportStatusHistory(
+    history = ReportStatusHistory(
         report=report,
         from_status=report.status,
         to_status=to_status.value,
         changed_by_id=actor.id,
         comment=comment or None,
         public_message=public_message or None,
-    ))
+    )
+    if urgency and urgency != report.urgency:
+        history.from_urgency = report.urgency
+        history.to_urgency = urgency
+        history.urgency_reason = urgency_reason or None
+        report.urgency = urgency
+    db.session.add(history)
     report.status = to_status.value
     return report
 
 
-def update_report_status(report_id, to_status, *, actor_id, comment):
-    """職員が報告の対応状況と担当者メモを更新する。詳細・対応更新画面 基本フロー2
+def update_report_status(report_id, to_status, *, actor_id, comment, urgency='', urgency_reason=''):
+    """職員が報告の対応状況・緊急度と担当者メモを更新する。詳細・対応更新画面 基本フロー2
 
-    担当者メモ・進捗コメントは必須（代替フロー2a-1）。存在しない報告は None。
+    担当者メモ・進捗コメントは必須（代替フロー2a-1）。
+    緊急度は空なら変更しない。最新の AI 判定と異なる緊急度に変更する場合は判断変更理由が必須。
+    存在しない報告は None。
     """
     report = db.session.get(Report, report_id)
     if report is None:
         return None
     comment = (comment or '').strip()
+    urgency = (urgency or '').strip()
+    urgency_reason = (urgency_reason or '').strip()
     if not comment:
         raise ServiceError(MSG_COMMENT_REQUIRED)
     if to_status not in ReportStatus.values():
         raise ServiceError(MSG_INVALID_STATUS.format(
             current=ReportStatus.label_of(report.status), status=to_status))
+    if urgency and urgency not in Urgency.values():
+        raise ServiceError(MSG_INVALID_URGENCY)
+    if urgency and urgency != report.urgency and not urgency_reason:
+        latest_ai = report.latest_ai_analysis
+        ai_urgency = latest_ai.urgency if latest_ai and latest_ai.status == AiAnalysisStatus.SUCCEEDED else None
+        if ai_urgency and urgency != ai_urgency:
+            raise ServiceError(MSG_URGENCY_REASON_REQUIRED)
 
-    change_status(report, to_status, actor=db.session.get(User, actor_id), comment=comment)
+    change_status(report, to_status, actor=db.session.get(User, actor_id), comment=comment,
+                  urgency=urgency, urgency_reason=urgency_reason)
     db.session.commit()
     return report
 

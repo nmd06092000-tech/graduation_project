@@ -2,7 +2,9 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 from flask_login import current_user
 from werkzeug.exceptions import RequestEntityTooLarge
 
-from app.constants import MSG_ICON_NOT_SAVED, MSG_ICON_UPDATED, MSG_PROFILE_UPDATED, MSG_UPLOAD_TOO_LARGE
+from app.constants import (
+    MSG_ICON_DELETED, MSG_ICON_NOT_SAVED, MSG_ICON_UPDATED, MSG_PROFILE_UPDATED, MSG_UPLOAD_TOO_LARGE,
+)
 from app.models import User
 from app.services import ServiceError, ValidationError, report_service, storage_service, user_service
 from app.services.report_service import InappropriatePhotoError
@@ -176,6 +178,22 @@ def profile_icon():
         flash(MSG_ICON_UPDATED, 'success')
         return redirect(url_for('citizen.profile'))
     return render_template('citizen/profile_icon.html', msg_icon_not_saved=MSG_ICON_NOT_SAVED)
+
+
+# 市民アイコン撮影画面（撮影した写真はアイコン設定と同じ citizen.profile_icon へ送信して保存する）
+@citizen_bp.route('/profile/icon/camera')
+@role_required(User.ROLE_CITIZEN)
+def profile_icon_camera():
+    return render_template('citizen/profile_icon_camera.html')
+
+
+# 市民アイコン削除（初期アイコンに戻して、アイコン設定画面へ）
+@citizen_bp.route('/profile/icon/delete', methods=['POST'])
+@role_required(User.ROLE_CITIZEN)
+def profile_icon_delete():
+    user_service.delete_icon(current_user.id)
+    flash(MSG_ICON_DELETED, 'success')
+    return redirect(url_for('citizen.profile_icon'))
 
 
 # 本人のアイコン画像

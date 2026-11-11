@@ -1,9 +1,9 @@
 # ステータス遷移・取り消し・対応履歴のテスト
 import pytest
 
-from app.constants import MSG_COMMENT_REQUIRED, ReportStatus
+from app.constants import MSG_COMMENT_REQUIRED, MSG_INVALID_URGENCY, MSG_URGENCY_REASON_REQUIRED, ReportStatus
 from app.extensions import db
-from app.models import DuplicateGroup, ReportStatusHistory
+from app.models import AiAnalysis, DuplicateGroup, ReportStatusHistory
 from app.services import ServiceError, status_service
 
 
@@ -36,7 +36,7 @@ def test_update_report_status_requires_comment(staff, make_report, comment):
     assert _histories(report) == []
 
 
-# 職員は 未対応 → 対応済み に直接変更できる
+# 職員は 未対応 → 対応完了 に直接変更できる
 def test_update_report_status_received_to_resolved(staff, make_report):
     report = make_report()
 
@@ -47,12 +47,47 @@ def test_update_report_status_received_to_resolved(staff, make_report):
     assert (history.from_status, history.to_status) == ('received', 'resolved')
 
 
-# README の状態遷移にない変更（対応中 → 未対応、職員による取り消し、対応済み → 対応中）は拒否する
+# 業者対応・完了確認を経て対応完了にする（README の状態遷移）
+def test_update_report_status_contractor_flow(staff, make_report):
+    report = make_report()
+
+    for status in ('in_progress', 'contractor', 'confirming', 'resolved'):
+        status_service.update_report_status(report.id, status, actor_id=staff.id, comment=f'{status} へ')
+
+    assert report.status == 'resolved'
+    assert [(h.from_status, h.to_status) for h in _histories(report)] == [
+        ('received', 'in_progress'), ('in_progress', 'contractor'), ('contractor', 'confirming'),
+        ('confirming', 'resolved')]
+
+
+# 保留・対象外への変更
+@pytest.mark.parametrize('current, new', [
+    ('received', 'on_hold'),
+    ('received', 'watching'),
+    ('received', 'not_applicable'),
+    ('in_progress', 'on_hold'),
+    ('on_hold', 'in_progress'),
+    ('watching', 'resolved'),
+    ('watching', 'not_applicable'),
+])
+def test_update_report_status_hold_and_not_applicable(staff, make_report, current, new):
+    report = make_report(status=current)
+
+    status_service.update_report_status(report.id, new, actor_id=staff.id, comment='メモ')
+
+    assert report.status == new
+
+
+# README の状態遷移にない変更（対応中 → 未対応、職員による取り消し、対応完了 → 対応中など）は拒否する
 @pytest.mark.parametrize('current, new', [
     ('in_progress', 'received'),
     ('received', 'cancelled'),
     ('resolved', 'in_progress'),
     ('received', 'unknown'),
+    ('received', 'contractor'),
+    ('contractor', 'resolved'),
+    ('on_hold', 'resolved'),
+    ('not_applicable', 'in_progress'),
 ])
 def test_update_report_status_rejects_invalid_transition(staff, make_report, current, new):
     report = make_report(status=current)
@@ -71,6 +106,79 @@ def test_update_report_status_comment_only(staff, make_report):
 
     [history] = _histories(report)
     assert history.from_status == history.to_status == 'in_progress'
+
+
+# 緊急度の判定：AI の判定（高）と異なる緊急度にする場合は判断変更理由が必須
+def _ai_analysis(report, road, urgency):
+    analysis = AiAnalysis(report=report, status='succeeded', category_id=road.id, urgency=urgency,
+                          confidence=0.9, model_name='rule_based')
+    db.session.add(analysis)
+    db.session.commit()
+    return analysis
+
+
+def test_update_report_status_changes_urgency_with_reason(staff, make_report, road):
+    report = make_report(urgency='high')
+    _ai_analysis(report, road, 'high')
+
+    status_service.update_report_status(report.id, 'received', actor_id=staff.id, comment='現地確認予定',
+                                        urgency='low', urgency_reason='写真より小さな穴で通行に支障なし')
+
+    assert report.urgency == 'low'
+    [history] = _histories(report)
+    assert (history.from_urgency, history.to_urgency) == ('high', 'low')
+    assert history.urgency_reason == '写真より小さな穴で通行に支障なし'
+    # AI の判定結果は上書きしない
+    assert report.latest_ai_analysis.urgency == 'high'
+
+
+def test_update_report_status_urgency_reason_required(staff, make_report, road):
+    report = make_report(urgency='high')
+    _ai_analysis(report, road, 'high')
+
+    with pytest.raises(ServiceError, match=MSG_URGENCY_REASON_REQUIRED):
+        status_service.update_report_status(report.id, 'received', actor_id=staff.id, comment='メモ',
+                                            urgency='low', urgency_reason=' ')
+
+    assert report.urgency == 'high'
+    assert _histories(report) == []
+
+
+# AI の判定に戻す場合・AI の判定がない場合は理由なしで変更できる
+def test_update_report_status_urgency_back_to_ai(staff, make_report, road):
+    report = make_report(urgency='low')
+    _ai_analysis(report, road, 'high')
+
+    status_service.update_report_status(report.id, 'received', actor_id=staff.id, comment='メモ', urgency='high')
+
+    assert report.urgency == 'high'
+
+
+def test_update_report_status_urgency_without_ai(staff, make_report):
+    report = make_report(urgency=None)
+
+    status_service.update_report_status(report.id, 'received', actor_id=staff.id, comment='メモ', urgency='medium')
+
+    [history] = _histories(report)
+    assert (history.from_urgency, history.to_urgency) == (None, 'medium')
+
+
+# 緊急度を変えない場合（空・同じ値）は緊急度の変更を記録しない
+@pytest.mark.parametrize('urgency', ['', 'high'])
+def test_update_report_status_urgency_unchanged(staff, make_report, urgency):
+    report = make_report(urgency='high')
+
+    status_service.update_report_status(report.id, 'in_progress', actor_id=staff.id, comment='メモ', urgency=urgency)
+
+    [history] = _histories(report)
+    assert history.to_urgency is None and report.urgency == 'high'
+
+
+def test_update_report_status_rejects_invalid_urgency(staff, make_report):
+    report = make_report()
+
+    with pytest.raises(ServiceError, match=MSG_INVALID_URGENCY):
+        status_service.update_report_status(report.id, 'received', actor_id=staff.id, comment='メモ', urgency='urgent')
 
 
 def test_update_report_status_not_found(staff):

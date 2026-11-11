@@ -1,0 +1,103 @@
+{% extends 'layouts/base.html' %}
+
+{# アイコン設定と同じくプロフィール設定の子画面（撮影・戻るで履歴を増やさない） #}
+{% block nav_parent %}{{ url_for('citizen.profile') }}{% endblock %}
+
+{% block layout %}
+<div class="container py-4 camera-page-container">
+    <div class="card border-0 shadow-sm mx-auto" style="max-width: 700px;">
+        <div class="card-body p-4 text-center">
+            <h3 class="fw-bold mb-3"><i class="bi bi-camera-fill me-2"></i>プロフィールアイコンの撮影</h3>
+            <p class="text-muted mb-4">アイコンに使用する写真を撮影してください。</p>
+
+            {# 撮影した写真はアイコン設定と同じ送信先で保存する（保存後はプロフィール設定、エラー時はアイコン設定に戻る） #}
+            <form id="iconCameraForm" action="{{ url_for('citizen.profile_icon') }}" method="POST" enctype="multipart/form-data" data-nav="replace">
+                <!-- カメラ表示領域（カメラを使えない端末では写真の選択欄を表示する） -->
+                <div class="bg-dark text-white rounded d-flex align-items-center justify-content-center mb-4 overflow-hidden" style="height: 300px;">
+                    <video id="iconCameraVideo" class="w-100 h-100 d-none" style="object-fit: cover;" autoplay playsinline muted></video>
+                    <div id="iconCameraPlaceholder">
+                        <i class="bi bi-camera" style="font-size: 3rem;"></i>
+                        <p class="mt-2 mb-0">カメラ撮影画面</p>
+                    </div>
+                </div>
+                <canvas id="iconCameraCanvas" class="d-none"></canvas>
+
+                <div id="iconCameraFileArea" class="mb-3 text-start d-none">
+                    <label for="iconCameraFile" class="form-label small fw-bold">カメラで撮影する・写真を選ぶ</label>
+                    <input type="file" id="iconCameraFile" name="icon" class="form-control" accept="image/jpeg,image/png,image/webp" capture="user">
+                </div>
+
+                <!-- 撮影ボタン -->
+                <button type="submit" id="iconCameraShutter" class="btn btn-primary w-100 mb-3">
+                    <i class="bi bi-camera-fill me-1"></i>撮影する
+                </button>
+            </form>
+
+            <!-- アイコン設定画面に戻る -->
+            <a href="{{ url_for('citizen.profile_icon') }}" class="btn btn-outline-secondary w-100" data-nav="replace">← アイコン設定に戻る</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // カメラ映像を表示し、「撮影する」で1枚撮影してアイコンとして送信する
+    // カメラはブラウザの仕様で HTTPS（または localhost）のときだけ使える
+    (function () {
+        const form = document.getElementById('iconCameraForm');
+        const video = document.getElementById('iconCameraVideo');
+        const canvas = document.getElementById('iconCameraCanvas');
+        const fileInput = document.getElementById('iconCameraFile');
+        const shutter = document.getElementById('iconCameraShutter');
+        let stream = null;
+
+        // カメラを使えない場合は写真の選択欄（スマホではカメラが起動する）を表示する
+        function showFileInput() {
+            document.getElementById('iconCameraFileArea').classList.remove('d-none');
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(function (track) { track.stop(); });
+            }
+        }
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof DataTransfer === 'undefined') {
+            showFileInput();
+        } else {
+            // アイコンの撮影なので前面カメラを使う
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false })
+                .then(function (mediaStream) {
+                    stream = mediaStream;
+                    video.srcObject = stream;
+                    video.classList.remove('d-none');
+                    document.getElementById('iconCameraPlaceholder').classList.add('d-none');
+                })
+                .catch(showFileInput);
+        }
+
+        shutter.addEventListener('click', function (event) {
+            // カメラ映像がまだない、または写真を選択済みなら、そのまま送信する（navigation.js）
+            if (!stream || !video.videoWidth || fileInput.files.length > 0) {
+                return;
+            }
+            event.preventDefault();
+            shutter.disabled = true;
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(function (blob) {
+                const transfer = new DataTransfer();
+                transfer.items.add(new File([blob], 'icon.jpg', { type: 'image/jpeg' }));
+                fileInput.files = transfer.files;
+                stopCamera();
+                // submit イベントを発生させて navigation.js で送信する（履歴を増やさない）
+                form.requestSubmit();
+            }, 'image/jpeg', 0.9);
+        });
+
+        window.addEventListener('pagehide', stopCamera);
+    })();
+</script>
+{% endblock %}

@@ -14,7 +14,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sqlalchemy import extract, func, select
 
 from app.constants import (
-    OPEN_STATUSES, URGENCY_DESCRIPTIONS, ReportStatus, Urgency,
+    HOLD_STATUSES, OPEN_STATUSES, URGENCY_DESCRIPTIONS, WORKING_STATUSES, ReportStatus, Urgency,
 )
 from app.extensions import db
 from app.models import Category, Report, ReportStatusHistory
@@ -44,10 +44,21 @@ _OPEN_STATUS_VALUES = [s.value for s in OPEN_STATUSES]
 
 
 def dashboard_summary():
-    """ダッシュボードのステータス別件数（未対応・対応中・対応済み）。ダッシュボード 基本フロー1"""
+    """ダッシュボードのステータス別件数（未対応・対応中・保留中・対応完了）。ダッシュボード 基本フロー1
+
+    対応中は 対応中・業者対応中・完了確認中、保留中は 保留・他部署へ引継ぎ・保留・経過観察 の合計。
+    """
     counts = _count_by(Report.status)
-    return {s.value: counts.get(s.value, 0)
-            for s in (ReportStatus.RECEIVED, ReportStatus.IN_PROGRESS, ReportStatus.RESOLVED)}
+
+    def total(statuses):
+        return sum(counts.get(s.value, 0) for s in statuses)
+
+    return {
+        'received': counts.get(ReportStatus.RECEIVED.value, 0),
+        'working': total(WORKING_STATUSES),
+        'hold': total(HOLD_STATUSES),
+        'resolved': counts.get(ReportStatus.RESOLVED.value, 0),
+    }
 
 
 def count_by_urgency():
@@ -121,7 +132,7 @@ def map_points(category='all', urgency='all'):
 def summary():
     """統計画面のサマリー（総件数・解決済み件数・対応完了率・平均対応日数）。統計・レポート分析 基本フロー1
 
-    平均対応日数：報告日時から最初に「対応済み」になった日時までの平均。
+    平均対応日数：報告日時から最初に「対応完了」になった日時までの平均。
     """
     counts = _count_by(Report.status)
     total = sum(counts.values())

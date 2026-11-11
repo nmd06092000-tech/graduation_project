@@ -1,7 +1,7 @@
 {% extends 'layouts/base.html' %}
 
 {% block layout %}
-<div class="container my-5">
+<div class="container my-5 login-page-container">
     <div class="row justify-content-center">
         <div class="col-md-5">
             <div class="text-center mb-4">
@@ -85,7 +85,7 @@
         }
         if (!loginId) loginIdInput.setCustomValidity('メールアドレスを入力してください。');
         if (!password) passwordInput.setCustomValidity('パスワードを入力してください。');
-        else if (password.length < 8) passwordInput.setCustomValidity('このテキストは8文字以上で指定してください（現在は' + password.length + '文字です）。');
+        else if (password.length < 8) passwordInput.setCustomValidity('このテキストは8文字以上で入力してください（現在は' + password.length + '文字です）。');
     });
 </script>
 {% endblock %}

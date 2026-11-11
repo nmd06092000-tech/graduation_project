@@ -53,6 +53,18 @@
                 </div>
             </div>
 
+            <!-- AI緊急度の再判定ルール（時間は AI_REJUDGE_HOURS。flask --app run rejudge-urgency で定期実行） -->
+            <div class="alert alert-info d-flex align-items-start mb-4" role="alert">
+                <i class="bi bi-info-circle-fill me-2 mt-1"></i>
+                <div>
+                    <strong>AI緊急度の再判定ルール</strong>
+                    <p class="mb-0 mt-1">
+                        未対応の報告は、報告から{{ rejudge_hours }}時間経過するとAIが緊急度を再判定します。
+                        再判定が行われた場合、行政職員へ通知されます。
+                    </p>
+                </div>
+            </div>
+
             <!-- 検索結果が0件の場合のメッセージ（代替フロー4a-1） -->
             {% include 'components/_flash.html' %}
 
@@ -97,8 +109,9 @@
                                     <th class="py-3 ps-3">ID</th>
                                     <th class="py-3">報告タイトル</th>
                                     <th class="py-3">AI分類カテゴリ</th>
-                                    <th class="py-3">AI判定緊急度</th>
                                     <th class="py-3">担当部署</th>
+                                    <th class="py-3">AI判定緊急度</th>
+                                    <th class="py-3">再判定状況</th>
                                     <th class="py-3">信頼度 (Confidence)</th>
                                     <th class="py-3">判定ステータス</th>
                                     <th class="py-3">処理日時</th>
@@ -113,6 +126,7 @@
                                     </td>
                                     <td>{{ log.title }}</td>
                                     <td><span class="badge bg-secondary">{{ log.category }}</span></td>
+                                    <td><span class="text-secondary fw-bold small"><i class="bi bi-building me-1"></i>{{ log.department }}</span></td>
                                     <td>
                                         {% if log.urgency == '高' %}
                                             <span class="badge bg-danger">高 (即時対応)</span>
@@ -124,7 +138,10 @@
                                             <span class="text-muted">—</span>
                                         {% endif %}
                                     </td>
-                                    <td><span class="text-secondary fw-bold small"><i class="bi bi-building me-1"></i>{{ log.department }}</span></td>
+                                    <!-- 再判定状況（初回判定 / 再判定済み） -->
+                                    <td>
+                                        <span class="badge {{ 'bg-primary' if log.trigger_type == 'rejudge' else 'bg-light text-dark border' }}">{{ log.trigger }}</span>
+                                    </td>
                                     <td>
                                         <div class="d-flex align-items-center">
                                             <span class="me-2 fw-bold text-success">{{ log.confidence }}</span>
@@ -141,7 +158,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="9" class="text-center text-muted py-4">AI判定結果はありません。</td>
+                                    <td colspan="10" class="text-center text-muted py-4">AI判定結果はありません。</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
