@@ -80,6 +80,19 @@ class Config:
     LOGIN_MAX_FAILURES = _env_int('LOGIN_MAX_FAILURES', 5, 1)
     LOGIN_LOCK_MINUTES = _env_int('LOGIN_LOCK_MINUTES', 15, 1)
 
+    # パスワード再設定（市民のメールのリンク・職員/管理者の再設定コード）の有効期間（分。1 以上。違反は起動時に ValueError）
+    PASSWORD_RESET_TOKEN_MINUTES = _env_int('PASSWORD_RESET_TOKEN_MINUTES', 30, 1)
+    # メールに書くリンクの元になる公開 URL（末尾の / は不要）。リクエストの Host は使わない（偽の Host でリンクを
+    # 作らせないため）。EC2 では https://team3app.duckdns.org など
+    PUBLIC_BASE_URL = (os.environ.get('PUBLIC_BASE_URL', '').strip().rstrip('/')) or 'http://localhost:5000'
+    # メール送信（SMTP + STARTTLS）。MAIL_SERVER が空ならメールは送らず、内容（再設定リンクを含む）をログに出す
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', '').strip()
+    MAIL_PORT = _env_int('MAIL_PORT', 587, 1)
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME', '')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD', '')
+    MAIL_FROM = os.environ.get('MAIL_FROM', '').strip() or 'no-reply@localhost'
+    MAIL_TIMEOUT = _env_int('MAIL_TIMEOUT', 10, 1)
+
     # リバースプロキシ（Nginx）の段数。0 なら ProxyFix を使わない（既定）。
     # 1 以上にすると X-Forwarded-For / X-Forwarded-Proto を信頼し、request.is_secure などが HTTPS で正しくなる
     # （X-Forwarded-Host は信頼しない）。Nginx が必ずこれらのヘッダを上書きして付ける構成でのみ設定すること
@@ -134,6 +147,9 @@ class TestingConfig(Config):
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False
     SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL', '')
+    # テストでは実際にメールを送らない（MAIL_SERVER を空にして、送信は常にログ出力にする）
+    MAIL_SERVER = ''
+    PUBLIC_BASE_URL = 'http://localhost:5000'
     # テストでは Gemini を呼ばない
     AI_PROVIDER = 'rule_based'
     GEMINI_API_KEY = ''

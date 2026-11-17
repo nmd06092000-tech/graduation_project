@@ -1,12 +1,18 @@
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session, abort, send_file
-from flask_login import current_user
+from flask import (
+    Blueprint, render_template, request, redirect, url_for, flash, session, abort, send_file, current_app,
+)
+from flask_login import current_user, login_user
+from flask_login.config import COOKIE_NAME
 from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.constants import (
-    MSG_ICON_DELETED, MSG_ICON_NOT_SAVED, MSG_ICON_UPDATED, MSG_PROFILE_UPDATED, MSG_UPLOAD_TOO_LARGE,
+    MSG_ICON_DELETED, MSG_ICON_NOT_SAVED, MSG_ICON_UPDATED, MSG_PASSWORD_CHANGED, MSG_PROFILE_UPDATED,
+    MSG_UPLOAD_TOO_LARGE,
 )
 from app.models import User
-from app.services import ServiceError, ValidationError, report_service, storage_service, user_service
+from app.services import (
+    ServiceError, ValidationError, auth_service, report_service, storage_service, user_service,
+)
 from app.services.report_service import InappropriatePhotoError
 from app.utils.decorators import role_required
 
@@ -163,6 +169,34 @@ def profile():
         return redirect(url_for('citizen.profile'))
     form = session.pop(PROFILE_FORM_KEY, None) or {'name': current_user.name, 'email': current_user.login_id}
     return render_template('citizen/profile.html', form=form)
+
+
+# 市民パスワード変更画面（現在のパスワードと新しいパスワード。成功したらプロフィール設定画面へ）
+@citizen_bp.route('/password', methods=['GET', 'POST'])
+@role_required(User.ROLE_CITIZEN)
+def change_password():
+    if request.method == 'POST':
+        try:
+            user = auth_service.change_password(
+                current_user.id, current_password=request.form.get('current_password', ''),
+                new_password=request.form.get('new_password', ''),
+                confirm_password=request.form.get('confirm_password', ''))
+        except ServiceError as e:
+            # 入力エラー・現在のパスワード違い・ロック中（履歴に同じ画面を増やさないよう redirect する）
+            if isinstance(e, ValidationError):
+                for category, message in e.messages:
+                    flash(message, category)
+            else:
+                flash(str(e), 'danger')
+            return redirect(url_for('citizen.change_password'))
+        # パスワードの印が変わったので、今のセッションだけを作り直して入り直させる（ほかの端末のセッションは無効になる）。
+        # 「ログイン状態を保持する」Cookie を使っていた場合は、新しい印で Cookie も発行し直す
+        remember = request.cookies.get(current_app.config.get('REMEMBER_COOKIE_NAME', COOKIE_NAME)) is not None
+        session.clear()
+        login_user(user, remember=remember)
+        flash(MSG_PASSWORD_CHANGED, 'success')
+        return redirect(url_for('citizen.profile'))
+    return render_template('citizen/change_password.html')
 
 
 # 市民アイコン設定画面

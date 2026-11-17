@@ -1,5 +1,6 @@
 # 報告の作成（写真保存 → AI判定 → 重複チェック）、市民別一覧、職員向け検索・絞り込み
 import math
+import re
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 
@@ -16,6 +17,7 @@ from app.constants import (
     MSG_GPS_NOT_FOUND, MSG_LOCATION_REQUIRED, MSG_PHOTO_INAPPROPRIATE, MSG_PHOTO_OUT_OF_FOCUS,
     MSG_PHOTO_REQUIRED, MSG_PHOTO_TOO_MANY, MSG_REPORT_ALL_REQUIRED, MSG_TITLE_REQUIRED, MSG_TITLE_TOO_LONG,
     MSG_NOTICE_REJUDGE_FAILED, MSG_NOTICE_REJUDGED_CHANGED, MSG_NOTICE_REJUDGED_SAME,
+    AI_ERROR_GENERIC_MESSAGE, AI_ERROR_KIND_LABELS, AI_ERROR_KINDS_HIDE_DETAIL, AI_ERROR_UNKNOWN_MESSAGE,
     OPEN_STATUSES, URGENCY_DESCRIPTIONS, WORKING_STATUSES, AiAnalysisStatus, AiAnalysisTrigger, LocationSource,
     ReportStatus, Role, Urgency, next_statuses,
 )
@@ -446,6 +448,35 @@ def _add_succeeded_analysis(report, result, trigger_type=AiAnalysisTrigger.INITI
     return analysis
 
 
+# 設定変数名（GEMINI_API_KEY のような大文字＋アンダースコアの識別子。SAFETY / STOP や finish_reason は対象外）
+_CONFIG_NAME_PATTERN = r'(?<![A-Za-z0-9_])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?![A-Za-z0-9_])'
+_CONFIG_NAME_RE = re.compile(_CONFIG_NAME_PATTERN)
+# 設定変数名を含む括弧書き（全角・半角）。直前の空白ごと取り除く
+_CONFIG_NAME_PAREN_RE = re.compile(r'\s*[（(][^（）()]*' + _CONFIG_NAME_PATTERN + r'[^（）()]*[）)]')
+
+
+# 画面に出すメッセージから設定変数名を取り除く（括弧書きごと削除 → なお残る場合は共通文に置き換え）
+def _hide_config_names(detail):
+    message = _CONFIG_NAME_PAREN_RE.sub('', detail).strip()
+    if _CONFIG_NAME_RE.search(message):
+        return AI_ERROR_GENERIC_MESSAGE
+    return message
+
+
+# 失敗した AI 判定の表示用情報（種類ラベル・メッセージ）。error_message は「[kind] 本文」形式（旧データは接頭辞なし・NULL もあり得る）
+def _ai_error_info(analysis):
+    match = re.match(r'^\[(\w+)\]\s*(.*)$', analysis.error_message or '', re.DOTALL)
+    kind, detail = (match.group(1), match.group(2).strip()) if match else ('unknown', (analysis.error_message or '').strip())
+    if kind not in AI_ERROR_KIND_LABELS:
+        kind = 'unknown'
+    # 設定・認証の詳細は構成情報を含み得るので共通文にする
+    if kind in AI_ERROR_KINDS_HIDE_DETAIL:
+        message = AI_ERROR_GENERIC_MESSAGE
+    else:
+        message = _hide_config_names(detail) or AI_ERROR_UNKNOWN_MESSAGE
+    return AI_ERROR_KIND_LABELS[kind], message
+
+
 def list_for_staff(search='', report_id=None):
     """職員向けの報告一覧（新しい順）。報告一覧画面 基本フロー1
 
@@ -477,6 +508,9 @@ def get_for_staff(report_id):
 
     latest_ai = report.latest_ai_analysis
     ai_succeeded = latest_ai is not None and latest_ai.status == AiAnalysisStatus.SUCCEEDED
+    # 最新の AI 判定が失敗の場合のみエラー情報（種類・メッセージ・日時）を返す
+    ai_failed = latest_ai is not None and latest_ai.status == AiAnalysisStatus.FAILED
+    ai_error_type, ai_error_message = _ai_error_info(latest_ai) if ai_failed else (None, None)
     # 現在のステータス（コメントのみの更新用）と、職員が変更できる次のステータス
     status_options = [ReportStatus(report.status)] + next_statuses(report.status, Role.STAFF)
     return {
@@ -500,6 +534,11 @@ def get_for_staff(report_id):
         'department': report.department.name if report.department else None,
         'ai_department': latest_ai.department.name if ai_succeeded and latest_ai.department else None,
         'ai_confidence': format_percent(latest_ai.confidence) if ai_succeeded else None,
+        # 最新の AI 判定が失敗の場合のエラー情報（成功時・判定なしは False / None）
+        'ai_failed': ai_failed,
+        'ai_error_type': ai_error_type,
+        'ai_error_message': ai_error_message,
+        'ai_error_date': format_datetime(latest_ai.created_at) if ai_failed else None,
         # TODO: 写真は instance/uploads/ から権限チェック付きのルートで配信する（storage_service と配信ルートが未実装）
         'image_url': '',
         'history': [_history_row(h) for h in report.histories],
@@ -530,6 +569,7 @@ def list_ai_analyses(search='', report_id=None):
         'urgency': Urgency.label_of(a.urgency),
         'confidence': format_percent(a.confidence),
         'status': AiAnalysisStatus.label_of(a.status),
+        'status_code': a.status,
         # 再判定状況（初回判定 / 再判定済み）
         'trigger_type': a.trigger_type,
         'trigger': AiAnalysisTrigger.label_of(a.trigger_type),

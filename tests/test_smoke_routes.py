@@ -168,6 +168,7 @@ def test_citizen_forbidden_on_staff_status_update(client, login, citizen, make_r
     ('/staff/dashboard', User.ROLE_STAFF),
     ('/staff/reports', User.ROLE_STAFF),
     ('/admin/portal', User.ROLE_ADMIN),
+    ('/admin/users', User.ROLE_ADMIN),
 ])
 def test_anonymous_redirected_to_login(client, path, role):
     # Act

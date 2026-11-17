@@ -3,7 +3,7 @@ import io
 import os
 import re
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 import pytest
@@ -128,6 +128,49 @@ def fake_now():
         patcher.stop()
 
 
+class Clock:
+    """auth_service._now を差し替えた時計（clock.advance(minutes=31) で進める）"""
+
+    def __init__(self, now):
+        self.now = now
+
+    def advance(self, **kwargs):
+        self.now = self.now + timedelta(**kwargs)
+        return self.now
+
+
+@pytest.fixture
+def clock(monkeypatch):
+    """auth_service._now を固定し、あとから進められる時計（monkeypatch なので複数回の差し替えでも元へ戻る）"""
+    value = Clock(datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc))
+    monkeypatch.setattr('app.services.auth_service._now', lambda: value.now)
+    return value
+
+
+@pytest.fixture
+def outbox():
+    """メール送信（mail.send_mail）を差し替えたモック。SMTP には一切つながない"""
+    with mock.patch('app.utils.mail.send_mail') as sender:
+        yield sender
+
+
+def sent_reset_token(outbox, index=-1):
+    """outbox に送られた再設定メールの本文から、リンクのトークンを取り出す"""
+    body = outbox.call_args_list[index].args[2]
+    match = re.search(r'/reset-password/confirm/([A-Za-z0-9_-]+)', body)
+    assert match, f'メール本文に再設定リンクがありません: {body!r}'
+    return match.group(1)
+
+
+@pytest.fixture
+def department(app):
+    """部署「道路管理課」（職員アカウントの所属先）"""
+    value = Department(name='道路管理課')
+    db.session.add(value)
+    db.session.commit()
+    return value
+
+
 @pytest.fixture
 def road(app):
     """カテゴリ「道路」（既定の担当部署: 道路管理課）"""
@@ -182,5 +225,32 @@ def _make_user(login_id, name, role):
     user = User(login_id=login_id, name=name, role=role)
     user.set_password('password123')
     db.session.add(user)
+    db.session.commit()
+    return user
+
+
+def make_account(login_id, role, name=None, department=None, **columns):
+    """職員・管理者・市民を1件作る（3a 用。パスワードは password123。columns で is_active・created_at などを直接指定できる）"""
+    user = User(login_id=login_id, name=name or login_id, role=role,
+                department_id=department.id if department else None, **columns)
+    user.set_password('password123')
+    db.session.add(user)
+    db.session.commit()
+    return user
+
+
+def soft_delete(user, by=None, at=None):
+    """論理削除の状態にする（del_flag・deleted_at・deleted_by_id を同じ書き込みで変える。再設定コードなどには触れない）"""
+    user.del_flag = True
+    user.deleted_at = at or datetime.now(timezone.utc)
+    user.deleted_by_id = by.id if by else None
+    db.session.commit()
+    return user
+
+
+def lock_account(user, minutes=10, failures=5):
+    """ログインの一時ロック中にする（locked_until を現在から minutes 分先にする）"""
+    user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    user.failed_login_count = failures
     db.session.commit()
     return user

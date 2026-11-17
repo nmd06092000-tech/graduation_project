@@ -1,1 +1,47 @@
 /* バッジ・カード・地図のピンなど部品ごとのスタイル */
+
+/* =================================
+   管理者：アカウント一覧（admin/user_list.html）
+================================= */
+.admin-users-page .admin-users-table th {
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+
+/* 操作ボタンは幅が足りなければ折り返す */
+.admin-users-page .admin-users-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.admin-users-page .admin-users-actions form {
+    margin: 0;
+}
+
+.admin-users-page .admin-users-actions .btn {
+    white-space: nowrap;
+}
+
+.admin-users-page .admin-users-state {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+}
+
+/* 再設定コード：読み間違いを防ぐため等幅・大きめで表示し、ワンクリックで全選択できる */
+.reset-code-value {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border: 1px dashed var(--bs-border-color);
+    border-radius: 0.5rem;
+    background-color: var(--bs-light);
+    color: var(--bs-dark);
+    font-family: SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    font-size: 1.5rem;
+    font-weight: 700;
+    letter-spacing: 0.15em;
+    overflow-wrap: anywhere;
+    user-select: all;
+}

@@ -943,3 +943,77 @@
         font-size: 1.05rem !important;
     }
 }
+
+/* 管理者アカウント一覧：スマホでは表を1件1枚のカード表示にする（各セルの data-label を見出しにする） */
+@media (max-width: 767.98px) {
+    /* 見出し行は視覚的にだけ隠し、スクリーンリーダーには残す */
+    .admin-users-page .admin-users-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+    }
+
+    .admin-users-page .admin-users-table,
+    .admin-users-page .admin-users-table tbody,
+    .admin-users-page .admin-users-table tr,
+    .admin-users-page .admin-users-table td {
+        display: block;
+        width: 100%;
+    }
+
+    .admin-users-page .admin-users-table tr {
+        padding: 0.5rem 0.75rem;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .admin-users-page .admin-users-table tr:last-child {
+        border-bottom: 0;
+    }
+
+    .admin-users-page .admin-users-table td {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.35rem 0;
+        border: 0;
+        text-align: right;
+        overflow-wrap: anywhere;
+    }
+
+    .admin-users-page .admin-users-table td::before {
+        content: attr(data-label);
+        flex: 0 0 6em;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--bs-secondary-color);
+        text-align: left;
+    }
+
+    /* 操作欄は見出しを出さず、ボタンを左から並べて幅いっぱいに使う */
+    .admin-users-page .admin-users-table td.admin-users-actions-cell {
+        padding-top: 0.6rem;
+    }
+
+    .admin-users-page .admin-users-table td.admin-users-actions-cell::before {
+        display: none;
+    }
+
+    .admin-users-page .admin-users-actions {
+        width: 100%;
+    }
+
+    .admin-users-page .admin-users-actions .btn {
+        min-height: 40px;
+    }
+}
+
+@media (max-width: 576px) {
+    .reset-code-value {
+        font-size: 1.25rem;
+        letter-spacing: 0.1em;
+    }
+}

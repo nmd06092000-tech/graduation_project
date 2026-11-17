@@ -20,14 +20,29 @@
     <div class="row g-4">
         <div class="col-md-6">
             <div class="card shadow-sm border-0">
-                <div class="card-header bg-white fw-bold py-3">ユーザー・職員アカウント管理</div>
+                <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span>ユーザー・職員アカウント管理</span>
+                    <span class="small fw-normal text-muted">全{{ user_total or 0 }}件</span>
+                </div>
                 <div class="card-body">
                     <a href="{{ url_for('admin.user_register') }}" class="btn btn-primary btn-sm mb-3">+ 新規職員アカウント登録</a>
+                    {# 最近登録された順に最大5件（route が recent_users を渡す） #}
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0"><span>鈴木 健一 (道路維持課)</span><span class="badge bg-success">有効</span></li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0"><span>佐藤 花子 (都市公園課)</span><span class="badge bg-success">有効</span></li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0"><span>渡邉優紀 (管理者)</span><span class="badge bg-success">有効</span></li>
+                        {% for u in recent_users or [] %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center gap-2 px-0">
+                            <span>{{ u.name }} ({{ u.department_name or u.role_label }})</span>
+                            <span class="text-nowrap">
+                                {% if u.is_locked %}<span class="badge bg-warning text-dark">ロック中</span>{% endif %}
+                                {% if not u.is_active %}<span class="badge bg-secondary">利用停止</span>{% elif not u.is_locked %}<span class="badge bg-success">有効</span>{% endif %}
+                            </span>
+                        </li>
+                        {% else %}
+                        <li class="list-group-item text-muted px-0">登録されているアカウントはありません。</li>
+                        {% endfor %}
                     </ul>
+                </div>
+                <div class="card-footer bg-white text-end">
+                    <a href="{{ url_for('admin.user_list') }}" class="small">すべて表示<i class="bi bi-chevron-right ms-1"></i></a>
                 </div>
             </div>
         </div>

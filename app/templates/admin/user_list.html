@@ -1,1 +1,288 @@
-{# ユーザー一覧 #}
+{# ユーザー一覧（職員・管理者アカウントの管理）。ポータルから開く独立画面なので nav_parent は使わない #}
+{% extends 'layouts/base.html' %}
+
+{% block title %}アカウント管理 | 埼玉県の困りごと報告システム{% endblock %}
+
+{% block layout %}
+{% set f = filters or {} %}
+{# POST フォーム共通の hidden（操作後も一覧の絞り込みを保つための条件。CSRF は静的検査のため各フォームに直書き） #}
+{% macro keep_filters(f) %}
+<input type="hidden" name="role" value="{{ f.role or '' }}">
+<input type="hidden" name="department" value="{{ f.department or '' }}">
+<input type="hidden" name="q" value="{{ f.q or '' }}">
+{% endmacro %}
+
+<div class="admin-users-page">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-secondary px-3 px-md-4">
+        <span class="navbar-brand fw-bold"><i class="bi bi-gear-fill me-2"></i>システム管理ポータル</span>
+        <div class="ms-auto d-flex align-items-center text-white">
+            <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+            <!-- モーダル呼び出しボタン -->
+            <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#systemAdminLogoutModal">
+                ログアウト
+            </button>
+        </div>
+    </nav>
+
+    <div class="container-fluid p-3 p-md-4">
+        <div class="mb-3">
+            <a href="{{ url_for('admin.portal') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>ポータルへ戻る</a>
+        </div>
+
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <h4 class="fw-bold mb-0">アカウント管理</h4>
+            <a href="{{ url_for('admin.user_register') }}" class="btn btn-primary btn-sm">+ 新規職員アカウント登録</a>
+        </div>
+
+        <!-- 操作結果などのメッセージ表示エリア -->
+        {% include 'components/_flash.html' %}
+
+        {# 再設定コードは発行直後の1回だけ表示される（再表示不可）。自動エスケープのまま出す（エスケープ解除はしない） #}
+        {% if issued_code %}
+        <section class="card border-warning shadow-sm mb-4" id="issued-code-card" aria-labelledby="issued-code-title">
+            <div class="card-header bg-warning-subtle fw-bold py-3" id="issued-code-title">
+                <i class="bi bi-key-fill me-2"></i>再設定コードを発行しました
+            </div>
+            <div class="card-body">
+                <p class="mb-2">{{ issued_code.name }}（ログインID: {{ issued_code.login_id }}）</p>
+                <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <span class="reset-code-value" id="issued-code-value">{{ issued_code.code }}</span>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="issued-code-copy" aria-describedby="issued-code-copy-status">
+                        <i class="bi bi-clipboard me-1"></i>コピー
+                    </button>
+                    <span class="small text-success" id="issued-code-copy-status" role="status" aria-live="polite"></span>
+                </div>
+                <p class="small text-muted mb-3">有効期限: {{ issued_code.expires_at_text }}</p>
+                {% if issued_code.is_locked %}
+                <div class="alert alert-warning py-2 small mb-3" role="alert">
+                    <i class="bi bi-lock-fill me-1"></i>このアカウントはロック中です。コードを使う前に、下の一覧で「ロック解除」を行ってください。
+                </div>
+                {% endif %}
+                <p class="small fw-bold text-danger mb-0"><i class="bi bi-exclamation-triangle-fill me-1"></i>この画面を閉じると再表示できません。</p>
+            </div>
+        </section>
+        {% endif %}
+
+        <!-- 絞り込み（GET） -->
+        <form method="get" action="{{ url_for('admin.user_list') }}" class="card border-0 shadow-sm mb-3" role="search" aria-label="アカウントの絞り込み">
+            <div class="card-body">
+                <div class="row g-2 align-items-end">
+                    <div class="col-12 col-md-4">
+                        <label for="filter-q" class="form-label fw-bold small mb-1">氏名・ログインID</label>
+                        <input type="search" class="form-control" id="filter-q" name="q" value="{{ f.q or '' }}" placeholder="一部でも検索できます" autocomplete="off">
+                    </div>
+                    <div class="col-6 col-md-2">
+                        <label for="filter-role" class="form-label fw-bold small mb-1">役割</label>
+                        <select class="form-select" id="filter-role" name="role">
+                            <option value="">すべて</option>
+                            <option value="staff" {% if f.role == 'staff' %}selected{% endif %}>職員</option>
+                            <option value="admin" {% if f.role == 'admin' %}selected{% endif %}>管理者</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label for="filter-department" class="form-label fw-bold small mb-1">所属部署</label>
+                        <select class="form-select" id="filter-department" name="department">
+                            <option value="">すべて</option>
+                            {% for d in departments or [] %}
+                            <option value="{{ d.id }}" {% if f.department|string == d.id|string %}selected{% endif %}>{{ d.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-3 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-fill flex-md-grow-0"><i class="bi bi-search me-1"></i>検索</button>
+                        <a href="{{ url_for('admin.user_list') }}" class="btn btn-outline-secondary flex-fill flex-md-grow-0">クリア</a>
+                    </div>
+                </div>
+            </div>
+        </form>
+
+        <p class="small text-muted mb-2">{{ (users or [])|length }}件表示（全{{ user_total or 0 }}件）</p>
+
+        {% if users %}
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 admin-users-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">氏名</th>
+                            <th scope="col">ログインID</th>
+                            <th scope="col">役割</th>
+                            <th scope="col">所属部署</th>
+                            <th scope="col">状態</th>
+                            <th scope="col">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for u in users %}
+                        {% set is_self = u.id == current_user.id %}
+                        <tr>
+                            <td data-label="氏名">
+                                <span><span class="fw-bold">{{ u.name }}</span>{% if is_self %}<span class="badge bg-info text-dark ms-1">あなた</span>{% endif %}</span>
+                            </td>
+                            <td data-label="ログインID"><span class="admin-users-login-id">{{ u.login_id }}</span></td>
+                            <td data-label="役割">
+                                <span class="badge {% if u.role == 'admin' %}bg-dark{% else %}bg-primary{% endif %}">{{ u.role_label }}</span>
+                            </td>
+                            <td data-label="所属部署">{{ u.department_name or '―' }}</td>
+                            <td data-label="状態">
+                                <span class="admin-users-state">
+                                    {% if u.is_locked %}
+                                    <span class="badge bg-warning text-dark">ロック中</span>
+                                    {% if u.locked_until_text %}<span class="small text-muted">〜{{ u.locked_until_text }}</span>{% endif %}
+                                    {% endif %}
+                                    {% if not u.is_active %}
+                                    <span class="badge bg-secondary">利用停止</span>
+                                    {% elif not u.is_locked %}
+                                    <span class="badge bg-success">有効</span>
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td data-label="操作" class="admin-users-actions-cell">
+                                <div class="admin-users-actions">
+                                    {% if u.is_locked %}
+                                    <form method="post" action="{{ url_for('admin.user_unlock', user_id=u.id) }}" data-nav="replace">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        {{ keep_filters(f) }}
+                                        <button type="submit" class="btn btn-outline-warning btn-sm" aria-label="ロック解除：{{ u.name }}（{{ u.login_id }}）">ロック解除</button>
+                                    </form>
+                                    {% endif %}
+                                    <form method="post" action="{{ url_for('admin.user_reset_code', user_id=u.id) }}" data-nav="replace">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        {{ keep_filters(f) }}
+                                        <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="再設定コード発行：{{ u.name }}（{{ u.login_id }}）">再設定コード発行</button>
+                                    </form>
+                                    {% if is_self %}
+                                    <span title="自分自身のアカウントは削除できません">
+                                        <button type="button" class="btn btn-outline-danger btn-sm" disabled aria-label="削除：{{ u.name }}（あなた）は削除できません">削除</button>
+                                    </span>
+                                    {% else %}
+                                    <button type="button" class="btn btn-outline-danger btn-sm"
+                                            data-bs-toggle="modal" data-bs-target="#userDeleteModal"
+                                            data-delete-url="{{ url_for('admin.user_delete', user_id=u.id) }}"
+                                            data-user-name="{{ u.name }}" data-user-login-id="{{ u.login_id }}"
+                                            aria-label="削除：{{ u.name }}（{{ u.login_id }}）">削除</button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-body text-center text-muted py-5">該当するアカウントがありません。</div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- 削除確認モーダル（一覧で共通。対象の名前・ID・送信先は下の script で入れる） -->
+    <div class="modal fade" id="userDeleteModal" tabindex="-1" aria-labelledby="userDeleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-dark" id="userDeleteModalLabel">アカウント削除確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                </div>
+                <div class="modal-body py-4 text-dark">
+                    <p class="mb-2"><strong id="user-delete-name"></strong>（ログインID: <span id="user-delete-login-id"></span>）を削除しますか？</p>
+                    <p class="small text-muted mb-0">削除すると、このアカウントではログインできなくなり、一覧にも表示されなくなります。</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    {# action は開くときに対象ごとの URL を入れる（未設定のまま送られても一覧への POST は 405 になるだけ） #}
+                    <form method="post" id="user-delete-form" data-nav="replace">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {{ keep_filters(f) }}
+                        <button type="submit" class="btn btn-danger px-4">削除する</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- システム管理者用 ログアウト確認モーダル -->
+    <div class="modal fade" id="systemAdminLogoutModal" tabindex="-1" aria-labelledby="systemAdminLogoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-dark" id="systemAdminLogoutModalLabel">ログアウト確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                </div>
+                <div class="modal-body py-4 text-center fs-6 text-dark">
+                    ログアウトしますか？
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <form method="post" action="{{ url_for('auth.logout') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger px-4">ログアウト</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    // 削除モーダル：押した行の名前・ID・送信先を入れる（値は textContent で入れ、HTML として解釈させない）
+    const deleteModal = document.getElementById('userDeleteModal');
+    if (deleteModal) {
+        const deleteForm = document.getElementById('user-delete-form');
+        const nameEl = document.getElementById('user-delete-name');
+        const loginIdEl = document.getElementById('user-delete-login-id');
+        deleteModal.addEventListener('show.bs.modal', function (event) {
+            const trigger = event.relatedTarget;
+            if (!trigger || !trigger.dataset.deleteUrl) {
+                return;
+            }
+            deleteForm.action = trigger.dataset.deleteUrl;
+            nameEl.textContent = trigger.dataset.userName || '';
+            loginIdEl.textContent = trigger.dataset.userLoginId || '';
+        });
+    }
+
+    // 再設定コードのコピー：clipboard API が使えない環境（http など）では選択して execCommand にする
+    const copyButton = document.getElementById('issued-code-copy');
+    const codeEl = document.getElementById('issued-code-value');
+    const statusEl = document.getElementById('issued-code-copy-status');
+    if (copyButton && codeEl) {
+        function showStatus(message) {
+            if (statusEl) {
+                statusEl.textContent = message;
+            }
+        }
+        function fallbackCopy() {
+            const range = document.createRange();
+            range.selectNodeContents(codeEl);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            let ok = false;
+            try {
+                ok = document.execCommand('copy');
+            } catch (e) {
+                ok = false;
+            }
+            showStatus(ok ? 'コピーしました' : 'コピーできませんでした。選択した文字を手動でコピーしてください。');
+        }
+        copyButton.addEventListener('click', function () {
+            const text = codeEl.textContent.trim();
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(function () {
+                    showStatus('コピーしました');
+                }, fallbackCopy);
+            } else {
+                fallbackCopy();
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

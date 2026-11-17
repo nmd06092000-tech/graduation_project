@@ -22,13 +22,14 @@ def validate_new_password(password, confirm=None):
     return []
 
 
-def validate_operator_password(password):
-    """運用者（flask コマンド）が設定するパスワードの入力チェック
+def validate_operator_password(password, confirm=None):
+    """アカウントに新しく設定するパスワードの入力チェック（flask コマンド・再設定・変更・アカウント登録）
 
     validate_new_password の規則に加え、README で公開されていたテストアカウントのパスワードは使えない。
+    confirm（確認用パスワード）を渡したときだけ、一致するかも調べる。
     （ログイン画面の入力チェックには使わない：公開パスワードでも「ログイン失敗」として数える必要があるため）
     """
-    errors = validate_new_password(password)
+    errors = validate_new_password(password, confirm)
     if not errors and password == TEST_ACCOUNT_PW:
         errors.append(('warning', MSG_PASSWORD_PUBLIC))
     return errors

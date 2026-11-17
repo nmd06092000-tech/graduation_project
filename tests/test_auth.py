@@ -239,7 +239,9 @@ def test_session_draft_is_cleared_on_login(client, citizen, login):
     assert response.status_code == 302
     with client.session_transaction() as session:
         assert 'report_draft' not in session
-        assert session['_user_id'] == str(citizen.id)
+        # 2b：セッションの値は「ID:パスワードの印」（パスワード変更で古いセッションを無効にするため）
+        assert session['_user_id'] == citizen.get_id()
+        assert session['_user_id'].split(':')[0] == str(citizen.id)
 
 
 def test_session_draft_is_not_cleared_when_login_fails(client, citizen, login):

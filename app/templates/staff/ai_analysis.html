@@ -125,10 +125,14 @@
                                         <a href="{{ url_for('staff.report_detail', report_id=log.id) }}" class="text-decoration-none text-dark">#{{ log.id }}</a>
                                     </td>
                                     <td>{{ log.title }}</td>
-                                    <td><span class="badge bg-secondary">{{ log.category }}</span></td>
-                                    <td><span class="text-secondary fw-bold small"><i class="bi bi-building me-1"></i>{{ log.department }}</span></td>
+                                    {# AI 判定が失敗した行は分類・部署・緊急度・信頼度が無いので「—」を出す #}
+                                    {% set ai_failed = log.status_code == 'failed' %}
+                                    <td>{% if ai_failed %}<span class="text-muted">—</span>{% else %}<span class="badge bg-secondary">{{ log.category }}</span>{% endif %}</td>
+                                    <td>{% if ai_failed %}<span class="text-muted">—</span>{% else %}<span class="text-secondary fw-bold small"><i class="bi bi-building me-1"></i>{{ log.department }}</span>{% endif %}</td>
                                     <td>
-                                        {% if log.urgency == '高' %}
+                                        {% if ai_failed %}
+                                            <span class="text-muted">—</span>
+                                        {% elif log.urgency == '高' %}
                                             <span class="badge bg-danger">高 (即時対応)</span>
                                         {% elif log.urgency == '中' %}
                                             <span class="badge bg-warning text-dark">中</span>
@@ -143,14 +147,18 @@
                                         <span class="badge {{ 'bg-primary' if log.trigger_type == 'rejudge' else 'bg-light text-dark border' }}">{{ log.trigger }}</span>
                                     </td>
                                     <td>
+                                        {% if ai_failed %}
+                                        <span class="text-muted">—</span>
+                                        {% else %}
                                         <div class="d-flex align-items-center">
                                             <span class="me-2 fw-bold text-success">{{ log.confidence }}</span>
                                             <div class="progress w-50" style="height: 6px;">
                                                 <div class="progress-bar bg-success" style="width: {{ log.confidence }};"></div>
                                             </div>
                                         </div>
+                                        {% endif %}
                                     </td>
-                                    <td><span class="badge bg-info text-dark">{{ log.status }}</span></td>
+                                    <td><span class="badge {{ 'bg-danger' if ai_failed else 'bg-info text-dark' }}">{{ log.status }}</span></td>
                                     <td><small class="text-muted">{{ log.date }}</small></td>
                                     <td class="text-end pe-3">
                                         <a href="{{ url_for('staff.report_detail', report_id=log.id) }}" class="btn btn-outline-primary btn-sm px-3">詳細確認</a>

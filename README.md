@@ -62,11 +62,14 @@ Bật bằng `sudo systemctl daemon-reload && sudo systemctl enable --now task-a
 
 **Seed và tài khoản test.** Mặc định `python -m scripts.seed` chỉ tạo dữ liệu master (部署, カテゴリ). Tài khoản test (市民 `taro@example.com`, 職員 `staff01`, 管理者 `admin01`; mật khẩu nằm trong `scripts/seed.py`, **không ghi ở README**) chỉ được tạo khi thêm cờ `--with-test-users`, chỉ dùng khi phát triển. **Không chạy seed với `--with-test-users` trên server.** Trong code, `scripts.seed.seed(with_test_users=False)` là hàm dùng được từ test (gọi trên app test), `main(argv)` là lối vào dòng lệnh.
 
-**Tài khoản (lệnh `flask --app run ...`, chạy ở thư mục task-app; cả local lẫn EC2).** Chưa có màn hình tạo hay đặt lại mật khẩu cho 管理者/職員 (làm ở giai đoạn 3), nên dùng 3 lệnh này. Mật khẩu luôn nhập ẩn, có bước xác nhận, ít nhất 8 ký tự:
+**Tài khoản (lệnh `flask --app run ...`, chạy ở thư mục task-app; cả local lẫn EC2).** 管理者 cũng tạo được 職員/管理者 ở màn hình `/admin/users/register` (2b), còn xoá, mở khoá và cấp 再設定コード cho 職員/管理者 làm ở màn hình `/admin/users` (3a); các lệnh dưới đây vẫn dùng được (nhất là khi không còn 管理者 nào đăng nhập được) và `restore-user` chỉ có ở CLI. Mật khẩu luôn nhập ẩn, có bước xác nhận, ít nhất 8 ký tự:
 - `create-admin [--login-id ID] [--name TÊN]`: tạo 管理者. Thiếu tham số thì hỏi. ID không được chứa `@`, tối đa 255 ký tự, không được trùng; tên tối đa 100 ký tự. Lỗi DB bất ngờ thì rollback và báo một câu (không in stack trace).
-- `set-password <login_id>`: đổi mật khẩu của bất kỳ tài khoản nào và gỡ khoá đăng nhập tạm. Không bật lại tài khoản đã bị vô hiệu (chỉ nhắc).
-- Cả `create-admin` và `set-password` **từ chối mật khẩu trùng mật khẩu thử đã công khai** (`TEST_ACCOUNT_PW` trong `app/constants.py`, dùng chung với `scripts/seed.py`) bằng 「このパスワードは公開されているため使用できません。」.
-- `remove-test-users [--dry-run] [--yes] [--force]`: gỡ `taro@example.com`, `staff01`, `admin01` còn dùng mật khẩu thử. Chỉ khớp khi **cả ID lẫn role đúng** (`taro@example.com`=市民, `staff01`=職員, `admin01`=管理者; khác role coi như không có, kể cả khi có `--force`). Tài khoản chưa có dữ liệu gắn (báo cáo, lịch sử, thông báo...) thì **xoá**; có dữ liệu thì **vô hiệu hoá** (`is_active=False`, mật khẩu đổi thành chuỗi ngẫu nhiên). Tài khoản đã đổi mật khẩu thì bỏ qua (trừ khi có `--force`). Tài khoản đã vô hiệu mà **mật khẩu vẫn là mật khẩu thử** (hoặc có `--force`) thì không bỏ qua: không có dữ liệu → xoá; có dữ liệu → giữ vô hiệu và đổi mật khẩu ngẫu nhiên (「無効化済み・パスワード変更」). Tài khoản không có thì bỏ qua nên chạy lại không lỗi. Nếu sau khi gỡ không còn 管理者 nào đang hoạt động thì **cả lệnh bị từ chối** (exit 1). `--dry-run` chỉ in kết quả dự kiến, `--yes` bỏ bước xác nhận.
+- `create-staff [--login-id ID] [--name TÊN] [--department TÊN-HOẶC-ID]`: tạo 職員 (2b), dùng chung `user_service.create_staff` với màn hình. Thiếu tham số thì hỏi; thiếu `--department` thì liệt kê 部署 (ID: tên) rồi hỏi. 部署 bắt buộc, nhận tên đầy đủ hoặc ID.
+- `issue-reset-code <login_id>`: cấp **再設定コード** cho 職員/管理者 đang hoạt động (2b). In mã dạng `XXXXX-XXXXX` (10 ký tự, không có 0/O/1/I/L) và hạn dùng; mã dùng **một lần**, hiệu lực `PASSWORD_RESET_TOKEN_MINUTES` phút (30), cấp mã mới thì mã cũ hỏng. Trong DB chỉ lưu hash; mã chỉ hiện trên màn hình, không ghi log. Quản trị **phải xác minh người xin là đúng chủ tài khoản ngoài hệ thống** rồi đưa mã trực tiếp; người đó nhập ID + mã + mật khẩu mới ở `/login/staff/reset-password` (hoặc `/login/admin/reset-password`). Nhập sai mã tính vào khoá tạm như đăng nhập.
+- `set-password <login_id>`: đổi mật khẩu của bất kỳ tài khoản nào và gỡ khoá đăng nhập tạm. Không bật lại tài khoản đã bị vô hiệu (chỉ nhắc). Tài khoản **đã xoá** (3a) thì từ chối, báo 「先に restore-user で復元してください」; `issue-reset-code` cũng từ chối tài khoản đã xoá, `create-admin`/`create-staff` với ID đã xoá thì báo trùng ID (ID của tài khoản đã xoá vẫn giữ chỗ).
+- `restore-user [LOGIN_ID] [--list]` (3a): `restore-user <login_id>` khôi phục tài khoản mà 管理者 đã xoá ở `/admin/users`: đặt lại `del_flag`, `deleted_at`, `deleted_by_id`, đồng thời xoá khoá đăng nhập tạm và vô hiệu mã/token chưa dùng (mật khẩu cũ vẫn dùng được; quên thì `issue-reset-code`/`set-password`). `restore-user --list` in danh sách tài khoản đã xoá (ID, 氏名, 役割, 削除日時 giờ Nhật, 削除者); rỗng thì in 「削除済みのアカウントはありません。」. Thiếu cả hai tham số thì báo lỗi cách dùng.
+- Cả `create-admin`, `create-staff` và `set-password` **từ chối mật khẩu trùng mật khẩu thử đã công khai** (`TEST_ACCOUNT_PW` trong `app/constants.py`, dùng chung với `scripts/seed.py`) bằng 「このパスワードは公開されているため使用できません。」.
+- `remove-test-users [--dry-run] [--yes] [--force]`: gỡ `taro@example.com`, `staff01`, `admin01` còn dùng mật khẩu thử. Chỉ khớp khi **cả ID lẫn role đúng** (`taro@example.com`=市民, `staff01`=職員, `admin01`=管理者; khác role coi như không có, kể cả khi có `--force`). Tài khoản chưa có dữ liệu gắn (báo cáo, lịch sử, thông báo...) thì **xoá**; có dữ liệu thì **vô hiệu hoá** (`is_active=False`, mật khẩu đổi thành chuỗi ngẫu nhiên). Tài khoản đã đổi mật khẩu thì bỏ qua (trừ khi có `--force`). Tài khoản đã vô hiệu mà **mật khẩu vẫn là mật khẩu thử** (hoặc có `--force`) thì không bỏ qua: không có dữ liệu → xoá; có dữ liệu → giữ vô hiệu và đổi mật khẩu ngẫu nhiên (「無効化済み・パスワード変更」). Tài khoản không có thì bỏ qua nên chạy lại không lỗi. Tài khoản thử **đã bị xoá mềm** (3a) không được coi là còn dùng được (xử lý như tài khoản đã vô hiệu). Nếu sau khi gỡ không còn 管理者 nào dùng được (không bị vô hiệu, không bị xoá) thì **cả lệnh bị từ chối** (exit 1). `--dry-run` chỉ in kết quả dự kiến, `--yes` bỏ bước xác nhận.
 
 Thứ tự khi dọn tài khoản thử (làm ở local trước, rồi EC2):
 1. `flask --app run db upgrade`
@@ -74,7 +77,7 @@ Thứ tự khi dọn tài khoản thử (làm ở local trước, rồi EC2):
 3. `flask --app run remove-test-users --dry-run`, xem kết quả
 4. `flask --app run remove-test-users` (hoặc thêm `--yes`)
 
-Cấu hình bảo mật trong `.env` (xem `.env.example`): `SESSION_COOKIE_SECURE` (`true` khi chạy HTTPS như EC2, mặc định `false` cho `http://localhost`), `WTF_CSRF_SSL_STRICT` (mặc định `true`), `LOGIN_MAX_FAILURES` (5, tối thiểu 1) và `LOGIN_LOCK_MINUTES` (15, tối thiểu 1) cho khoá đăng nhập tạm, `PROXY_FIX_HOPS` (0, tối thiểu 0, xem mục 8). Giá trị gõ sai (ví dụ `ture`; hoặc số nguyên sai như `abc`, `0` cho `LOGIN_MAX_FAILURES`) làm app **không khởi động** với thông báo lỗi nêu tên biến, để không vô tình tắt Secure hay tắt khoá đăng nhập. Để trống = dùng mặc định.
+Cấu hình bảo mật trong `.env` (xem `.env.example`): `SESSION_COOKIE_SECURE` (`true` khi chạy HTTPS như EC2, mặc định `false` cho `http://localhost`), `WTF_CSRF_SSL_STRICT` (mặc định `true`), `LOGIN_MAX_FAILURES` (5, tối thiểu 1) và `LOGIN_LOCK_MINUTES` (15, tối thiểu 1) cho khoá đăng nhập tạm, `PROXY_FIX_HOPS` (0, tối thiểu 0, xem mục 8). Đặt lại mật khẩu (2b): `PASSWORD_RESET_TOKEN_MINUTES` (30, tối thiểu 1), `PUBLIC_BASE_URL` (gốc của link trong mail, không lấy từ Host; EC2: `https://team3app.duckdns.org`, mặc định `http://localhost:5000`), `MAIL_SERVER`/`MAIL_PORT` (587)/`MAIL_USERNAME`/`MAIL_PASSWORD`/`MAIL_FROM`/`MAIL_TIMEOUT` (SMTP + STARTTLS; `MAIL_SERVER` trống thì **không gửi mail, nội dung kèm link được ghi vào log ở mức WARNING**; app cũng cảnh báo lúc khởi động nếu `SESSION_COOKIE_SECURE=true` mà `MAIL_SERVER` trống). Test luôn ép `MAIL_SERVER=''`. Giá trị gõ sai (ví dụ `ture`; hoặc số nguyên sai như `abc`, `0` cho `LOGIN_MAX_FAILURES`) làm app **không khởi động** với thông báo lỗi nêu tên biến, để không vô tình tắt Secure hay tắt khoá đăng nhập. Để trống = dùng mặc định.
 
 **Chạy test.** Test dùng một DB PostgreSQL riêng, mỗi test tạo rồi xoá toàn bộ bảng. Không bao giờ trỏ vào DB dev (conftest sẽ dừng nếu `TEST_DATABASE_URL` trùng `DATABASE_URL`). Chưa đặt `TEST_DATABASE_URL` thì các test dùng DB bị bỏ qua.
 
@@ -151,12 +154,12 @@ task-app/
 │   └── test_ai_classifier.py    ✅ rule_based, Gemini (client giả, không gọi API thật)
 └── app/
     ├── __init__.py              ✅ create_app(): config, extensions, đăng ký blueprint và lệnh CLI
-    ├── cli.py                   ✅ lệnh flask: `rejudge-urgency` (AI再判定, chạy định kỳ), `create-admin`, `set-password`, `remove-test-users` (xem mục 1)
+    ├── cli.py                   ✅ lệnh flask: `rejudge-urgency` (AI再判定, chạy định kỳ), `create-admin`, `create-staff`, `issue-reset-code`, `set-password`, `restore-user`, `remove-test-users` (xem mục 1)
     ├── extensions.py            ✅ db, login_manager, migrate
     ├── constants.py             ✅ Role, ReportStatus, Urgency, AiAnalysisStatus, DuplicateGroupStatus, luồng trạng thái, nhãn tiếng Nhật
     ├── models/
     │   ├── __init__.py          ✅ import mọi model
-    │   ├── user.py              ✅ User + user_loader
+    │   ├── user.py              ✅ User + user_loader (`get_id()` = `id:HMAC(SECRET_KEY, password_hash)[:20]`, 2b)
     │   ├── department.py        ✅ 担当部署
     │   ├── category.py          ✅ カテゴリ
     │   ├── report.py            ✅ Report, ReportPhoto
@@ -164,13 +167,14 @@ task-app/
     │   ├── ai_analysis.py       ✅ kết quả AI
     │   ├── duplicate_group.py   ✅ nhóm báo cáo nghi trùng
     │   └── notification.py      ✅ thông báo cho 職員 (AI再判定), 既読 chung
-    ├── services/                nghiệp vụ (xem mục 4). ✅ phần 職員 và 市民 của report/status/duplicate/stats/storage/user, đăng nhập và khoá tạm trong auth_service, lệnh tài khoản trong user_service. ⬜ assignment_service, đổi/đặt lại mật khẩu trong auth_service, đăng ký và quản lý tài khoản trong user_service
+    ├── services/                nghiệp vụ (xem mục 4). ✅ phần 職員 và 市民 của report/status/duplicate/stats/storage/user, đăng nhập, khoá tạm, đặt lại và đổi mật khẩu trong auth_service, tạo 職員/管理者 và lệnh tài khoản trong user_service. ⬜ assignment_service, quản lý tài khoản (khoá/mở, danh sách) trong user_service
     ├── ai/                      ✅ AI: Gemini và phân loại theo từ khóa (xem mục 4)
     ├── forms/                   ⬜ Flask-WTF forms
     ├── fonts/                   ✅ font IPAexゴシック cho PDF (kèm giấy phép IPA). Không đặt trong static để không public
     ├── utils/
     │   ├── decorators.py        ✅ role_required
-    │   ├── validators.py        ⬜ quy tắc mật khẩu, ID
+    │   ├── mail.py              ✅ send_mail() (SMTP + STARTTLS, hoặc ghi log khi MAIL_SERVER trống), MailError
+    │   ├── validators.py        ✅ quy tắc mật khẩu
     │   └── geo.py               ✅ địa chỉ ⇔ tọa độ (国土地理院). ⬜ tính khoảng cách
     ├── blueprints/
     │   ├── public/              ✅ /, /guide, /faq
@@ -213,8 +217,8 @@ Mỗi file là một nhóm bảng. Khi thêm model mới, phải import nó tron
 
 | Bảng | Nội dung chính |
 |---|---|
-| `users` | Đã có. Thêm `icon_path` cho アイコン設定, `postal_code` (dạng `123-4567`) và `address` cho アカウント作成 (chỉ người dân, NULL với nhân viên và admin). `failed_login_count` (số lần sai liên tiếp, NOT NULL mặc định 0) và `locked_until` (khoá đăng nhập tạm đến thời điểm này) cho `auth_service`. `department_id` (FK `departments`, RESTRICT, NULL với dữ liệu cũ) là 担当部署 của 職員, chưa có màn hình ghi vào (2b) |
-| `password_reset_tokens` | Token đặt lại mật khẩu của 市民 (làm ở 2b): `user_id` (FK CASCADE), `token_hash` (UNIQUE, chỉ lưu hash), `expires_at`, `used_at`, `created_at`. Hiện chưa có code dùng |
+| `users` | Đã có. Thêm `icon_path` cho アイコン設定, `postal_code` (dạng `123-4567`) và `address` cho アカウント作成 (chỉ người dân, NULL với nhân viên và admin). `failed_login_count` (số lần sai liên tiếp, NOT NULL mặc định 0) và `locked_until` (khoá đăng nhập tạm đến thời điểm này) cho `auth_service`. `department_id` (FK `departments`, RESTRICT, NULL với dữ liệu cũ và 管理者) là 担当部署 của 職員, ghi bởi `create_staff` (màn hình 新規アカウント登録 và lệnh `create-staff`). 3a (xoá mềm): `del_flag` (boolean NOT NULL, mặc định false), `deleted_at` (timestamptz NULL), `deleted_by_id` (FK `users.id` `users_deleted_by_id_fkey`, RESTRICT, có index) luôn được ghi cùng một lần; CHECK `ck_users_del_flag_consistent` bắt buộc đã xoá thì có `deleted_at`, chưa xoá thì `deleted_at` và `deleted_by_id` đều NULL. `login_id` vẫn UNIQUE nên ID tài khoản đã xoá vẫn giữ chỗ. `is_active` là cờ 利用停止 riêng (chỉ `remove-test-users` đặt). **"Dùng được" là `User.is_usable` = `is_active AND NOT del_flag`** (dùng được cả ở Python lẫn trong câu truy vấn), không dùng `is_active` đơn lẻ |
+| `password_reset_tokens` | Token mail của 市民 và 再設定コード của 職員/管理者 (2b): `user_id` (FK CASCADE), `token_hash` (UNIQUE, chỉ lưu SHA-256), `expires_at`, `used_at` (NULL = chưa dùng), `created_at`. Một bảng dùng chung, phân biệt theo `role` của user (token mail chỉ tiêu thụ được với 市民, mã chỉ với 職員/管理者). Mỗi user chỉ có 1 token/mã còn hiệu lực (cái cũ bị đặt `used_at`) |
 | `departments` | 担当部署. Tạm thời có 道路管理課, 道路照明課, 公園緑地課, 環境課, 市民生活課 |
 | `categories` | `code` (khoá cố định cho AI), `name` (道路, 街灯, 公園, 不法投棄, その他), `default_department_id` |
 | `reports` | `citizen_id`, `title` (件名), `description`, `latitude`, `longitude`, `address` (ô 位置情報 trên màn hình 報告する của người dân, phía 職員 gọi là 発生場所), `location_source` (nguồn tọa độ: `photo`/`device` là GPS, `address` là tìm từ 発生場所), `gps_address` (địa chỉ suy ra từ GPS để 職員 đối chiếu), `status`, `category_id`, `urgency`, `department_id`, `duplicate_group_id`, `duplicate_of_id`, thời gian. `category_id`, `urgency`, `department_id` là giá trị đã chốt, NULL nghĩa là chưa phân loại |
@@ -262,8 +266,8 @@ Chỉ `status_service.py` được đổi trạng thái. Mỗi lần đổi ph�
 ### app/services/
 | File | Nhiệm vụ |
 |---|---|
-| `auth_service.py` | ✅ `authenticate(role, login_id, password)` (kiểm tra đầu vào theo Excel, tách theo vai trò, khoá tạm sau `LOGIN_MAX_FAILURES` lần sai trong `LOGIN_LOCK_MINUTES` phút, đếm bằng một câu UPDATE nguyên tử; giờ lấy qua `auth_service._now()` để test patch), `set_password_by_operator(login_id, password)` (cho lệnh `set-password`). ⬜ Đổi mật khẩu khi đã đăng nhập, tạo và kiểm tra token reset mật khẩu (2b) |
-| `user_service.py` | Đăng ký người dân, admin tạo, khóa và mở khóa tài khoản nhân viên. ✅ Cập nhật プロフィール (tên, email), lưu và xoá アイコン của người dân, `create_admin()` và `remove_test_users()` cho lệnh CLI (`TEST_LOGIN_IDS` đặt ở đây; dò động mọi FK không CASCADE trỏ vào `users.id` để biết tài khoản có dữ liệu gắn hay không) |
+| `auth_service.py` | ✅ `authenticate(role, login_id, password)` (kiểm tra đầu vào theo Excel, tách theo vai trò, khoá tạm sau `LOGIN_MAX_FAILURES` lần sai trong `LOGIN_LOCK_MINUTES` phút, đếm bằng một câu UPDATE nguyên tử; giờ lấy qua `auth_service._now()` để test patch), `set_password_by_operator(login_id, password)` (cho lệnh `set-password`). ✅ 2b: `request_password_reset(email)` (市民: chống lạm dụng 60 giây/3 lần mỗi giờ, token `secrets.token_urlsafe(32)` chỉ lưu SHA-256, gửi mail sau commit qua `app.utils.mail`), `is_reset_token_valid(token)`, `reset_password_with_token(token, new, confirm)` (kiểm mật khẩu trước, rồi tiêu thụ token bằng một UPDATE nguyên tử), `issue_reset_code(login_id)` (CLI) và `reset_password_with_code(role, login_id, code, new, confirm)` (職員/管理者, mã sai tính vào khoá tạm), `change_password(user_id, current_password=, new_password=, confirm_password=)`. 3a: `is_locked(user)`, `invalidate_reset_tokens(user_id)`; mọi đường đăng nhập/đặt lại dùng `User.is_usable`, tài khoản đã xoá bị coi như ID không tồn tại ở `authenticate` (cùng `MSG_LOGIN_FAILED`, không tăng số lần sai). Mọi cách đổi mật khẩu đều đổi dấu vân tay trong `User.get_id()` nên phiên cũ hết hiệu lực |
+| `user_service.py` | Đăng ký người dân, khóa và mở khóa tài khoản nhân viên. ✅ Cập nhật プロフィール (tên, email), lưu và xoá アイコン của người dân, `create_admin()`/`create_staff()` (chung `_create_account`; dùng cho màn hình và CLI), `list_departments()`, `find_department(tên-hoặc-ID)`. ✅ 3a: `account_filters(role, department, q)`, `list_accounts(role=, department_id=, q=, limit=)` (職員/管理者 chưa xoá, mới nhất trước, ILIKE đã escape `%` `_`), `count_accounts()`, `account_row(user)` (dict cho template), `delete_account(user_id, actor_id=)` (xoá mềm; khoá các 管理者 dùng được theo thứ tự id rồi mới đếm nên không thể hết 管理者; chặn xoá chính mình), `unlock_account(user_id)`, `issue_reset_code_for_account(user_id)` (gọi `auth_service.issue_reset_code`, trả dict có mã để route đưa vào session), `restore_account(login_id)`, `list_deleted_accounts()`. `remove_test_users()` cho lệnh CLI (`TEST_LOGIN_IDS` đặt ở đây; dò động mọi FK không CASCADE trỏ vào `users.id` để biết tài khoản có dữ liệu gắn hay không) |
 | `report_service.py` | Tạo báo cáo theo thứ tự lưu ảnh, gọi AI, kiểm tra trùng. Danh sách theo người dân. Tìm kiếm, lọc, phân trang cho nhân viên |
 | `status_service.py` | Nơi duy nhất đổi trạng thái: kiểm tra luồng hợp lệ, ghi lịch sử, xử lý 取り消し. Cũng là nơi ghi việc 職員 đổi 緊急度 (vì cùng ghi vào 対応履歴) |
 | `assignment_service.py` | Gán phòng ban theo gợi ý AI hoặc do nhân viên chọn |
@@ -295,7 +299,8 @@ Gọi AI sau khi đã commit báo cáo, bọc trong try. Nếu AI lỗi, báo c�
 ### app/forms/, app/utils/
 - **forms/**: định nghĩa form Flask-WTF, gồm quy tắc validate và CSRF. Ba màn hình reset mật khẩu sẽ dùng chung form.
 - **utils/decorators.py**: `role_required(User.ROLE_xxx)` bảo vệ route theo vai trò.
-- **utils/validators.py**: quy tắc dùng ở nhiều nơi. Hiện có `validate_new_password(password, confirm=None)` (trống, dưới 8 ký tự, không khớp; trả danh sách `(category, text)`, không ném lỗi). Quy tắc ID nhân viên và admin không chứa `@` đang nằm trong `auth_service` và `user_service`.
+- **utils/validators.py**: quy tắc dùng ở nhiều nơi. Hiện có `validate_new_password(password, confirm=None)` (trống, dưới 8 ký tự, không khớp; trả danh sách `(category, text)`, không ném lỗi) và `validate_operator_password(password, confirm=None)` (thêm: cấm mật khẩu thử công khai; dùng cho mọi chỗ đặt mật khẩu mới: reset, đổi, tạo tài khoản, CLI). Quy tắc ID nhân viên và admin không chứa `@` đang nằm trong `auth_service` và `user_service`.
+- **utils/mail.py**: `send_mail(to, subject, body)` gửi qua SMTP + STARTTLS (`MAIL_*`), lỗi thành `MailError` (chỉ mang tên loại lỗi, kể cả khi header có xuống dòng); `to` phải là đúng một địa chỉ (không khoảng trắng, `,`, `;`, CR/LF), nếu không thì `MailError` và không gửi (cả ở chế độ log); `MAIL_SERVER` trống thì không gửi mà ghi nội dung vào log (WARNING). Link trong mail chỉ lấy từ `PUBLIC_BASE_URL`.
 - **utils/geo.py**: `search_address()` tìm tọa độ từ địa chỉ bằng API của 国土地理院 (dùng khi báo cáo không có GPS). `reverse_geocode()` đổi tọa độ GPS thành địa chỉ bằng 逆ジオコーダー của 国土地理院. API này chỉ trả mã thành phố (`muniCd`), nên `SAITAMA_MUNICIPALITIES` chứa bảng mã → tên của 埼玉県 (từ `maps.gsi.go.jp/js/muni.js`). Dự định thêm tính khoảng cách Haversine giữa hai tọa độ.
 
 ### app/blueprints/
@@ -312,8 +317,9 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 |---|---|---|---|---|
 | 市民 | アカウント作成 | `/register` | ✅ `auth.register` | chưa có service, logic nằm ở `auth/routes.py` (dự kiến user_service ở 2b). Server đã kiểm tra email phải có `@` (`MSG_EMAIL_NO_AT`) |
 | Chung | ログイン, ログアウト | `/login/<role>`, `/logout` | ✅ `auth.login_*`, `auth.logout` | auth_service. Đăng nhập và đăng xuất đều `session.clear()` |
-| Quản trị (CLI) | tạo 管理者, đặt mật khẩu, gỡ tài khoản thử | lệnh `flask --app run create-admin`, `set-password`, `remove-test-users` | ✅ `app/cli.py` | user_service, auth_service |
-| Chung | パスワード再設定 | `/reset-password`, `/login/staff/reset-password`, `/login/admin/reset-password` | ✅ `auth.reset_password*` | chỉ kiểm tra form ở `auth/routes.py`, chưa đổi mật khẩu (dự kiến auth_service) |
+| Quản trị (CLI) | tạo 管理者/職員, cấp 再設定コード, đặt mật khẩu, khôi phục tài khoản đã xoá, gỡ tài khoản thử | lệnh `flask --app run create-admin`, `create-staff`, `issue-reset-code`, `set-password`, `restore-user`, `remove-test-users` | ✅ `app/cli.py` | user_service, auth_service |
+| 市民 | パスワード再設定 (2 bước, qua email) | `/reset-password` (nhập email), `/reset-password/confirm/<token>` (mật khẩu mới), `/reset-password/complete` | ✅ `auth.reset_password`, `auth.reset_password_confirm`, `auth.reset_password_complete` | auth_service, utils/mail. Luôn cùng một thông báo dù email có tồn tại hay không; trang confirm có `Referrer-Policy: no-referrer` và `Cache-Control: no-store` |
+| 職員, 管理者 | パスワード再設定 (bằng 再設定コード) | `/login/staff/reset-password`, `/login/admin/reset-password` (+ `/complete`) | ✅ `auth.reset_password_staff(_complete)`, `auth.reset_password_admin(_complete)` | auth_service (`reset_password_with_code`). Trang 職員 chỉ đổi được tài khoản 職員, trang 管理者 chỉ 管理者. Mã do quản trị cấp bằng `issue-reset-code` |
 | 市民 | マイページ | `/citizen/mypage` | ✅ `citizen.mypage` | report_service |
 | 市民 | 報告する | `/citizen/report` | ✅ `citizen.report_new` | report_service, ai |
 | 市民 | 写真撮影 | `/citizen/report/camera` | ✅ `citizen.report_camera` | report_service, storage_service, ai |
@@ -323,12 +329,12 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 市民 | 履歴を表示する | `/citizen/reports` | ✅ `citizen.report_list` | report_service |
 | 市民 | 対応状況を表示する | `/citizen/reports/<id>` | ⬜ | report_service |
 | 市民 | 報告を取り消す | `POST /citizen/reports/<id>/cancel` | ⬜ | status_service |
-| 市民 | パスワード変更 | `/citizen/password` | ⬜ | auth_service |
+| 市民 | パスワード変更 | `/citizen/password` | ✅ `citizen.change_password` | auth_service. Thành công thì `session.clear()` + `login_user` lại (giữ remember nếu có) nên phiên khác bị đăng xuất |
 | 市民 | プロフィール設定 | `/citizen/profile` | ✅ `citizen.profile` | user_service |
 | 市民 | アイコン設定 | `/citizen/profile/icon`, ảnh: `/citizen/profile/icon/image` | ✅ `citizen.profile_icon`, `citizen.profile_icon_image` | user_service, storage_service |
 | 市民 | アイコン撮影 | `/citizen/profile/icon/camera` (ảnh chụp gửi tới `citizen.profile_icon`) | ✅ `citizen.profile_icon_camera` | user_service, storage_service |
 | 市民 | アイコン削除 | `POST /citizen/profile/icon/delete` | ✅ `citizen.profile_icon_delete` | user_service, storage_service |
-| 職員 | ダッシュボード | `/staff/dashboard` | ✅ `staff.dashboard` | stats_service |
+| 職員 | ダッシュボード | `/staff/dashboard` | ✅ `staff.dashboard` | stats_service (`map_points`: 地域の問題マップ（Google Maps、map.js 共用）) |
 | 職員 | 報告一覧 | `/staff/reports` | ✅ `staff.report_list` | report_service |
 | 職員 | 報告内容, 対応状況, 対応履歴 | `/staff/reports/<id>` | ✅ `staff.report_detail` | report_service, status_service |
 | 職員 | 対応状況を更新する | `POST /staff/reports/<id>/status` | ✅ `staff.report_status_update` | status_service |
@@ -343,9 +349,12 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 職員 | 一括対応ステータス変更 | `/staff/duplicates/<group_id>/status` | ✅ `staff.duplicate_batch_status` | status_service |
 | 職員 | 統計 | `/staff/stats` ✅, `/api/stats` ⬜ | ✅ `staff.stats` | stats_service |
 | 職員 | レポート出力 (PDF/CSV) | `/staff/stats/export/<fmt>` | ✅ `staff.stats_export` | stats_service |
-| 管理者 | ポータル | `/admin/portal` | ✅ `admin.portal` | |
-| 管理者 | ユーザー一覧 | `/admin/users` | ⬜ | user_service |
-| 管理者 | 新規職員アカウント登録 | `/admin/users/register`, `/admin/users/register/complete` | ✅ `admin.user_register`, `admin.user_register_complete` | user_service |
+| 管理者 | ポータル | `/admin/portal` | ✅ `admin.portal` | user_service (`list_accounts(limit=5)`, `count_accounts`, `account_row`): 5 tài khoản mới nhất + tổng số (3a) |
+| 管理者 | ユーザー一覧 | `/admin/users` (query `role`, `department`, `q`) | ✅ `admin.user_list` | user_service. 職員/管理者 chưa xoá, lọc 役割/部署, tìm tên/ID. Biến template: `users`, `departments`, `filters`, `user_total`, `issued_code`. Trang luôn có `Cache-Control: no-store` và `Referrer-Policy: no-referrer` |
+| 管理者 | ユーザー削除 (xoá mềm) | `POST /admin/users/<id>/delete` | ✅ `admin.user_delete` | user_service (`delete_account`). Không xoá được chính mình hay 管理者 dùng được cuối cùng; log WARNING (action, actor_id, target_id); luôn redirect về `user_list` giữ bộ lọc |
+| 管理者 | ロック解除 | `POST /admin/users/<id>/unlock` | ✅ `admin.user_unlock` | user_service (`unlock_account`) |
+| 管理者 | 再設定コード発行 | `POST /admin/users/<id>/reset-code` | ✅ `admin.user_reset_code` | user_service (`issue_reset_code_for_account`). Mã đưa vào `session['reset_code']` (kèm `issued` epoch) rồi redirect `user_list`; GET `session.pop` và chỉ hiện mã nếu chưa quá 120 giây (quá hạn: `MSG_RESET_CODE_GONE`). Mã nằm tạm trong cookie session có ký (không mã hoá) tối đa 120 giây |
+| 管理者 | 新規職員アカウント登録 (職員 hoặc 管理者) | `/admin/users/register`, `/admin/users/register/complete` | ✅ `admin.user_register`, `admin.user_register_complete` | user_service (`create_staff`, `create_admin`, `list_departments`). Lỗi thì PRG, dữ liệu nhập (trừ mật khẩu) giữ ở `session['user_form']` |
 | 管理者 | システム管理 | `/admin/departments`, `/admin/categories` | ⬜ | user_service |
 
 ### app/templates/, app/static/
@@ -354,7 +363,7 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 - **staff/mockup_report_triage.html**: mockup giao diện màn hình phân loại báo cáo, chưa có route. Dùng làm tham khảo khi làm `staff/report_list.html` và `staff/report_detail.html`, làm xong thì xóa.
 - **static/css/**: `tokens.css` chứa biến màu và khoảng cách, `base.css` chứa style chung, `components.css` chứa style cho từng thành phần, `responsive.css` chứa style cho điện thoại (nạp cuối cùng trong `base.html`, dùng các class như `citizen-page`, `report-page`, `guide-page`). Không căn giữa cả `body`. Màn hình nào cần căn giữa trên điện thoại thì dùng class riêng (`login-page-container`, `reset-password-container`, `report-camera-container`, `camera-page-container`…). Style cho sidebar của 県民 phải đặt dưới `.citizen-page` để không ảnh hưởng tới 職員 và 管理者.
 - **Lịch sử trình duyệt (`static/js/navigation.js`, nạp trong `base.html`).** Đi qua lại giữa màn cha và màn con, hoặc gửi form, không được làm nút Back của trình duyệt quay về màn con hay hiện lại cùng một màn hình. Quy ước:
-  - Màn con khai báo màn cha bằng `{% block nav_parent %}{{ url_for('...') }}{% endblock %}`. Hiện có: 写真撮影, 撮影写真の確認, 位置情報の確認 (cha là 報告する), アイコン設定, アイコン撮影 (cha là プロフィール設定), 代表案件に統合, 一括対応ステータス変更 (cha là 重複確認), 新規職員アカウント登録 và màn hoàn tất (cha là ポータル).
+  - Màn con khai báo màn cha bằng `{% block nav_parent %}{{ url_for('...') }}{% endblock %}`. Hiện có: 写真撮影, 撮影写真の確認, 位置情報の確認 (cha là 報告する), アイコン設定, アイコン撮影 (cha là プロフィール設定), 代表案件に統合, 一括対応ステータス変更 (cha là 重複確認), 新規職員アカウント登録 và màn hoàn tất (cha là ユーザー一覧, từ 3a; ユーザー一覧 là màn độc lập, không có nav_parent).
   - Link di chuyển trong màn con, hoặc từ màn con về màn cha, thêm `data-nav="replace"`. Khi về màn cha mà mục lịch sử ngay trước đó chính là màn cha, script gọi `history.back()` rồi tải lại màn cha để hiện nội dung mới (ảnh vừa chụp, flash). Trường hợp khác thì dùng `location.replace`. Từ JS thì gọi `window.historyNav.go(url)`.
   - Form thêm `data-nav="replace"` sẽ được gửi bằng `fetch` kèm header `X-Replace-History`. `create_app()` đổi response redirect thành JSON `{"redirect": url}` (flash vẫn giữ trong session), rồi script chuyển trang mà không thêm mục lịch sử. Vì vậy route của các form này **luôn trả redirect, kể cả khi lỗi** (flash + redirect, PRG). Nội dung đã nhập thì giữ trong session (`report_form`, `profile_form`) để hiện lại. Không render template ngay trong POST.
   - Link mở màn con từ màn cha và link giữa các màn độc lập (sidebar, 一覧 → 詳細) vẫn là link thường.
@@ -394,20 +403,32 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
 1. ✅ Tách app thành package, dùng `create_app()` và blueprint theo actor.
 2. ✅ Thêm **Flask-Migrate**. Đã khai báo trong `extensions.py` và có thư mục `migrations/`. Seed không còn gọi `create_all`.
 3. ✅ Thêm **Flask-WTF** (`CSRFProtect`) để có CSRF cho mọi form POST, đăng xuất bằng POST, cờ cookie, seed tài khoản test chỉ khi có `--with-test-users` (giai đoạn 1, đã nghiệm thu 2026-11-11). Giai đoạn 2a thêm khoá đăng nhập tạm, làm mới session, ProxyFix và lệnh tài khoản (xem mục 8).
-4. ⬜ Viết lại **đặt lại mật khẩu**: người dân nhận token qua email, nhân viên và admin được admin cấp lại.
+4. ✅ Viết lại **đặt lại mật khẩu** (2b): người dân nhận token qua email (2 bước), 職員 và 管理者 dùng 再設定コード do quản trị cấp bằng CLI; thêm đổi mật khẩu của 市民, đăng ký 職員/管理者 lưu DB, đăng xuất phiên cũ khi đổi mật khẩu.
 5. ✅ Viết `constants.py` và các model phòng ban, danh mục, báo cáo, ảnh, lịch sử, kết quả AI, nhóm trùng, kèm migration và dữ liệu seed. Các service đã đọc và ghi DB thật (bước 6 và 7).
 6. ✅ Làm luồng báo cáo của người dân (chụp ảnh, GPS, đoán địa chỉ, gửi báo cáo, AI phán định), マイページ, 報告一覧, プロフィール, アイコン. Có cả `rule_based.py` và Gemini.
 7. ✅ Làm danh sách, chi tiết, cập nhật trạng thái và lịch sử cho nhân viên. Thay số liệu hard-code trên dashboard bằng dữ liệu thật. Kèm AI分析 (chỉ đọc kết quả), 重複確認, 統合, 一括変更, 統計. Còn lại: xem mục 8.
 8. Bản đồ Google Maps ✅. ⬜ Thêm blueprint `api` và biểu đồ.
 9. Thêm `llm_classifier.py` ✅ (Gemini) và phần phát hiện trùng của `duplicate_service.py` ⬜.
-10. ⬜ Làm quản lý người dùng và dữ liệu master cho admin.
+10. Quản lý người dùng và dữ liệu master cho admin. ✅ 3a: danh sách, xoá mềm, mở khoá, cấp 再設定コード, ポータル dữ liệu thật, CLI `restore-user` (phần giao diện do frontend làm theo hợp đồng ở mục 5). ⬜ 3b: master 部署/カテゴリ.
 11. ⬜ Thêm layout theo vai trò, component và trang lỗi để bỏ phần lặp trong template.
 
 ## 8. Vấn đề đã biết
 
-- **Đặt lại mật khẩu chưa thực sự đổi mật khẩu.** Ba route reset chỉ kiểm tra form rồi chuyển trang. Không được lưu mật khẩu theo form hiện tại, vì ai biết email người khác cũng sẽ đổi được mật khẩu của họ. Xem bước 4 của lộ trình.
+- **Đặt lại mật khẩu (2b) và các giới hạn đã chấp nhận.**
+  - Khi chưa cấu hình SMTP (`MAIL_SERVER` trống, hiện trạng EC2), mail **không được gửi** mà nội dung, **gồm cả link chứa token**, được ghi vào log ứng dụng (WARNING; xem bằng `journalctl`). Ai đọc được log đều đặt lại được mật khẩu 市民 đang có yêu cầu. Cấu hình `MAIL_*` và `PUBLIC_BASE_URL` trên EC2 để dùng thật. App cảnh báo khi khởi động nếu `SESSION_COOKIE_SECURE=true` mà `MAIL_SERVER` trống.
+  - Thời gian phản hồi của `/reset-password` hơi lâu hơn khi email tồn tại (có gửi SMTP), nên về lý thuyết đo thời gian có thể đoán được email đã đăng ký. Thông báo thì luôn giống nhau. Chưa có rate limit theo IP (chỉ giới hạn theo tài khoản: 60 giây/3 lần mỗi giờ).
+  - 職員/管理者 **chưa tự đổi mật khẩu khi đang đăng nhập** (chỉ có reset bằng 再設定コード hoặc `set-password`); việc xin mã phải qua quản trị ngoài hệ thống (管理者 cấp ở `/admin/users`, hoặc `issue-reset-code`).
+  - Đổi mật khẩu bằng bất kỳ cách nào (đổi, mail, mã, `set-password`) làm mọi phiên và cookie ghi nhớ cũ của tài khoản đó hết hiệu lực. Lần deploy 2b đầu tiên, **mọi người dùng phải đăng nhập lại một lần** (phiên cũ không có dấu vân tay mật khẩu).
+- **Xoá tài khoản 職員/管理者 là xoá mềm (3a); mọi service sau này phải dùng `User.is_usable`.** `del_flag` + `deleted_at` + `deleted_by_id` ghi cùng một lần; `is_usable = is_active AND NOT del_flag` là điều kiện duy nhất cho "tài khoản dùng được" (đăng nhập, `load_user`, đặt lại mật khẩu, cấp mã, đếm 管理者 còn lại). **Không** dùng `is_active` đơn lẻ vì sẽ bỏ sót tài khoản đã xoá. Hệ quả:
+  - Tài khoản đã xoá không đăng nhập được và nhận cùng thông báo như ID không tồn tại (không tăng số lần sai); phiên và cookie ghi nhớ cũ chết ở request kế tiếp; mã/token chưa dùng bị vô hiệu.
+  - `login_id` vẫn giữ chỗ: tạo mới trùng ID đã xoá chỉ báo 「既に使用されています」 mà không nói là tài khoản đã xoá. Muốn dùng lại ID thì `restore-user`.
+  - Chưa có màn hình khôi phục (chỉ CLI), chưa có bảng nhật ký thao tác (chỉ `deleted_by_id` và log WARNING `action=delete|unlock|reset_code actor_id target_id`).
+  - Rủi ro đã chấp nhận (a): mã 再設定コード vừa cấp ở `/admin/users` nằm tạm trong cookie session (có ký, không mã hoá) tối đa 120 giây trên trình duyệt của 管理者; trang có `Cache-Control: no-store`.
+  - Rủi ro đã chấp nhận (b): `restore-user` làm phiên và cookie ghi nhớ cũ của tài khoản hợp lệ lại (dấu vân tay mật khẩu không đổi). Nếu nghi cookie cũ bị lộ thì chạy `set-password` ngay sau khi khôi phục (CLI cũng nhắc, và cảnh báo thêm nếu mật khẩu vẫn là `password123`).
+  - Sau khi deploy 3a phải chạy `flask --app run db upgrade` (local và EC2).
+  - Cảnh báo downgrade: migration `d4a91c7e5b36` khi `db downgrade` sẽ đặt `is_active=false` cho mọi tài khoản đã xoá mềm trước khi bỏ cột `del_flag` (để không sống lại). Upgrade lại không tự bật `is_active`; muốn dùng lại thì sửa tay trong DB.
 - **ProxyFix mặc định TẮT (`PROXY_FIX_HOPS=0`), nên `WTF_CSRF_SSL_STRICT` chỉ có tác dụng khi bật nó.** Khi tắt, `request.is_secure` luôn False sau Nginx, bước kiểm Referer/Host chỉ cho HTTPS không chạy; token CSRF vẫn được kiểm đầy đủ. Bật bằng `PROXY_FIX_HOPS=1` (số tầng proxy) sẽ tin `X-Forwarded-For` và `X-Forwarded-Proto` (không tin `X-Forwarded-Host`). **Chỉ bật khi đã kiểm tra trên EC2:** (1) Nginx có `proxy_set_header Host $host;` và `proxy_set_header X-Forwarded-Proto $scheme;`, (2) gunicorn chỉ bind `127.0.0.1` hoặc socket (không để client đi thẳng vào gunicorn tự gửi header giả), rồi restart. Nếu sau đó mọi form đều báo 「セッションの有効期限が切れました…」 thì đặt `WTF_CSRF_SSL_STRICT=false` rồi restart (và báo lại để xem Host/Referer).
-- **Chống dò mật khẩu: khoá tạm theo tài khoản (2a), chưa có rate limit theo IP và chưa có rate limit cho đăng ký.** Sai mật khẩu `LOGIN_MAX_FAILURES` (5) lần liên tiếp thì khoá `LOGIN_LOCK_MINUTES` (15) phút, lưu ở `users.failed_login_count`/`locked_until` nên đúng khi chạy nhiều worker gunicorn. Khi đang khoá, mật khẩu đúng cũng bị từ chối và sai thêm không gia hạn khoá. Hệ quả chấp nhận: ai biết ID cũng có thể khoá người khác 15 phút, và thông báo khoá làm lộ ID có tồn tại. 管理者/職員 bị khoá thì dùng `set-password` (màn hình mở khoá làm ở giai đoạn 3). Việc xoá tài khoản thử trên EC2 do người dùng chạy `remove-test-users` (xem mục 1); cho đến khi chạy, `password123` vẫn đăng nhập được. `session.clear()` khi đăng nhập và đăng xuất nên không còn session fixation hay nháp của người trước. Chưa có: đăng xuất mọi phiên khi đổi mật khẩu, chuẩn hoá ID 職員 về chữ thường.
+- **Chống dò mật khẩu: khoá tạm theo tài khoản (2a), chưa có rate limit theo IP và chưa có rate limit cho đăng ký.** Sai mật khẩu `LOGIN_MAX_FAILURES` (5) lần liên tiếp thì khoá `LOGIN_LOCK_MINUTES` (15) phút, lưu ở `users.failed_login_count`/`locked_until` nên đúng khi chạy nhiều worker gunicorn. Khi đang khoá, mật khẩu đúng cũng bị từ chối và sai thêm không gia hạn khoá. Hệ quả chấp nhận: ai biết ID cũng có thể khoá người khác 15 phút, và thông báo khoá làm lộ ID có tồn tại. 管理者/職員 bị khoá thì 管理者 bấm ロック解除 ở `/admin/users` (hoặc dùng `set-password`). Việc xoá tài khoản thử trên EC2 do người dùng chạy `remove-test-users` (xem mục 1); cho đến khi chạy, `password123` vẫn đăng nhập được. `session.clear()` khi đăng nhập và đăng xuất nên không còn session fixation hay nháp của người trước. Đăng xuất mọi phiên khi đổi mật khẩu đã làm ở 2b. Chưa có: chuẩn hoá ID 職員 về chữ thường. Mã sai ở trang 再設定コード cũng tính vào khoá tạm (cùng bộ đếm với đăng nhập), nên trong lúc khoá cũng không đặt lại được bằng mã (dùng `set-password`).
 - **Luồng báo cáo của người dân.** Ảnh chụp, tọa độ và địa chỉ đoán được giữ trong `session['report_draft']` cho đến khi gửi 報告する. Ảnh chụp được lưu tạm ở `instance/uploads/drafts/`, khi gửi thì chuyển sang `reports/`. Còn thiếu:
   - Camera và GPS của trình duyệt chỉ chạy trên **HTTPS** hoặc `localhost`. Nếu chạy HTTP thì trang 写真撮影 chuyển sang ô chọn ảnh, còn GPS chỉ lấy được từ EXIF của ảnh. Khi không có GPS, tọa độ được tìm từ 発生場所 mà người dân nhập (API 国土地理院), nên vẫn gửi được báo cáo nếu địa chỉ tìm được. Server EC2 đã bật HTTPS tại `https://team3app.duckdns.org` (Nginx + Let's Encrypt/Certbot, tự gia hạn bằng `certbot.timer`, HTTP chuyển hướng 301 sang HTTPS). Nếu Learner Lab đổi Public IP thì phải cập nhật IP trên DuckDNS, nếu không trang web và việc gia hạn chứng chỉ sẽ lỗi. Người dùng từ chối quyền vị trí và ảnh không có GPS thì tọa độ lấy từ 発生場所. Độ chính xác chỉ đến mức địa chỉ (thường là 丁目). Nguồn tọa độ lưu ở `reports.location_source`, hiện ở 報告詳細. Có thể làm thêm phần chọn điểm trên bản đồ (Google Maps).
   - Ở 報告する, nếu chưa có tọa độ lúc chụp thì `report_form.js` lấy vị trí hiện tại của thiết bị, và vị trí này được ưu tiên hơn địa chỉ đã nhập. Nếu người dân báo cáo khi đã rời khỏi chỗ xảy ra sự cố, ghim sẽ nằm ở vị trí lúc gửi (報告詳細 hiện 端末の位置情報（GPS） và địa chỉ của vị trí đó để 職員 nhận ra).
@@ -430,12 +451,7 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
   - Không có báo cáo do AI tạo. Người báo cáo luôn là người dân.
   - `ai_detected` là giá trị tính được từ `ai_analyses` (`duplicate_service._group_dict`): báo cáo có `ai_analyses` thành công thì `ai_detected` đúng.
   - Dữ liệu mẫu có người báo cáo "AIシステム" đã bỏ khi chuyển sang DB.
-- **Nút パスワードを変更する ở プロフィール設定** vẫn trỏ tới trang reset công khai `auth.reset_password` (sẽ đổi sang `/citizen/password`). お名前, メールアドレス và アイコン đã lưu DB.
-- **Màn hình 新規職員アカウント登録 chưa lưu gì.** Route `admin.user_register` chỉ chuyển sang trang hoàn tất. Khi làm `user_service` cần:
-  - Kiểm tra ID không chứa `@`, mật khẩu tối thiểu 8 ký tự, mật khẩu xác nhận khớp, ID chưa tồn tại.
-  - Thêm cột `users.department_id` (kèm migration) để lưu 所属部署.
-  - Ô 所属部署 đang viết cứng tên phòng ban theo bản thiết kế (道路維持課, 都市公園課…), khác với master `departments`. Nên lấy từ bảng `departments` và dùng `id` làm value.
-  - Danh sách tài khoản ở ポータル vẫn viết cứng.
+- **Màn hình 新規職員アカウント登録 (2b) đã lưu thật** (職員 bắt buộc 所属部署 lấy từ `departments` với value là `id`; 管理者 không có 部署). Còn lại: `users.department_id` chưa hiển thị ở đâu.
 - **Template còn viết cứng hoặc dùng nhãn tiếng Nhật làm value.** Cần sửa khi chuyển service sang DB:
   - Đã sửa cho 市民: マイページ (tên, số liệu, 最近の報告), form 報告する.
   - Đã sửa cho 職員: thẻ AI分析, ô chọn trạng thái (`next_statuses()`), nhãn AI判定担当部署 (gợi ý AI mới nhất), bộ lọc bản đồ (`categories.id`, mã `Urgency`), tên カテゴリ ở 統計 và dashboard (lấy từ master).

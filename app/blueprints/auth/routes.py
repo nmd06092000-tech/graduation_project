@@ -1,10 +1,10 @@
 import re
 
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from flask import Blueprint, make_response, render_template, request, redirect, url_for, flash, session
 from flask_login import login_user, logout_user, current_user
 from sqlalchemy.exc import IntegrityError
 
-from app.constants import MSG_EMAIL_NO_AT, MSG_PASSWORD_MISMATCH
+from app.constants import MSG_EMAIL_NO_AT, MSG_PASSWORD_MISMATCH, MSG_RESET_LINK_INVALID, MSG_RESET_MAIL_SENT
 from app.extensions import db
 from app.models import User
 from app.services import ServiceError, ValidationError, auth_service
@@ -142,28 +142,59 @@ def register_complete():
     return render_template('auth/register_complete.html')
 
 
-# パスワード再設定画面
-# TODO: 現状は入力チェックのみで、パスワードは保存されない。
-#       本人確認（メールのトークン）付きの流れに作り直す予定（README 参照）
+def _flash_errors(error):
+    """業務エラーを flash する（ValidationError はメッセージごとの色、それ以外は赤 'danger'）"""
+    if isinstance(error, ValidationError):
+        for category, message in error.messages:
+            flash(message, category)
+    else:
+        flash(str(error), 'danger')
+
+
+# 市民 パスワード再設定画面（1 つ目：メールアドレスを入れると、再設定リンクのメールを送る）
+# 登録の有無が分からないよう、入力が正しければ常に同じメッセージを表示する
 @auth_bp.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():
     if request.method == 'POST':
         email = request.form.get('email', '')
-        new_password = request.form.get('new_password', '')
-        confirm_password = request.form.get('confirm_password', '')
+        try:
+            auth_service.request_password_reset(email)
+        except ValidationError as e:
+            _flash_errors(e)
+            return render_template('auth/reset_password.html', email=email)
+        flash(MSG_RESET_MAIL_SENT, 'success')
+        return redirect(url_for('auth.reset_password'))
+    return render_template('auth/reset_password.html', email='')
 
-        # 1. パスワード文字数チェック（8文字未満はエラー）
-        if len(new_password) < 8:
-            return render_template('auth/reset_password.html', error='新しいパスワードは8文字以上で入力してください。')
 
-        # 2. パスワード一致チェック
-        if new_password != confirm_password:
-            return render_template('auth/reset_password.html', error='パスワードが一致しません。')
+# 市民 パスワード再設定画面（2 つ目：メールのリンクから開き、新しいパスワードを入れる）
+# リンクのトークンが Referer や履歴・キャッシュに残らないよう、応答にヘッダを付ける
+@auth_bp.route('/reset-password/confirm/<token>', methods=['GET', 'POST'])
+def reset_password_confirm(token):
+    if request.method == 'POST':
+        try:
+            auth_service.reset_password_with_token(
+                token, request.form.get('new_password', ''), request.form.get('confirm_password', ''))
+        except ValidationError as e:
+            # 入力エラー：トークンは消費されていないので、同じリンクの画面に戻す
+            _flash_errors(e)
+            return _no_leak(redirect(url_for('auth.reset_password_confirm', token=token)))
+        except ServiceError as e:
+            flash(str(e), 'danger')
+            return _no_leak(redirect(url_for('auth.reset_password')))
+        return _no_leak(redirect(url_for('auth.reset_password_complete')))
 
-        # 再設定完了画面へリダイレクト
-        return redirect(url_for('auth.reset_password_complete'))
+    if not auth_service.is_reset_token_valid(token):
+        flash(MSG_RESET_LINK_INVALID, 'danger')
+        return _no_leak(redirect(url_for('auth.reset_password')))
+    return _no_leak(make_response(render_template('auth/reset_password_confirm.html', token=token)))
 
-    return render_template('auth/reset_password.html')
+
+def _no_leak(response):
+    """再設定リンクの画面の応答：Referer を送らせず、キャッシュさせない"""
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Cache-Control'] = 'no-store'
+    return response
 
 
 # パスワード再設定完了画面
@@ -172,30 +203,29 @@ def reset_password_complete():
     return render_template('auth/reset_password_complete.html')
 
 
-# 行政職員 パスワード再設定画面
+def _handle_reset_with_code(role, template, complete_endpoint):
+    """職員・管理者のパスワード再設定画面の共通処理（ID・再設定コード・新しいパスワード）
+
+    エラーはメッセージを flash して画面を表示し直す（入力した ID は残し、コード・パスワードは残さない）。
+    """
+    login_id = request.form.get('login_id', '')
+    if request.method == 'POST':
+        try:
+            auth_service.reset_password_with_code(
+                role, login_id, request.form.get('reset_code', ''),
+                request.form.get('new_password', ''), request.form.get('confirm_password', ''))
+        except ServiceError as e:
+            _flash_errors(e)
+            return render_template(template, login_id=login_id)
+        return redirect(url_for(complete_endpoint))
+    return render_template(template, login_id='')
+
+
+# 行政職員 パスワード再設定画面（運用者が発行した再設定コードが必要）
 @auth_bp.route('/login/staff/reset-password', methods=['GET', 'POST'])
 def reset_password_staff():
-    if request.method == 'POST':
-        staff_id = request.form.get('staff_id', '')
-        new_password = request.form.get('new_password', '')
-        confirm_password = request.form.get('confirm_password', '')
-
-        # 1. 職員IDの @ チェック
-        if '@' in staff_id:
-            return render_template('auth/reset_password_staff.html', error='職員IDに @ は使用できません。')
-
-        # 2. パスワード文字数チェック（8文字未満はエラー）
-        if len(new_password) < 8:
-            return render_template('auth/reset_password_staff.html', error='新しいパスワードは8文字以上で入力してください。')
-
-        # 3. パスワード一致チェック
-        if new_password != confirm_password:
-            return render_template('auth/reset_password_staff.html', error='新しいパスワードと確認用パスワードが一致しません。')
-
-        # 再設定完了画面へリダイレクト
-        return redirect(url_for('auth.reset_password_staff_complete'))
-
-    return render_template('auth/reset_password_staff.html')
+    return _handle_reset_with_code(User.ROLE_STAFF, 'auth/reset_password_staff.html',
+                                   'auth.reset_password_staff_complete')
 
 
 # 行政職員 パスワード再設定完了画面
@@ -204,30 +234,11 @@ def reset_password_staff_complete():
     return render_template('auth/reset_password_staff_complete.html')
 
 
-# 管理者 パスワード再設定画面
+# 管理者 パスワード再設定画面（運用者が発行した再設定コードが必要）
 @auth_bp.route('/login/admin/reset-password', methods=['GET', 'POST'])
 def reset_password_admin():
-    if request.method == 'POST':
-        admin_id = request.form.get('admin_id', '')
-        new_password = request.form.get('new_password', '')
-        confirm_password = request.form.get('confirm_password', '')
-
-        # 1. 管理者IDの @ チェック
-        if '@' in admin_id:
-            return render_template('auth/reset_password_admin.html', error='管理者IDに @ は使用できません。')
-
-        # 2. パスワード文字数チェック（8文字未満はエラー）
-        if len(new_password) < 8:
-            return render_template('auth/reset_password_admin.html', error='新しいパスワードは8文字以上で入力してください。')
-
-        # 3. パスワード一致チェック
-        if new_password != confirm_password:
-            return render_template('auth/reset_password_admin.html', error='パスワードが一致しません。')
-
-        # 再設定完了画面へリダイレクト
-        return redirect(url_for('auth.reset_password_admin_complete'))
-
-    return render_template('auth/reset_password_admin.html')
+    return _handle_reset_with_code(User.ROLE_ADMIN, 'auth/reset_password_admin.html',
+                                   'auth.reset_password_admin_complete')
 
 
 # 管理者 パスワード再設定完了画面

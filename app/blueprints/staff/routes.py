@@ -16,7 +16,7 @@ from app.utils.decorators import role_required
 staff_bp = Blueprint('staff', __name__, url_prefix='/staff')
 
 
-# 5. 行政職員ダッシュボード
+# 5. 行政職員ダッシュボード（地域の問題マップは 地図表示 と map.js を共用）
 @staff_bp.route('/dashboard')
 @role_required(User.ROLE_STAFF)
 def dashboard():
@@ -26,7 +26,10 @@ def dashboard():
                            urgency_stats=stats_service.count_by_urgency(),
                            priority_reports=stats_service.priority_reports(),
                            notifications=notification_service.list_unread(),
-                           unread_count=notification_service.count_unread())
+                           unread_count=notification_service.count_unread(),
+                           map_reports=stats_service.map_points(),
+                           google_maps_api_key=current_app.config['GOOGLE_MAPS_API_KEY'],
+                           google_maps_map_id=current_app.config['GOOGLE_MAPS_MAP_ID'])
 
 
 # 行政職員 通知を既読にする（既読は職員全員で共通）

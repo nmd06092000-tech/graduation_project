@@ -60,6 +60,16 @@
                             <h5 class="card-title fs-6 fw-bold mb-0"><i class="bi bi-file-text me-2"></i>報告内容</h5>
                         </div>
                         <div class="card-body">
+                            {# 最新の AI 判定が失敗したときだけエラーを表示（成功・未実行のときは出さない） #}
+                            {% if report.ai_failed %}
+                            <div class="alert alert-danger mb-4" role="alert">
+                                <div class="fw-bold mb-2">
+                                    <i class="bi bi-exclamation-triangle-fill me-1"></i>エラー内容：{{ report.ai_error_type or 'AI判定エラー' }}
+                                </div>
+                                <p class="mb-2">{{ report.ai_error_message or 'AIが正常に判定できませんでした。' }}</p>
+                                <small>発生日時：{{ report.ai_error_date or '未記録' }}</small>
+                            </div>
+                            {% endif %}
                             <h5 class="fw-bold text-primary mb-3">{{ report.title }}</h5>
 
                             <div class="row mb-3">
@@ -167,9 +177,18 @@
                             {# 更新後の詳細画面は履歴を置き換えて表示する（js/navigation.js） #}
                             <form action="{{ url_for('staff.report_status_update', report_id=report.id) }}" method="POST" data-nav="replace">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <!-- 緊急度の判定（AI判定と職員の最終判断） -->
-                                <div class="border rounded p-3 mb-4">
-                                    <h6 class="fw-bold mb-3"><i class="bi bi-robot me-2"></i>緊急度の判定</h6>
+                                <!-- 緊急度の判定（AI判定と職員の最終判断）。折りたたんでも入力欄は form 内に残り、送信される -->
+                                <div class="accordion mb-4" id="urgencyAccordion">
+                                  <div class="accordion-item">
+                                    <h2 class="accordion-header" id="urgencyHeading">
+                                        <button class="accordion-button collapsed fw-bold" type="button"
+                                                data-bs-toggle="collapse" data-bs-target="#urgencyCollapse"
+                                                aria-expanded="false" aria-controls="urgencyCollapse">
+                                            <i class="bi bi-robot me-2"></i>緊急度の判定
+                                        </button>
+                                    </h2>
+                                    <div id="urgencyCollapse" class="accordion-collapse collapse" aria-labelledby="urgencyHeading">
+                                    <div class="accordion-body">
                                     <div class="mb-3">
                                         <label class="form-label fw-bold small">AI判定緊急度</label>
                                         <div>
@@ -205,6 +224,9 @@
                                     <div class="alert alert-info small mb-0">
                                         AI判定と職員判断が異なる場合は、職員の判断を優先します。
                                     </div>
+                                    </div>
+                                    </div>
+                                  </div>
                                 </div>
 
                                 <div class="mb-3">

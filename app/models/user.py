@@ -1,5 +1,10 @@
+import hashlib
+import hmac
+
 import sqlalchemy as sa
+from flask import current_app
 from flask_login import UserMixin
+from sqlalchemy.ext.hybrid import hybrid_property
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from app.constants import Role
@@ -16,6 +21,10 @@ class User(UserMixin, db.Model):
 
     __table_args__ = (
         sa.CheckConstraint(Role.check_sql('role'), name='ck_users_role'),
+        # 削除済み（del_flag）と削除日時・削除者の整合：削除なら日時が必須、未削除なら日時・削除者は NULL
+        sa.CheckConstraint(
+            '(del_flag AND deleted_at IS NOT NULL) OR (NOT del_flag AND deleted_at IS NULL AND deleted_by_id IS NULL)',
+            name='ck_users_del_flag_consistent'),
     )
 
     id = db.Column(db.BigInteger, primary_key=True)
@@ -24,8 +33,14 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     role = db.Column(db.String(20), nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    # False の場合はログイン不可（利用停止）
+    # False の場合はログイン不可（利用停止。flask --app run remove-test-users だけが立てる別の旗）
     is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=sa.true())
+    # 論理削除（管理者が削除したアカウント）。ID は残したまま使えなくする。復元は flask --app run restore-user
+    # del_flag・deleted_at・deleted_by_id は同じ書き込みで一緒に変える（CHECK ck_users_del_flag_consistent）
+    del_flag = db.Column(db.Boolean, nullable=False, default=False, server_default=sa.false())
+    deleted_at = db.Column(db.DateTime(timezone=True))
+    deleted_by_id = db.Column(db.BigInteger, db.ForeignKey('users.id', ondelete='RESTRICT',
+                                                           name='users_deleted_by_id_fkey'), index=True)
     # 市民の郵便番号（「123-4567」の形で保存）と住所（埼玉県内）。職員・管理者は NULL
     postal_code = db.Column(db.String(8))
     address = db.Column(db.String(255))
@@ -44,17 +59,49 @@ class User(UserMixin, db.Model):
 
     department = db.relationship('Department')
 
+    @property
+    def is_deleted(self):
+        """管理者に削除（論理削除）されたアカウントか"""
+        return bool(self.del_flag)
+
+    @hybrid_property
+    def is_usable(self):
+        """使えるアカウントか（利用停止でも削除済みでもない）。「使える」の判定は必ずこれを使う（is_active 単独は不可）"""
+        return bool(self.is_active) and not self.del_flag
+
+    @is_usable.expression
+    def is_usable(cls):
+        return sa.and_(cls.is_active.is_(True), cls.del_flag.is_(False))
+
     def set_password(self, password):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
         return check_password_hash(self.password_hash, password)
 
+    def _password_fingerprint(self):
+        """パスワードのハッシュに紐づく印（SECRET_KEY による HMAC の先頭20文字。ハッシュそのものは外に出さない）"""
+        digest = hmac.new(current_app.config['SECRET_KEY'].encode(), self.password_hash.encode(), hashlib.sha256)
+        return digest.hexdigest()[:20]
 
-# セッションに保存されたIDからユーザーを復元する（利用停止中のユーザーは復元しない）
+    def get_id(self):
+        """セッション・「ログイン状態を保持する」Cookie に入れる値：「ID:パスワードの印」
+
+        パスワードを変えると印が変わるので、変更前に発行された Cookie（ほかの端末のセッションを含む）は無効になる。
+        """
+        return f'{self.id}:{self._password_fingerprint()}'
+
+
+# セッションに保存された値からユーザーを復元する（利用停止中・削除済み・パスワード変更後の古いセッションは復元しない）
 @login_manager.user_loader
-def load_user(user_id):
+def load_user(session_value):
+    user_id, _, fingerprint = str(session_value).partition(':')
+    if not (user_id.isascii() and user_id.isdigit()) or not fingerprint:
+        # 印のない値（2b より前のセッション）や不正な値は復元しない
+        return None
     user = db.session.get(User, int(user_id))
-    if user is None or not user.is_active:
+    if user is None or not user.is_usable:
+        return None
+    if not hmac.compare_digest(fingerprint.encode(), user._password_fingerprint().encode()):
         return None
     return user

@@ -10,8 +10,8 @@
 |---|---|---|
 | 0 | Nền test & DB thật | Đã nghiệm thu 2026-11-11 |
 | 1 | Bảo mật nền: CSRF Flask-WTF, logout POST, cookie SECURE/SAMESITE, seed chỉ chạy ở dev | Đã nghiệm thu 2026-11-11 |
-| 2 | Tài khoản: `auth_service`, reset mật khẩu thật, パスワード変更 cho 市民, đăng ký 職員 lưu DB (`users.department_id`), xoá tài khoản thử taro/staff01/admin01 ở local và EC2. Tách 2a (khoá tạm, CLI, gỡ tài khoản thử, ProxyFix, session) và 2b (email reset, パスワード変更, đăng ký 職員) | Đang làm (2a) |
-| 3 | Quản trị: ユーザー一覧, khoá/mở tài khoản, quản lý 部署/カテゴリ, bỏ dữ liệu viết cứng ở ポータル | Chưa làm |
+| 2 | Tài khoản: `auth_service`, reset mật khẩu thật, パスワード変更 cho 市民, đăng ký 職員 lưu DB (`users.department_id`), xoá tài khoản thử taro/staff01/admin01 ở local và EC2. Tách 2a (khoá tạm, CLI, gỡ tài khoản thử, ProxyFix, session) và 2b (email reset, パスワード変更, đăng ký 職員) | 2a đã nghiệm thu 2026-11-12; 2b đã nghiệm thu 2026-11-16 |
+| 3 | Quản trị: ユーザー一覧, khoá/mở tài khoản, quản lý 部署/カテゴリ, bỏ dữ liệu viết cứng ở ポータル. Tách 3a (quản lý tài khoản 職員/管理者) và 3b (master 部署/カテゴリ) | 3a đã nghiệm thu 2026-11-16 (1025 pass/0/0); 3b chưa làm |
 | 4 | 市民 còn thiếu: route trả ảnh có kiểm quyền, 対応状況を表示, 報告を取り消す | Chưa làm |
 | 5 | 職員 còn thiếu: 担当部署, AI再実行, `urgency_code` + `_urgency_badge`, phân trang, tự phát hiện trùng | Chưa làm |
 | 6 | Chất lượng giao diện: responsive 職員, trang lỗi, dọn JS inline, a11y; gom màu 緊急度 (gồm `staff/map.html`, `static/js/map.js`), xoá `mockup_report_triage.html` | Chưa làm |
@@ -110,7 +110,56 @@
 3. `flask --app run remove-test-users --dry-run`, xem kết quả, rồi chạy không có `--dry-run`.
 4. EC2: kiểm tra Nginx có `proxy_set_header Host $host;` và `X-Forwarded-Proto $scheme;`, gunicorn bind `127.0.0.1` hoặc socket; đúng thì đặt `PROXY_FIX_HOPS=1` và restart. Nếu mọi form báo 「セッションの有効期限…」 thì đặt `WTF_CSRF_SSL_STRICT=false`.
 
-**Chưa làm (2b / giai đoạn 3)**: email và reset 2 bước của 市民, パスワード変更, đăng ký 職員 lưu DB, màn hình mở khoá/đặt lại mật khẩu cho admin, rate limit theo IP, đăng xuất mọi phiên khi đổi mật khẩu, chuẩn hoá ID 職員 về chữ thường.
+**Chưa làm khi nghiệm thu 2a**: email và reset 2 bước của 市民, パスワード変更, đăng ký 職員 lưu DB, đăng xuất mọi phiên khi đổi mật khẩu (các mục này làm ở 2b, xem bên dưới). Còn lại cho giai đoạn 3 trở đi: màn hình mở khoá/đặt lại mật khẩu cho admin, rate limit theo IP, chuẩn hoá ID 職員 về chữ thường.
+
+## Port thiết kế team – Phần A (2026-11-12, nghiệm thu)
+
+Kế hoạch A20261112-095405. Port từ HTML của nhóm thiết kế: hiển thị lỗi AI ở màn chi tiết và AI分析 của 職員, accordion 緊急度. Test sau Phần A: **422 passed**. Người dùng đã nghiệm thu.
+
+## Giai đoạn 2b – Tài khoản: reset mật khẩu thật, đổi mật khẩu, đăng ký 職員 (2026-11-12 bắt đầu; nghiệm thu 2026-11-16)
+
+Kế hoạch A20261112-111447. Không có migration (dùng bảng `password_reset_tokens` của 2a).
+
+**Đã làm (backend)**
+- `app/utils/mail.py` (mới): `send_mail`, `MailError`; `MAIL_SERVER` trống thì ghi nội dung (kèm link) vào log WARNING. `config.py`/`.env.example`: `PUBLIC_BASE_URL`, `MAIL_*`, `PASSWORD_RESET_TOKEN_MINUTES=30`; `TestingConfig` ép `MAIL_SERVER=''`. App cảnh báo khi `SESSION_COOKIE_SECURE=true` mà thiếu `MAIL_SERVER`.
+- `auth_service`: `request_password_reset`, `is_reset_token_valid`, `reset_password_with_token`, `issue_reset_code`, `reset_password_with_code`, `change_password`. Token mail 市民 và 再設定コード 職員/管理者 dùng chung bảng, phân biệt theo role; mã sai tính vào khoá tạm.
+- `user_service`: `_create_account` chung, `create_staff`, `create_admin` (thêm tham số tuỳ chọn `confirm_password`), `list_departments`, `find_department`. `validators.validate_operator_password(password, confirm=None)`.
+- `User.get_id()` = `id:HMAC(SECRET_KEY, password_hash)[:20]`, `load_user` so khớp: đổi mật khẩu bằng cách nào cũng đăng xuất phiên/cookie ghi nhớ khác.
+- CLI: `create-staff`, `issue-reset-code`. Route: `auth.reset_password`, `auth.reset_password_confirm` (mới), `auth.reset_password_staff/_admin` (thêm ô mã), `citizen.change_password`, `admin.user_register` (lưu thật, 職員/管理者). README cập nhật (`docs/db/db_design.md` đã có từ 2a, không đổi trong 2b).
+- Frontend: 7 template sửa + `auth/reset_password_confirm.html` mới (chưa kiểm tra trên trình duyệt). Tester: bộ test mới chưa viết lúc ghi dòng này.
+- Kế hoạch gốc A20261112-111447 hết hạn duyệt, được duyệt lại bằng A20261116-104748 (không đổi phạm vi).
+
+- Kết quả test: **733 pass / 0 fail / 0 skip** (đã nghiệm thu 2026-11-16).
+
+**Hướng dẫn thử (local)**
+1. 市民: `/reset-password` nhập email đã đăng ký → luôn hiện cùng một thông báo; `MAIL_SERVER` trống nên link nằm trong log của `python run.py` (tìm 「MAIL_SERVER が未設定」). Mở link → đặt mật khẩu mới → 完了 → đăng nhập bằng mật khẩu mới. Mở lại link → quay về `/reset-password` kèm thông báo lỗi.
+2. 市民 đã đăng nhập: プロフィール → 「パスワードを変更する」 (`/citizen/password`). Thử sai mật khẩu hiện tại (tính vào khoá tạm), trùng mật khẩu cũ, thành công. Đăng nhập cùng tài khoản ở trình duyệt khác trước đó → sau khi đổi, tải lại sẽ bị đăng xuất.
+3. 管理者: `/admin/users/register` tạo 職員 (chọn 部署) và 管理者; đăng nhập thử bằng tài khoản vừa tạo. Cũng có `flask --app run create-staff`.
+4. 職員/管理者 quên mật khẩu: `flask --app run issue-reset-code <ID>` → nhập ID + mã + mật khẩu mới ở `/login/staff/reset-password` (hoặc `/login/admin/reset-password`).
+
+**Việc người dùng tự làm trên EC2 sau nghiệm thu**
+- `.env`: `PUBLIC_BASE_URL=https://team3app.duckdns.org`; khi có SMTP thì `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM` (chưa có thì mail không gửi, link nằm trong log: ai đọc được log đều thấy; app cảnh báo lúc khởi động).
+- Tạo 職員 thật bằng `flask --app run create-staff` (hoặc màn hình 管理者); cấp mã quên mật khẩu bằng `issue-reset-code <ID>` rồi đưa trực tiếp cho đúng người sau khi xác minh ngoài hệ thống.
+- **Sau deploy, mọi người dùng phải đăng nhập lại một lần** (định dạng phiên đổi).
+- Nhớ chạy `flask --app run db upgrade` nếu chưa chạy migration 2a `2422f95d18ff`.
+
+**Giới hạn đã chấp nhận**: 職員 chưa tự đổi mật khẩu khi đang đăng nhập; chưa có rate limit theo IP; thời gian phản hồi `/reset-password` lộ nhẹ email có tồn tại; màn quản trị cấp mã/mở khoá làm ở GĐ3a (xem bên dưới).
+
+## Giai đoạn 3a – Quản trị: quản lý tài khoản 職員/管理者 (2026-11-16, đã nghiệm thu: 1025 pass/0/0)
+
+Kế hoạch A20261116-122658. Người dùng chốt: danh sách chỉ 職員 và 管理者; 削除 là **xoá mềm** (`del_flag`, `deleted_at`, `deleted_by_id`), khôi phục bằng `flask --app run restore-user`; không có nút 無効/有効; ID tài khoản đã xoá vẫn giữ chỗ.
+
+**Đã làm (backend, 2026-11-16)**
+- Migration `d4a91c7e5b36` (sau `2422f95d18ff`): 3 cột, index `ix_users_deleted_by_id`, FK `users_deleted_by_id_fkey` (RESTRICT), CHECK `ck_users_del_flag_consistent`. **Người dùng tự chạy `flask --app run db upgrade`** (local và EC2). Chưa chạy trên DB dev.
+- `User.is_usable` (hybrid: `is_active AND NOT del_flag`) thay `is_active` ở `load_user` và mọi đường auth; tài khoản đã xoá bị coi như ID không tồn tại ở `authenticate`.
+- `user_service`: `list_accounts`, `count_accounts`, `account_filters`, `account_row`, `delete_account`, `unlock_account`, `issue_reset_code_for_account`, `restore_account`, `list_deleted_accounts`. `auth_service`: `is_locked`, `invalidate_reset_tokens`.
+- Route: `admin.user_list`, `user_delete`, `user_unlock`, `user_reset_code`, `admin.portal` dữ liệu thật. Mã 再設定コード qua `session['reset_code']`, hiện 1 lần trong 120 giây.
+- CLI: `restore-user [LOGIN_ID] [--list]`; `set-password`, `issue-reset-code`, `create-*`, `remove-test-users` xử lý tài khoản đã xoá.
+
+**Trạng thái**: đã nghiệm thu 2026-11-16 (1025 pass/0/0; security ĐẠT, architecture đã sửa).
+
+## Việc nhỏ ngoài lộ trình
+- 2026-11-16 (kế hoạch A20261116-144424): ダッシュボード 職員 thêm khung 地域の問題マップ (Google Maps, dùng lại `map.js` của 地図表示); `staff.dashboard` truyền `map_reports`, `google_maps_api_key`, `google_maps_map_id`. Chờ tester/người dùng nghiệm thu.
 
 ## Hướng dẫn thử như khách hàng
 
@@ -135,9 +184,8 @@ Chạy local: `python run.py` (interpreter `task-app\.venv\Scripts\python.exe`),
 
 ## Phần còn "giả" hoặc chưa có
 
-- Reset mật khẩu (3 màn) chỉ chuyển trang, không đổi mật khẩu.
-- 新規職員アカウント登録 không lưu; ポータル hiện danh sách viết cứng.
-- 市民 chưa xem được chi tiết 対応状況, chưa 取り消し được, chưa có パスワード変更.
+- ポータル: danh sách tài khoản đã lấy từ DB (3a, backend và template). Reset mật khẩu, パスワード変更 và 新規アカウント登録 đã thật từ 2b.
+- 市民 chưa xem được chi tiết 対応状況, chưa 取り消し được.
 - 職員 không thấy ảnh đính kèm, chưa có 担当部署設定, nút AIモデル再実行 không chạy, 重複確認 trống.
 - Chưa có trang lỗi 403/404/500 riêng. (CSRF và logout POST đã có từ GĐ1.)
 - Giao diện 職員 trên điện thoại: sidebar có thể chiếm cả màn hình (chưa kiểm chứng).

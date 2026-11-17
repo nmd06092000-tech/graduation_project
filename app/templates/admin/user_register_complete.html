@@ -1,7 +1,7 @@
 {% extends 'layouts/base.html' %}
 
-{# ポータルの子画面（ポータルへ戻ると履歴を戻る） #}
-{% block nav_parent %}{{ url_for('admin.portal') }}{% endblock %}
+{# アカウント一覧の子画面（一覧へ戻ると履歴を戻る） #}
+{% block nav_parent %}{{ url_for('admin.user_list') }}{% endblock %}
 
 {% block layout %}
 <div class="container mt-5" style="max-width: 600px;">
@@ -15,13 +15,18 @@
             <h3 class="fw-bold mb-3">職員アカウントの登録が完了しました</h3>
             <p class="text-muted mb-4">
                 新しい職員アカウントが正常に登録されました。<br>
-                システム管理ポータルから確認・管理が可能です。
+                アカウント一覧から確認・管理が可能です。
             </p>
 
-            <!-- ポータルへ戻るボタン -->
-            <a href="{{ url_for('admin.portal') }}" class="btn btn-primary px-4" data-nav="replace">
-                システム管理ポータルへ戻る
-            </a>
+            <!-- 一覧・ポータルへ戻るボタン -->
+            <div class="d-flex flex-wrap justify-content-center gap-2">
+                <a href="{{ url_for('admin.user_list') }}" class="btn btn-primary px-4" data-nav="replace">
+                    アカウント一覧へ戻る
+                </a>
+                <a href="{{ url_for('admin.portal') }}" class="btn btn-outline-secondary px-4" data-nav="replace">
+                    システム管理ポータルへ戻る
+                </a>
+            </div>
         </div>
     </div>
 </div>

@@ -507,7 +507,8 @@ def test_every_post_form_in_templates_has_csrf_token():
 
     # Assert: 走査対象が減っていない（form の取りこぼし・テンプレート削除を検知する）
     assert total >= 32
-    assert logout_forms == 13
+    # citizen/change_password.html（2b で新設）と admin/user_list.html（3a で新設）に ログアウト のモーダルがあるので 15
+    assert logout_forms == 15
     assert missing == []
 
 
@@ -531,9 +532,9 @@ def test_logout_is_never_linked_outside_post_form():
 
 # ログアウトのモーダル（POST /logout の form）を持つ画面
 LOGOUT_MODAL_PATHS = {
-    '/citizen/mypage', '/citizen/reports', '/citizen/profile', '/citizen/profile/icon',
+    '/citizen/mypage', '/citizen/reports', '/citizen/profile', '/citizen/profile/icon', '/citizen/password',
     '/staff/dashboard', '/staff/reports', '/staff/reports/{report_id}', '/staff/map',
-    '/staff/ai-analysis', '/staff/duplicates', '/staff/stats', '/admin/portal',
+    '/staff/ai-analysis', '/staff/duplicates', '/staff/stats', '/admin/portal', '/admin/users',
 }
 
 
@@ -541,6 +542,7 @@ LOGOUT_MODAL_PATHS = {
     (None, '/login/citizen'), (None, '/login/staff'), (None, '/login/admin'),
     (None, '/register'), (None, '/reset-password'),
     (None, '/login/staff/reset-password'), (None, '/login/admin/reset-password'),
+    (User.ROLE_CITIZEN, '/citizen/password'),
     (User.ROLE_CITIZEN, '/citizen/mypage'), (User.ROLE_CITIZEN, '/citizen/report'),
     (User.ROLE_CITIZEN, '/citizen/report/camera'), (User.ROLE_CITIZEN, '/citizen/reports'),
     (User.ROLE_CITIZEN, '/citizen/profile'), (User.ROLE_CITIZEN, '/citizen/profile/icon'),
@@ -549,7 +551,7 @@ LOGOUT_MODAL_PATHS = {
     (User.ROLE_STAFF, '/staff/reports/{report_id}'), (User.ROLE_STAFF, '/staff/map'),
     (User.ROLE_STAFF, '/staff/ai-analysis'), (User.ROLE_STAFF, '/staff/duplicates'),
     (User.ROLE_STAFF, '/staff/stats'),
-    (User.ROLE_ADMIN, '/admin/portal'), (User.ROLE_ADMIN, '/admin/users/register'),
+    (User.ROLE_ADMIN, '/admin/portal'), (User.ROLE_ADMIN, '/admin/users'), (User.ROLE_ADMIN, '/admin/users/register'),
 ])
 def test_rendered_post_forms_embed_csrf_token(csrf_client, csrf_login, citizen, staff, make_report,
                                               role, path):

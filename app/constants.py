@@ -73,6 +73,25 @@ class AiAnalysisTrigger(LabeledEnum):
     REJUDGE = ('rejudge', '再判定済み')
 
 
+# AI 判定失敗の種類（ai_analyses.error_message 先頭の [kind]）の画面表示ラベル。AIError.kind と対応
+AI_ERROR_KIND_LABELS = {
+    'config': '設定エラー',
+    'client': '入力エラー',
+    'quota': '利用上限エラー',
+    'auth': '認証エラー',
+    'server': 'AIサーバーエラー',
+    'timeout': 'タイムアウト',
+    'network': '通信エラー',
+    'blocked': '安全性によるブロック',
+    'invalid_response': '応答形式エラー',
+    'unknown': '不明なエラー',
+}
+# 設定・認証の詳細は構成情報を含み得るため画面には出さず、この共通文を表示する
+AI_ERROR_KINDS_HIDE_DETAIL = ('config', 'auth')
+AI_ERROR_GENERIC_MESSAGE = 'AI判定の設定に問題があるため、判定できませんでした。管理者へお問い合わせください'
+AI_ERROR_UNKNOWN_MESSAGE = 'AI判定に失敗しました'
+
+
 class DuplicateGroupStatus(LabeledEnum):
     OPEN = ('open', '確認待ち')
     MERGED = ('merged', '統合済み')
@@ -250,6 +269,53 @@ MSG_NO_ADMIN_LEFT = '有効な管理者アカウントが他に残らないた�
 MSG_PASSWORD_PUBLIC = 'このパスワードは公開されているため使用できません。'
 MSG_ID_TOO_LONG = '{label}は255文字以内で入力してください。'
 MSG_ACCOUNT_SAVE_FAILED = 'アカウントを保存できませんでした。しばらくしてからもう一度お試しください。'
+
+# 設計書にない新規の文言（2b：パスワード再設定・パスワード変更・職員アカウント登録）
+# 市民のパスワード再設定（メール）：メールアドレスが登録されているかどうかに関わらず、同じ文言を表示する
+MSG_RESET_MAIL_SENT = ('入力されたメールアドレスが登録されている場合は、パスワード再設定用のメールを送信しました。'
+                       'メールが届かない場合は、迷惑メールフォルダーを確認のうえ、しばらくしてからもう一度お試しください。')
+MSG_RESET_LINK_INVALID = 'このリンクは無効か、有効期限が切れています。もう一度メールアドレスを入力して、再設定をやり直してください。'
+# 職員・管理者のパスワード再設定（運用者が発行する再設定コード）。ID が存在するかどうかが分からないよう、原因は区別しない
+MSG_RESET_CODE_REQUIRED = '再設定コードを入力してください。'
+MSG_RESET_CODE_INVALID = 'IDまたは再設定コードが正しくありません。コードの有効期限が切れている場合は、管理者に再発行を依頼してください。'
+# issue-reset-code（flask コマンド）と、管理者画面の再設定コード発行（user_service）で使う
+MSG_RESET_CODE_NOT_ALLOWED = '「{login_id}」は有効な職員・管理者アカウントではないため、再設定コードを発行できません。'
+# 市民のパスワード変更
+MSG_PASSWORD_CHANGED = 'パスワードを変更しました'
+MSG_CURRENT_PASSWORD_REQUIRED = '現在のパスワードを入力してください。'
+MSG_CURRENT_PASSWORD_WRONG = '現在のパスワードが正しくありません。'
+MSG_PASSWORD_SAME_AS_CURRENT = '新しいパスワードは、現在のパスワードと異なるものにしてください。'
+# 管理者によるアカウント登録（職員は所属部署が必須）
+MSG_ROLE_REQUIRED = 'アカウント権限を選択してください。'
+MSG_DEPARTMENT_REQUIRED = '所属部署を選択してください。'
+MSG_DEPARTMENT_INVALID = '所属部署が見つかりません。'
+
+# 設計書にない新規の文言（3a：管理者によるアカウント管理・削除済みアカウントの復元）
+# 画面の操作（削除・ロック解除・再設定コード発行）の対象が存在しない・削除済み・市民のとき。存在の有無は区別しない
+MSG_ACCOUNT_TARGET_NOT_FOUND = '対象のアカウントが見つかりません。'
+MSG_CANNOT_DELETE_SELF = '自分自身のアカウントは削除できません。'
+MSG_CANNOT_DELETE_LAST_ADMIN = '有効な管理者が他にいなくなるため、このアカウントは削除できません。'
+MSG_ACCOUNT_DELETED = '「{name}」（{login_id}）のアカウントを削除しました。'
+MSG_ACCOUNT_UNLOCKED = '「{name}」（{login_id}）のロックを解除しました。'
+# 発行直後の表示時間（120秒）が過ぎた、または再読み込みで消えたとき（警告）
+MSG_RESET_CODE_GONE = '再設定コードの表示時間が過ぎました。必要な場合は、もう一度発行してください。'
+# flask コマンド（restore-user / set-password）専用
+MSG_ACCOUNT_NOT_DELETED = '「{login_id}」は削除されていないアカウントです。'
+MSG_ACCOUNT_DELETED_RESTORE_FIRST = '「{login_id}」は削除済みのアカウントです。先に restore-user で復元してください。'
+MSG_ACCOUNT_RESTORED = '「{login_id}」を復元しました。'
+
+# パスワード再設定メール（件名・本文。{name} はお名前、{url} は再設定ページのリンク、{minutes} は有効期限（分））
+MAIL_RESET_SUBJECT = '【困りごと報告システム】パスワード再設定のご案内'
+MAIL_RESET_BODY = (
+    '{name} 様\n'
+    '\n'
+    'パスワード再設定のご依頼を受け付けました。\n'
+    '下記のリンクを開き、新しいパスワードを設定してください（{minutes}分間有効・1回のみ使えます）。\n'
+    '\n'
+    '{url}\n'
+    '\n'
+    'このメールに心当たりがない場合は、何もせずこのメールを破棄してください。パスワードは変更されません。\n'
+)
 
 # 開発用テストアカウントの公開パスワード（README に載っていた値。秘密ではない）。
 # remove-test-users の対象判定と scripts/seed.py のテストアカウント作成で共用し、

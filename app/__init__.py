@@ -46,6 +46,11 @@ def create_app(config_class=Config):
     if proxy_hops > 0:
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxy_hops, x_proto=proxy_hops, x_host=0)
 
+    # 本番（HTTPS 配信）なのにメールの送信先が未設定だと、再設定リンクがログにしか出ない
+    if app.config.get('SESSION_COOKIE_SECURE') and not app.config.get('MAIL_SERVER'):
+        app.logger.warning('MAIL_SERVER が未設定です。パスワード再設定のメールは送信されず、リンクがログに出力されます'
+                           '（.env に MAIL_SERVER などを設定してください）')
+
     db.init_app(app)
     login_manager.init_app(app)
     # 全 POST に csrf_token を要求する（form は hidden の csrf_token、fetch は X-CSRFToken ヘッダ）
