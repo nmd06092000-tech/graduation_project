@@ -43,9 +43,11 @@ def user_list():
         'admin/user_list.html', users=[user_service.account_row(user) for user in accounts],
         departments=user_service.list_departments(),
         filters=filters, user_total=user_service.count_accounts(), issued_code=_pop_issued_code()))
-    # コードを含むページは保存・Referer 送信をさせない
+    # コードを含むページは保存させず、外部サイトへの Referer 送信もさせない。
+    # same-origin は外部へは Referer を送らないが、自サイトへの POST には送るので、
+    # HTTPS での CSRF 検証（Referer 必須）が通る（no-referrer だと CSRFError になる）
     response.headers['Cache-Control'] = 'no-store'
-    response.headers['Referrer-Policy'] = 'no-referrer'
+    response.headers['Referrer-Policy'] = 'same-origin'
     return response
 
 

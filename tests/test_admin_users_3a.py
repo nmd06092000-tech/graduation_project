@@ -425,13 +425,13 @@ def test_list_with_no_match_shows_empty_message(admin_client):
 
 
 @pytest.mark.parametrize('path', ['/admin/users', '/admin/users?role=admin&q=a'])
-def test_list_always_sends_no_store_and_no_referrer_headers(admin_client, path):
+def test_list_always_sends_no_store_and_same_origin_referrer_headers(admin_client, path):
     # Act
     response = _get(admin_client, path)
 
-    # Assert: コードがない通常の表示でも付く
+    # Assert: コードがない通常の表示でも付く（same-origin: 外部へは Referer を送らず、HTTPS の CSRF 検証は通る）
     assert response.headers['Cache-Control'] == 'no-store'
-    assert response.headers['Referrer-Policy'] == 'no-referrer'
+    assert response.headers['Referrer-Policy'] == 'same-origin'
 
 
 def test_list_page_is_standalone_without_nav_parent(admin_client):
@@ -807,7 +807,7 @@ def test_reset_code_is_shown_once_with_expiry_and_copy_button(admin_client, worl
     assert '山田 道路' in html and 'ログインID: staff_a' in html
     assert f"有効期限: {stored['expires_at_text']}" in html
     assert 'id="issued-code-copy"' in html and 'コピー' in html
-    assert response.headers['Cache-Control'] == 'no-store' and response.headers['Referrer-Policy'] == 'no-referrer'
+    assert response.headers['Cache-Control'] == 'no-store' and response.headers['Referrer-Policy'] == 'same-origin'
     assert '再設定コードを発行しました' in html
 
 

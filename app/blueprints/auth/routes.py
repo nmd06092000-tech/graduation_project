@@ -187,8 +187,12 @@ def reset_password_confirm(token):
 
 
 def _no_leak(response):
-    """再設定リンクの画面の応答：Referer を送らせず、キャッシュさせない"""
-    response.headers['Referrer-Policy'] = 'no-referrer'
+    """再設定リンクの画面の応答：外部サイトへ Referer を送らせず、キャッシュさせない
+
+    same-origin は外部へは Referer を送らないが、自サイトへの POST には送るので、
+    HTTPS での CSRF 検証（Referer 必須）が通る（no-referrer だと CSRFError になる）
+    """
+    response.headers['Referrer-Policy'] = 'same-origin'
     response.headers['Cache-Control'] = 'no-store'
     return response
 

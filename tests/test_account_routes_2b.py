@@ -362,7 +362,7 @@ def _assert_link_invalid_redirect(client, response):
     """リンク無効：1 つ目の画面へ redirect・flash・ヘッダ"""
     assert response.status_code == 302 and response.headers['Location'] == '/reset-password'
     assert _flashes(client) == [('danger', MSG_RESET_LINK_INVALID)]
-    assert response.headers['Referrer-Policy'] == 'no-referrer'
+    assert response.headers['Referrer-Policy'] == 'same-origin'
     assert response.headers['Cache-Control'] == 'no-store'
 
 
@@ -383,7 +383,7 @@ def test_confirm_page_with_valid_token_shows_confirm_form_with_privacy_headers(a
     assert 'type="password"' not in html
     assert len(re.findall(r'<form\b', html)) == 1 and 'method="POST"' in html
     assert f'action="{url}"' in html
-    assert response.headers['Referrer-Policy'] == 'no-referrer'
+    assert response.headers['Referrer-Policy'] == 'same-origin'
     assert response.headers['Cache-Control'] == 'no-store'
 
 
@@ -473,7 +473,7 @@ def test_confirm_post_sets_pending_password_and_user_can_log_in(client, reset_li
     # Assert
     assert response.status_code == 302 and response.headers['Location'] == '/reset-password/complete'
     assert response.headers['Cache-Control'] == 'no-store'
-    assert response.headers['Referrer-Policy'] == 'no-referrer'
+    assert response.headers['Referrer-Policy'] == 'same-origin'
     assert _password_of(citizen.id).check_password(NEW_PW)
     assert client.get('/reset-password/complete').status_code == 200
     # 新しいパスワードでログインでき、古いパスワードでは入れない
