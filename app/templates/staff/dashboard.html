@@ -147,14 +147,15 @@
                         </div>
                         {% if google_maps_api_key %}
                         <!-- Google Maps（ピンは static/js/map.js が表示。地図表示画面と同じ。ピン色で緊急度を区別） -->
-                        <div id="reportMap" class="dashboard-map rounded"
+                        <!-- CSS がキャッシュで古くても高さ 0 にならないよう、最低高さをインラインでも指定 -->
+                        <div id="reportMap" class="dashboard-map rounded" style="min-height: 300px;"
                              data-map-id="{{ google_maps_map_id }}"
                              data-detail-url="{{ url_for('staff.report_detail', report_id=0) }}"></div>
                         <!-- GPS 情報がない報告のピンは、発生場所の住所を国土地理院の住所検索 API で検索した位置 -->
                         <div class="text-end small text-muted mt-1">住所検索 出典：国土地理院</div>
                         {% else %}
                         <!-- GOOGLE_MAPS_API_KEY 未設定時の代替表示 -->
-                        <div class="dashboard-map dashboard-map-placeholder bg-secondary text-white rounded text-center py-4">
+                        <div class="dashboard-map dashboard-map-placeholder bg-secondary text-white rounded text-center py-4" style="min-height: 300px;">
                             <i class="bi bi-map fs-1"></i>
                             <p class="small mb-0">［GISマップ表示エリア：ピン色で緊急度を区別］</p>
                         </div>

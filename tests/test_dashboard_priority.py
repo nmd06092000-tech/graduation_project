@@ -114,16 +114,20 @@ def test_dashboard_map_has_dashboard_map_class_without_fixed_height(app, client,
     tag = re.search(r'<div id="reportMap"[^>]*>', html)
     assert tag
     assert 'dashboard-map' in tag.group(0)
-    assert 'height: 300px' not in tag.group(0)
-    assert 'height: 300px' not in html
+    # min-height は inline で指定、固定 height は禁止（min-height を除く）
+    assert 'min-height: 300px' in tag.group(0)
+    assert not re.search(r'(?<!min-)height:\s*300px', tag.group(0))
+    assert not re.search(r'(?<!min-)height:\s*300px', html)
 
 
 def test_dashboard_placeholder_has_dashboard_map_class_without_key(app, client, login, staff):
     html = _dashboard_html(app, client, login, staff, '')
 
-    placeholder = re.search(r'<div class="[^"]*dashboard-map-placeholder[^"]*"', html)
+    placeholder = re.search(r'<div class="[^"]*dashboard-map-placeholder[^"]*"[^>]*>', html)
     assert placeholder
     assert re.search(r'(^|\s|")dashboard-map(\s|")', placeholder.group(0))
+    assert 'min-height: 300px' in placeholder.group(0)
+    assert not re.search(r'(?<!min-)height:\s*300px', placeholder.group(0))
     assert 'id="reportMap"' not in html
 
 
