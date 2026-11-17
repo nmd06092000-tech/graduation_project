@@ -45,3 +45,17 @@
     overflow-wrap: anywhere;
     user-select: all;
 }
+
+/* ダッシュボードの地域マップ：隣の優先対応カードに合わせて伸び、最低 300px を確保する（初期化時に高さ 0 にならないように） */
+.dashboard-map {
+    flex: 1 1 auto;
+    min-height: 300px;
+}
+
+/* API キー未設定時の代替表示：中身を中央に寄せる */
+.dashboard-map-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}

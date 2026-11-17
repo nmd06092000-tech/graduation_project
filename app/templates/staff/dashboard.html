@@ -118,8 +118,9 @@
 
             <!-- 下段：本日の優先対応 & 地域マップ -->
             <div class="row g-3">
-                <div class="col-md-6">
-                    <div class="card border-0 shadow-sm p-3">
+                <!-- d-flex + h-100：md 以上で 2 枚のカードの高さを揃える -->
+                <div class="col-md-6 d-flex">
+                    <div class="card border-0 shadow-sm p-3 w-100 h-100 d-flex flex-column">
                         <h6 class="fw-bold mb-3">本日の優先対応案件</h6>
                         <ul class="list-group list-group-flush small">
                             {% for r in priority_reports %}
@@ -132,24 +133,28 @@
                             <li class="list-group-item px-0 py-2 text-muted">優先対応が必要な案件はありません。</li>
                             {% endfor %}
                         </ul>
+                        {% if (priority_total or 0) > (priority_reports or [])|length %}
+                        <!-- 表示は上位 10 件まで。残りは報告一覧で確認する -->
+                        <a href="{{ url_for('staff.report_list') }}" class="btn btn-sm btn-outline-primary mt-3 align-self-start">報告一覧で全件を見る（全 {{ priority_total }} 件）</a>
+                        {% endif %}
                     </div>
                 </div>
-                <div class="col-md-6">
-                    <div class="card border-0 shadow-sm p-3">
+                <div class="col-md-6 d-flex">
+                    <div class="card border-0 shadow-sm p-3 w-100 h-100 d-flex flex-column">
                         <div class="d-flex justify-content-between align-items-center mb-2">
                             <h6 class="fw-bold mb-0">地域の問題マップ</h6>
                             <a href="{{ url_for('staff.report_map') }}" class="small text-decoration-none">地図表示で見る →</a>
                         </div>
                         {% if google_maps_api_key %}
                         <!-- Google Maps（ピンは static/js/map.js が表示。地図表示画面と同じ。ピン色で緊急度を区別） -->
-                        <div id="reportMap" class="rounded" style="height: 300px;"
+                        <div id="reportMap" class="dashboard-map rounded"
                              data-map-id="{{ google_maps_map_id }}"
                              data-detail-url="{{ url_for('staff.report_detail', report_id=0) }}"></div>
                         <!-- GPS 情報がない報告のピンは、発生場所の住所を国土地理院の住所検索 API で検索した位置 -->
                         <div class="text-end small text-muted mt-1">住所検索 出典：国土地理院</div>
                         {% else %}
                         <!-- GOOGLE_MAPS_API_KEY 未設定時の代替表示 -->
-                        <div class="bg-secondary text-white rounded text-center py-4" style="height: 120px;">
+                        <div class="dashboard-map dashboard-map-placeholder bg-secondary text-white rounded text-center py-4">
                             <i class="bi bi-map fs-1"></i>
                             <p class="small mb-0">［GISマップ表示エリア：ピン色で緊急度を区別］</p>
                         </div>

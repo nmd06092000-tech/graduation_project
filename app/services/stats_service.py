@@ -21,7 +21,7 @@ from app.models import Category, Report, ReportStatusHistory
 from app.services.report_service import JST
 
 # ダッシュボードの「本日の優先対応案件」に表示する最大件数
-PRIORITY_LIMIT = 5
+PRIORITY_LIMIT = 10
 
 # 統計画面の「月別報告件数トレンド」に表示する月数（今月を含む）
 TREND_MONTHS = 6
@@ -74,10 +74,15 @@ def count_by_urgency():
     } for u in Urgency]
 
 
+def _priority_conditions():
+    """本日の優先対応案件の条件（緊急度「高」かつ未完了）。一覧と件数で共用する"""
+    return (Report.urgency == Urgency.HIGH.value, Report.status.in_(_OPEN_STATUS_VALUES))
+
+
 def priority_reports():
-    """本日の優先対応案件：緊急度「高」の未完了の報告（古い順）。ダッシュボード 基本フロー1"""
+    """本日の優先対応案件：緊急度「高」の未完了の報告（古い順、最大 PRIORITY_LIMIT 件）。ダッシュボード 基本フロー1"""
     stmt = (select(Report)
-            .where(Report.urgency == Urgency.HIGH.value, Report.status.in_(_OPEN_STATUS_VALUES))
+            .where(*_priority_conditions())
             .order_by(Report.created_at, Report.id)
             .limit(PRIORITY_LIMIT))
     return [{
@@ -86,6 +91,12 @@ def priority_reports():
         'location': r.address,
         'urgency': Urgency.label_of(r.urgency),
     } for r in db.session.execute(stmt).scalars()]
+
+
+def count_priority_reports():
+    """本日の優先対応案件の総件数（PRIORITY_LIMIT 超のとき 報告一覧 ボタンを出す判定用）。ダッシュボード 基本フロー1"""
+    stmt = select(func.count()).select_from(Report).where(*_priority_conditions())
+    return db.session.execute(stmt).scalar_one()
 
 
 def map_filter_options():

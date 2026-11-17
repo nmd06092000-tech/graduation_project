@@ -25,6 +25,7 @@ def dashboard():
                            category_stats=stats_service.count_by_category(),
                            urgency_stats=stats_service.count_by_urgency(),
                            priority_reports=stats_service.priority_reports(),
+                           priority_total=stats_service.count_priority_reports(),
                            notifications=notification_service.list_unread(),
                            unread_count=notification_service.count_unread(),
                            map_reports=stats_service.map_points(),

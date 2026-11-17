@@ -334,7 +334,7 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 市民 | アイコン設定 | `/citizen/profile/icon`, ảnh: `/citizen/profile/icon/image` | ✅ `citizen.profile_icon`, `citizen.profile_icon_image` | user_service, storage_service |
 | 市民 | アイコン撮影 | `/citizen/profile/icon/camera` (ảnh chụp gửi tới `citizen.profile_icon`) | ✅ `citizen.profile_icon_camera` | user_service, storage_service |
 | 市民 | アイコン削除 | `POST /citizen/profile/icon/delete` | ✅ `citizen.profile_icon_delete` | user_service, storage_service |
-| 職員 | ダッシュボード | `/staff/dashboard` | ✅ `staff.dashboard` | stats_service (`map_points`: 地域の問題マップ（Google Maps、map.js 共用）) |
+| 職員 | ダッシュボード | `/staff/dashboard` | ✅ `staff.dashboard` | stats_service (`priority_reports`: 本日の優先対応案件は最大 10 件、`count_priority_reports` の総数が 10 を超えると 報告一覧 ボタンを表示; `map_points`: 地域の問題マップ（Google Maps、map.js 共用）) |
 | 職員 | 報告一覧 | `/staff/reports` | ✅ `staff.report_list` | report_service |
 | 職員 | 報告内容, 対応状況, 対応履歴 | `/staff/reports/<id>` | ✅ `staff.report_detail` | report_service, status_service |
 | 職員 | 対応状況を更新する | `POST /staff/reports/<id>/status` | ✅ `staff.report_status_update` | status_service |

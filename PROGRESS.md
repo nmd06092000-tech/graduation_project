@@ -159,6 +159,7 @@ Kế hoạch A20261116-122658. Người dùng chốt: danh sách chỉ 職員 v�
 **Trạng thái**: đã nghiệm thu 2026-11-16 (1025 pass/0/0; security ĐẠT, architecture đã sửa).
 
 ## Việc nhỏ ngoài lộ trình
+- 2026-11-17 (kế hoạch A20261117-120553): ダッシュボード 職員: 本日の優先対応案件 hiện tối đa 10 (`PRIORITY_LIMIT` 5 → 10), thêm `stats_service.count_priority_reports()` và biến template `priority_total` để frontend hiện nút 報告一覧 khi có hơn 10; điều kiện 優先対応 tách vào `_priority_conditions()` dùng chung. Không đổi DB.
 - 2026-11-17 (kế hoạch A20261117-104147): sửa lỗi production trên HTTPS (`WTF_CSRF_SSL_STRICT=True`): trang có `Referrer-Policy: no-referrer` làm form POST không gửi Referer ⇒ Flask-WTF báo CSRFError 「The referrer header is missing.」 rồi bị đưa về `public.index`. Backend: đổi sang `Referrer-Policy: same-origin` ở `admin.user_list` và `_no_leak` (`auth/routes.py`, dùng cho trang `reset_password_confirm`); vẫn không gửi Referer ra site ngoài. Giữ `Cache-Control: no-store`. Test cũ (`test_account_routes_2b.py`, `test_admin_users_3a.py`) còn assert `no-referrer` ⇒ tester cập nhật.
 - 2026-11-17 (kế hoạch A20261117-100122): 市民 パスワード再設定 trả về **một màn** (email + mật khẩu mới + xác nhận), mật khẩu chỉ có hiệu lực khi mở link trong mail rồi bấm 「パスワードの変更を確定する」 (POST). Backend xong (frontend/tester làm song song):
   - Migration `e5b2c8f1a937` (sau `d4a91c7e5b36`): `password_reset_tokens.pending_password_hash VARCHAR(255) NULL`. **Người dùng tự chạy `flask --app run db upgrade`** (local và EC2); chưa chạy trên DB dev. Link gửi trước khi deploy bị vô hiệu.
