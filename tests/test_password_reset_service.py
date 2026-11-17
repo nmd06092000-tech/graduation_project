@@ -7,6 +7,7 @@ from datetime import timedelta
 from threading import Barrier
 
 import pytest
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.constants import (
     MSG_ACCOUNT_DISABLED, MSG_CURRENT_PASSWORD_REQUIRED, MSG_CURRENT_PASSWORD_WRONG, MSG_EMAIL_NO_AT,
@@ -34,8 +35,14 @@ def _fresh(user_id):
     return db.session.get(User, user_id)
 
 
-def _request(email='taro@example.com'):
-    auth_service.request_password_reset(email)
+def _request(email='taro@example.com', password=NEW_PW):
+    auth_service.request_password_reset(email, password, password)
+
+
+def _pending(user_id):
+    """そのユーザーのトークンの確認待ちハッシュ（id 順）"""
+    db.session.expire_all()
+    return [t.pending_password_hash for t in _tokens(user_id)]
 
 
 def _lock_message(minutes):
@@ -58,7 +65,7 @@ def operator_admin(app):
 
 def test_request_reset_creates_hashed_token_and_sends_link(citizen, clock, outbox):
     # Act
-    result = auth_service.request_password_reset('taro@example.com')
+    result = auth_service.request_password_reset('taro@example.com', NEW_PW, NEW_PW)
 
     # Assert: 返り値なし。メールは本人宛て・件名と本文に再設定リンク
     assert result is None
@@ -77,35 +84,87 @@ def test_request_reset_creates_hashed_token_and_sends_link(citizen, clock, outbo
     assert token.used_at is None
 
 
+def test_request_reset_stores_only_hash_of_pending_password_and_keeps_current_password(citizen, outbox):
+    # Act
+    _request()
+
+    # Assert: 確認待ちはハッシュ（平文ではない）。ユーザーのパスワードはまだ変わらない
+    [token] = _tokens(citizen.id)
+    assert token.pending_password_hash and NEW_PW not in token.pending_password_hash
+    assert check_password_hash(token.pending_password_hash, NEW_PW)
+    fresh = _fresh(citizen.id)
+    assert fresh.check_password('password123') and not fresh.check_password(NEW_PW)
+    assert auth_service.authenticate(User.ROLE_CITIZEN, 'taro@example.com', 'password123').id == citizen.id
+    with pytest.raises(ServiceError):
+        auth_service.authenticate(User.ROLE_CITIZEN, 'taro@example.com', NEW_PW)
+
+
+def test_request_reset_mail_body_does_not_contain_password(citizen, outbox):
+    # Act
+    _request()
+
+    # Assert: 件名・本文にパスワードも確認待ちのハッシュも入らない。確定のボタン名・「開くだけでは変更されない」旨はある
+    _, subject, body = outbox.call_args.args
+    [token] = _tokens(citizen.id)
+    assert NEW_PW not in body and NEW_PW not in subject
+    assert token.pending_password_hash not in body
+    assert 'パスワードの変更を確定する' in body and 'リンクを開くだけでは変更されません' in body
+
+
 def test_request_reset_normalizes_email_case_and_spaces(citizen, outbox):
     # Act
-    auth_service.request_password_reset('  Taro@Example.COM ')
+    auth_service.request_password_reset('  Taro@Example.COM ', NEW_PW, NEW_PW)
 
     # Assert
     assert outbox.call_args.args[0] == 'taro@example.com'
     assert len(_tokens(citizen.id)) == 1
 
 
-@pytest.mark.parametrize('email, expected', [
-    ('', ('warning', MSG_EMAIL_REQUIRED)),
-    ('   ', ('warning', MSG_EMAIL_REQUIRED)),
-    (None, ('warning', MSG_EMAIL_REQUIRED)),
-    ('taro.example.com', ('warning', MSG_EMAIL_NO_AT.format(email='taro.example.com'))),
+@pytest.mark.parametrize('email, new, confirm, expected', [
+    ('', NEW_PW, NEW_PW, [('warning', MSG_EMAIL_REQUIRED)]),
+    ('   ', NEW_PW, NEW_PW, [('warning', MSG_EMAIL_REQUIRED)]),
+    (None, NEW_PW, NEW_PW, [('warning', MSG_EMAIL_REQUIRED)]),
+    ('taro.example.com', NEW_PW, NEW_PW, [('warning', MSG_EMAIL_NO_AT.format(email='taro.example.com'))]),
+    ('taro@example.com', '', '', [('warning', MSG_PASSWORD_REQUIRED)]),
+    ('taro@example.com', None, None, [('warning', MSG_PASSWORD_REQUIRED)]),
+    ('taro@example.com', 'short', 'short', [('warning', MSG_PASSWORD_TOO_SHORT.format(length=5))]),
+    ('taro@example.com', NEW_PW, NEW_PW + 'x', [('warning', MSG_PASSWORD_MISMATCH)]),
+    ('taro@example.com', 'password123', 'password123', [('warning', MSG_PASSWORD_PUBLIC)]),
+    # メールとパスワードの誤りは 1 つの ValidationError にまとめる
+    ('', 'short', 'x', [('warning', MSG_EMAIL_REQUIRED), ('warning', MSG_PASSWORD_TOO_SHORT.format(length=5))]),
+    ('taro.example.com', NEW_PW, 'different-pw',
+     [('warning', MSG_EMAIL_NO_AT.format(email='taro.example.com')), ('warning', MSG_PASSWORD_MISMATCH)]),
 ])
-def test_request_reset_rejects_empty_or_no_at(citizen, outbox, email, expected):
+def test_request_reset_input_errors_are_collected_and_create_nothing(citizen, outbox, email, new, confirm, expected):
     # Act
     with pytest.raises(ValidationError) as e:
-        auth_service.request_password_reset(email)
+        auth_service.request_password_reset(email, new, confirm)
 
-    # Assert
-    assert e.value.messages == [expected]
+    # Assert: トークンもメールもなし。パスワードは変わらない
+    assert e.value.messages == expected
     outbox.assert_not_called()
     assert _tokens(citizen.id) == []
+    assert _fresh(citizen.id).check_password('password123')
+
+
+def test_request_reset_input_error_keeps_existing_valid_token(citizen, clock, outbox):
+    # Arrange: すでに有効な申請がある
+    _request()
+    raw = sent_reset_token(outbox)
+    clock.advance(seconds=61)
+
+    # Act: 入力ミスの申請
+    with pytest.raises(ValidationError):
+        auth_service.request_password_reset('taro@example.com', 'short', 'short')
+
+    # Assert: 前のリンクはそのまま使える（入力エラーでは無効化しない）
+    assert auth_service.is_reset_token_valid(raw) is True
+    assert outbox.call_count == 1
 
 
 def test_request_reset_unknown_email_is_silent(citizen, outbox):
     # Act: 例外にも返り値にもならず、メールもトークンも作らない（登録の有無が分からない）
-    result = auth_service.request_password_reset('nobody@example.com')
+    result = auth_service.request_password_reset('nobody@example.com', NEW_PW, NEW_PW)
 
     # Assert
     assert result is None
@@ -119,23 +178,25 @@ def test_request_reset_inactive_citizen_gets_no_mail(citizen, outbox):
     db.session.commit()
 
     # Act
-    assert auth_service.request_password_reset('taro@example.com') is None
+    assert auth_service.request_password_reset('taro@example.com', NEW_PW, NEW_PW) is None
 
     # Assert
     outbox.assert_not_called()
     assert PasswordResetToken.query.count() == 0
 
 
-def test_request_reset_non_citizen_with_email_like_id_gets_no_mail(app, outbox):
+@pytest.mark.parametrize('role', [User.ROLE_STAFF, User.ROLE_ADMIN])
+def test_request_reset_non_citizen_with_email_like_id_gets_no_mail(app, outbox, role):
     # Arrange: 役割が市民ではないアカウント（ID が @ 付きでも市民用の画面では対象外）
-    staff = _make_user('ops@example.com', '運用', User.ROLE_STAFF)
+    operator = _make_user('ops@example.com', '運用', role)
 
     # Act
-    auth_service.request_password_reset('ops@example.com')
+    auth_service.request_password_reset('ops@example.com', NEW_PW, NEW_PW)
 
-    # Assert
+    # Assert: 結果は返さず、トークンもメールもなし。パスワードも変わらない
     outbox.assert_not_called()
-    assert _tokens(staff.id) == []
+    assert _tokens(operator.id) == []
+    assert _fresh(operator.id).check_password('password123')
 
 
 def test_request_reset_new_token_invalidates_old_one(citizen, clock, outbox):
@@ -153,6 +214,27 @@ def test_request_reset_new_token_invalidates_old_one(citizen, clock, outbox):
     assert len([t for t in _tokens(citizen.id) if t.used_at is None]) == 1
     assert auth_service.is_reset_token_valid(old) is False
     assert auth_service.is_reset_token_valid(new) is True
+    # 古いトークンの確認待ちハッシュは消え、新しいほうだけが持つ
+    first, second = _tokens(citizen.id)
+    db.session.expire_all()
+    assert first.pending_password_hash is None and second.pending_password_hash is not None
+
+
+def test_request_reset_new_password_of_second_request_is_the_one_applied(citizen, clock, outbox):
+    # Arrange: 1 回目は NEW_PW、2 回目は別のパスワードで申請
+    _request(password=NEW_PW)
+    old = sent_reset_token(outbox)
+    clock.advance(seconds=61)
+    _request(password='Second-pw-1')
+    new = sent_reset_token(outbox)
+
+    # Act / Assert: 古いリンクでは何も変わらず、新しいリンクで 2 回目のパスワードになる
+    with pytest.raises(ServiceError):
+        auth_service.confirm_password_reset(old)
+    assert _fresh(citizen.id).check_password('password123')
+    auth_service.confirm_password_reset(new)
+    fresh = _fresh(citizen.id)
+    assert fresh.check_password('Second-pw-1') and not fresh.check_password(NEW_PW)
 
 
 # ---------------------------------------------------------------------------
@@ -235,12 +317,13 @@ def test_request_reset_mail_failure_deletes_token_and_stays_silent(citizen, cloc
 
     # Act
     with caplog.at_level('DEBUG'):
-        assert auth_service.request_password_reset('taro@example.com') is None
+        assert auth_service.request_password_reset('taro@example.com', NEW_PW, NEW_PW) is None
 
-    # Assert: 作ったトークンは消え、リンクもログに残らない
+    # Assert: 作ったトークン（確認待ちハッシュごと）は消え、リンクもパスワードもログに残らない。パスワードは変わらない
     assert _tokens(citizen.id) == []
     raw = re.search(r'/reset-password/confirm/([A-Za-z0-9_-]+)', captured['body']).group(1)
-    assert raw not in caplog.text
+    assert raw not in caplog.text and NEW_PW not in caplog.text
+    assert _fresh(citizen.id).check_password('password123')
     assert 'パスワード再設定メールを送信できませんでした' in caplog.text
     # 失敗は回数に数えない：すぐにもう一度試せる
     outbox.side_effect = None
@@ -305,43 +388,84 @@ def test_is_reset_token_valid_false_for_staff_reset_code(operator_staff):
 
 
 # ---------------------------------------------------------------------------
-# reset_password_with_token
+# confirm_password_reset（メールのリンクの確認画面で「確定する」を押したとき）
 # ---------------------------------------------------------------------------
 
-def test_reset_with_token_changes_password_and_consumes_token(citizen, clock, outbox):
+def _mail_token(user_id, raw, clock, *, pending='hash', used_at=None, minutes=30):
+    """メールのリンク相当のトークンを手で作る（pending=None で「確認待ちのパスワードなし」）"""
+    pending_hash = generate_password_hash(NEW_PW) if pending == 'hash' else pending
+    token = PasswordResetToken(
+        user_id=user_id, token_hash=hashlib.sha256(raw.encode()).hexdigest(), created_at=clock.now,
+        expires_at=clock.now + timedelta(minutes=minutes), used_at=used_at, pending_password_hash=pending_hash)
+    db.session.add(token)
+    db.session.commit()
+    return token
+
+
+def test_confirm_reset_changes_password_and_consumes_token(citizen, clock, outbox):
     # Arrange
     _request()
     raw = sent_reset_token(outbox)
     clock.advance(minutes=5)
 
     # Act
-    user = auth_service.reset_password_with_token(raw, NEW_PW, NEW_PW)
+    user = auth_service.confirm_password_reset(raw)
 
-    # Assert
+    # Assert: 申請のときのパスワードが有効になり、古いパスワードは使えない。トークンは使用済み・ハッシュは NULL
     assert user.id == citizen.id
     fresh = _fresh(citizen.id)
     assert fresh.check_password(NEW_PW) and not fresh.check_password('password123')
-    assert _tokens(citizen.id)[0].used_at == clock.now
-    # 新しいパスワードで認証できる
+    [token] = _tokens(citizen.id)
+    assert token.used_at == clock.now and token.pending_password_hash is None
     assert auth_service.authenticate(User.ROLE_CITIZEN, 'taro@example.com', NEW_PW).id == citizen.id
+    with pytest.raises(ServiceError):
+        auth_service.authenticate(User.ROLE_CITIZEN, 'taro@example.com', 'password123')
 
 
-def test_reset_with_token_cannot_be_used_twice(citizen, outbox):
+def test_confirm_reset_applies_the_stored_hash_itself(citizen, outbox):
+    # Arrange
+    _request()
+    [token] = _tokens(citizen.id)
+    stored = token.pending_password_hash
+
+    # Act
+    auth_service.confirm_password_reset(sent_reset_token(outbox))
+
+    # Assert: 確認待ちのハッシュがそのままユーザーのハッシュになる（再ハッシュしない）
+    assert _fresh(citizen.id).password_hash == stored
+
+
+def test_is_reset_token_valid_does_not_change_password(citizen, outbox):
     # Arrange
     _request()
     raw = sent_reset_token(outbox)
-    auth_service.reset_password_with_token(raw, NEW_PW, NEW_PW)
 
-    # Act: 同じリンクで別のパスワードに変えようとする
+    # Act
+    assert auth_service.is_reset_token_valid(raw) is True
+
+    # Assert: 確認画面の表示用の判定では何も変わらない
+    assert _fresh(citizen.id).check_password('password123')
+    assert _pending(citizen.id)[0] is not None
+
+
+def test_confirm_reset_cannot_be_used_twice(citizen, outbox):
+    # Arrange
+    _request()
+    raw = sent_reset_token(outbox)
+    auth_service.confirm_password_reset(raw)
+    changed_hash = _fresh(citizen.id).password_hash
+
+    # Act: 同じリンクをもう一度
     with pytest.raises(ServiceError) as e:
-        auth_service.reset_password_with_token(raw, 'Another-pw-1', 'Another-pw-1')
+        auth_service.confirm_password_reset(raw)
 
     # Assert
     assert str(e.value) == MSG_RESET_LINK_INVALID
-    assert _fresh(citizen.id).check_password(NEW_PW)
+    assert _fresh(citizen.id).password_hash == changed_hash
+    assert auth_service.is_reset_token_valid(raw) is False
 
 
-def test_reset_with_token_rejected_when_expired(citizen, clock, outbox):
+def test_confirm_reset_rejected_when_expired(citizen, clock, outbox):
     # Arrange
     _request()
     raw = sent_reset_token(outbox)
@@ -349,25 +473,38 @@ def test_reset_with_token_rejected_when_expired(citizen, clock, outbox):
 
     # Act
     with pytest.raises(ServiceError) as e:
-        auth_service.reset_password_with_token(raw, NEW_PW, NEW_PW)
+        auth_service.confirm_password_reset(raw)
 
     # Assert
     assert str(e.value) == MSG_RESET_LINK_INVALID
     assert _fresh(citizen.id).check_password('password123')
+
+
+def test_confirm_reset_still_valid_just_before_expiry(citizen, clock, outbox):
+    # Arrange
+    _request()
+    raw = sent_reset_token(outbox)
+    clock.advance(minutes=29, seconds=59)
+
+    # Act
+    auth_service.confirm_password_reset(raw)
+
+    # Assert
+    assert _fresh(citizen.id).check_password(NEW_PW)
 
 
 @pytest.mark.parametrize('token', ['', None, 'unknown-token'])
-def test_reset_with_token_rejects_unknown_token(citizen, token):
+def test_confirm_reset_rejects_unknown_token(citizen, token):
     # Act
     with pytest.raises(ServiceError) as e:
-        auth_service.reset_password_with_token(token, NEW_PW, NEW_PW)
+        auth_service.confirm_password_reset(token)
 
     # Assert
     assert str(e.value) == MSG_RESET_LINK_INVALID
     assert _fresh(citizen.id).check_password('password123')
 
 
-def test_reset_with_token_old_token_is_invalid_after_new_request(citizen, clock, outbox):
+def test_confirm_reset_old_token_is_invalid_after_new_request(citizen, clock, outbox):
     # Arrange
     _request()
     old = sent_reset_token(outbox)
@@ -376,54 +513,85 @@ def test_reset_with_token_old_token_is_invalid_after_new_request(citizen, clock,
 
     # Act
     with pytest.raises(ServiceError) as e:
-        auth_service.reset_password_with_token(old, NEW_PW, NEW_PW)
+        auth_service.confirm_password_reset(old)
 
     # Assert
     assert str(e.value) == MSG_RESET_LINK_INVALID
-
-
-@pytest.mark.parametrize('new, confirm, expected', [
-    ('', '', ('warning', MSG_PASSWORD_REQUIRED)),
-    ('short', 'short', ('warning', MSG_PASSWORD_TOO_SHORT.format(length=5))),
-    (NEW_PW, NEW_PW + 'x', ('warning', MSG_PASSWORD_MISMATCH)),
-    ('password123', 'password123', ('warning', MSG_PASSWORD_PUBLIC)),
-])
-def test_reset_with_token_input_error_does_not_consume_token(citizen, outbox, new, confirm, expected):
-    # Arrange
-    _request()
-    raw = sent_reset_token(outbox)
-
-    # Act
-    with pytest.raises(ValidationError) as e:
-        auth_service.reset_password_with_token(raw, new, confirm)
-
-    # Assert: 入力ミスではトークンを使い切らない（同じリンクでやり直せる）
-    assert e.value.messages == [expected]
-    assert _tokens(citizen.id)[0].used_at is None
-    assert auth_service.is_reset_token_valid(raw) is True
     assert _fresh(citizen.id).check_password('password123')
 
 
-def test_reset_with_token_clears_lock_and_other_tokens(citizen, clock, outbox):
-    # Arrange: ロック中・失敗 3 回・別の未使用トークン（職員用の仕組みで作ったものも含め全部）が残っている
+def test_confirm_reset_rejects_token_without_pending_hash(citizen, clock):
+    # Arrange: 確認待ちのパスワードがない（仕組みが変わる前に送ったメールのトークン相当）
+    _mail_token(citizen.id, 'legacy-token-value', clock, pending=None)
+
+    # Act / Assert: 表示用の判定も確定も無効。パスワードは変わらず、トークンも消費されない
+    assert auth_service.is_reset_token_valid('legacy-token-value') is False
+    with pytest.raises(ServiceError) as e:
+        auth_service.confirm_password_reset('legacy-token-value')
+    assert str(e.value) == MSG_RESET_LINK_INVALID
+    assert _fresh(citizen.id).check_password('password123')
+    assert _tokens(citizen.id)[0].used_at is None
+
+
+def test_confirm_reset_rejects_already_used_token_even_with_pending_hash(citizen, clock):
+    # Arrange: 使用済みなのにハッシュが残っている行（あってはならないが、使えてはいけない）
+    _mail_token(citizen.id, 'used-token-value', clock, used_at=clock.now)
+
+    # Act / Assert
+    assert auth_service.is_reset_token_valid('used-token-value') is False
+    with pytest.raises(ServiceError):
+        auth_service.confirm_password_reset('used-token-value')
+    assert _fresh(citizen.id).check_password('password123')
+
+
+def test_confirm_reset_clears_lock_failures_and_other_tokens_and_hashes(citizen, clock, outbox):
+    # Arrange: ロック中・失敗 3 回・別の未使用トークン（確認待ちハッシュ付きも含め全部）が残っている
     _request()
     raw = sent_reset_token(outbox)
     citizen.failed_login_count = 3
     citizen.locked_until = clock.now + timedelta(minutes=10)
-    db.session.add(PasswordResetToken(user_id=citizen.id, token_hash='f' * 64, expires_at=clock.now + timedelta(hours=1)))
+    db.session.add(PasswordResetToken(user_id=citizen.id, token_hash='f' * 64, expires_at=clock.now + timedelta(hours=1),
+                                      pending_password_hash=generate_password_hash('Other-pw-1')))
     db.session.commit()
 
     # Act
-    auth_service.reset_password_with_token(raw, NEW_PW, NEW_PW)
+    auth_service.confirm_password_reset(raw)
 
-    # Assert: ロック解除・回数 0、未使用のトークンは残らない。その場でログインできる
+    # Assert: ロック解除・回数 0、未使用のトークンは残らず、確認待ちのハッシュはすべて NULL。その場でログインできる
     fresh = _fresh(citizen.id)
     assert fresh.failed_login_count == 0 and fresh.locked_until is None
     assert all(t.used_at is not None for t in _tokens(citizen.id))
+    assert _pending(citizen.id) == [None, None]
     assert auth_service.authenticate(User.ROLE_CITIZEN, 'taro@example.com', NEW_PW).id == citizen.id
 
 
-def test_reset_with_token_rejected_when_owner_became_inactive(citizen, outbox):
+def test_confirm_reset_invalidates_old_session_value(citizen, outbox):
+    # Arrange: 確定前のセッションの印
+    old_value = citizen.get_id()
+    _request()
+    assert load_user(old_value).id == citizen.id
+
+    # Act
+    auth_service.confirm_password_reset(sent_reset_token(outbox))
+
+    # Assert: パスワードの印が変わるので、古いセッションは無効
+    db.session.expire_all()
+    assert load_user(old_value) is None
+
+
+def test_request_reset_alone_does_not_invalidate_old_session(citizen, outbox):
+    # Arrange
+    old_value = citizen.get_id()
+
+    # Act: 申請だけ（確定していない）
+    _request()
+
+    # Assert: 元のセッションはそのまま使える
+    db.session.expire_all()
+    assert load_user(old_value).id == citizen.id
+
+
+def test_confirm_reset_rejected_when_owner_became_inactive(citizen, outbox):
     # Arrange
     _request()
     raw = sent_reset_token(outbox)
@@ -432,37 +600,56 @@ def test_reset_with_token_rejected_when_owner_became_inactive(citizen, outbox):
 
     # Act
     with pytest.raises(ServiceError) as e:
-        auth_service.reset_password_with_token(raw, NEW_PW, NEW_PW)
+        auth_service.confirm_password_reset(raw)
 
     # Assert
     assert str(e.value) == MSG_RESET_LINK_INVALID
     assert _fresh(citizen.id).check_password('password123')
 
 
-def test_reset_with_token_rejects_staff_reset_code(operator_staff):
+def test_confirm_reset_rejects_staff_reset_code(operator_staff):
     # Arrange
     code, _ = auth_service.issue_reset_code('staff01')
 
     # Act
     with pytest.raises(ServiceError) as e:
-        auth_service.reset_password_with_token(code, NEW_PW, NEW_PW)
+        auth_service.confirm_password_reset(code)
 
     # Assert
     assert str(e.value) == MSG_RESET_LINK_INVALID
     assert _fresh(operator_staff.id).check_password('password123')
 
 
-def test_reset_with_token_succeeds_only_once_under_concurrency(app, citizen, outbox):
+def test_reset_code_tokens_have_no_pending_hash(operator_staff):
+    # Act
+    auth_service.issue_reset_code('staff01')
+
+    # Assert: 職員・管理者の再設定コードは確認待ちのハッシュを持たない
+    assert _pending(operator_staff.id) == [None]
+
+
+def test_issue_reset_code_does_not_touch_citizen_pending_token(citizen, operator_staff, outbox):
+    # Arrange: 市民の確認待ちトークン
+    _request()
+
+    # Act: 職員のコード発行は職員のトークンだけを無効にする（市民の確認待ちには触れない）
+    auth_service.issue_reset_code('staff01')
+
+    # Assert
+    assert _pending(citizen.id)[0] is not None
+
+
+def test_confirm_reset_succeeds_only_once_under_concurrency(app, citizen, outbox):
     # Arrange: 同じリンクを同時に 2 つのリクエスト（別接続）から使う
     _request()
     raw = sent_reset_token(outbox)
     barrier = Barrier(2)
 
-    def _attempt(password):
+    def _attempt(_):
         with app.app_context():
             try:
                 barrier.wait(timeout=10)
-                auth_service.reset_password_with_token(raw, password, password)
+                auth_service.confirm_password_reset(raw)
                 return 'ok'
             except ServiceError as e:
                 return str(e)
@@ -471,11 +658,13 @@ def test_reset_with_token_succeeds_only_once_under_concurrency(app, citizen, out
 
     # Act
     with ThreadPoolExecutor(max_workers=2) as pool:
-        results = list(pool.map(_attempt, [NEW_PW, 'Another-pw-1']))
+        results = list(pool.map(_attempt, [0, 1]))
 
-    # Assert: 成功は 1 回だけ。もう 1 つはリンク無効
+    # Assert: 成功は 1 回だけ。もう 1 つはリンク無効。申請のパスワードに変わり、ハッシュは NULL
     assert sorted(results) == sorted(['ok', MSG_RESET_LINK_INVALID])
     assert _tokens(citizen.id)[0].used_at is not None
+    assert _fresh(citizen.id).check_password(NEW_PW)
+    assert _pending(citizen.id) == [None]
 
 
 # ---------------------------------------------------------------------------

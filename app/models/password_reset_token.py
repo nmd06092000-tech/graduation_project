@@ -15,6 +15,9 @@ class PasswordResetToken(db.Model):
     expires_at = db.Column(db.DateTime(timezone=True), nullable=False)
     # 使用済みにした日時（NULL = 未使用）
     used_at = db.Column(db.DateTime(timezone=True))
+    # 確認待ちの新しいパスワードのハッシュ（werkzeug）。市民のメールのトークンだけが持つ（職員・管理者の再設定コードは NULL）。
+    # トークンが使用済み・無効になったら NULL に戻す。NULL のメールのトークンは使えない
+    pending_password_hash = db.Column(db.String(255))
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, server_default=sa.func.now())
 
     user = db.relationship('User')

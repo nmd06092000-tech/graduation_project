@@ -393,7 +393,7 @@ def test_reset_link_follows_public_base_url_config(app, citizen, outbox):
     app.config['PUBLIC_BASE_URL'] = 'https://team3app.example.test'
 
     # Act
-    auth_service.request_password_reset('taro@example.com')
+    auth_service.request_password_reset('taro@example.com', 'NewPass-9876', 'NewPass-9876')
 
     # Assert
     body = outbox.call_args.args[2]

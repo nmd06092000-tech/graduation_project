@@ -948,7 +948,7 @@ def test_request_password_reset_sends_nothing_for_deleted_citizen(world, outbox)
     soft_delete(world['citizen'])
 
     # Act
-    auth_service.request_password_reset('c@example.com')
+    auth_service.request_password_reset('c@example.com', NEW_PW, NEW_PW)
 
     # Assert: 通常と同じく結果は返さず、メールもトークンも作らない
     outbox.assert_not_called()
@@ -957,7 +957,7 @@ def test_request_password_reset_sends_nothing_for_deleted_citizen(world, outbox)
 
 def test_request_password_reset_still_sends_for_active_citizen(world, outbox):
     # Act
-    auth_service.request_password_reset('c@example.com')
+    auth_service.request_password_reset('c@example.com', NEW_PW, NEW_PW)
 
     # Assert: 対照（削除していなければ送る）
     outbox.assert_called_once()
@@ -965,7 +965,7 @@ def test_request_password_reset_still_sends_for_active_citizen(world, outbox):
 
 def test_mail_token_of_account_deleted_after_issue_is_unusable(world, outbox):
     # Arrange: メールを送ったあと（トークンの無効化をせずに）削除フラグだけ立てる
-    auth_service.request_password_reset('c@example.com')
+    auth_service.request_password_reset('c@example.com', NEW_PW, NEW_PW)
     token = sent_reset_token(outbox)
     assert auth_service.is_reset_token_valid(token) is True
     soft_delete(world['citizen'])
@@ -973,7 +973,7 @@ def test_mail_token_of_account_deleted_after_issue_is_unusable(world, outbox):
     # Act / Assert
     assert auth_service.is_reset_token_valid(token) is False
     with pytest.raises(ServiceError) as excinfo:
-        auth_service.reset_password_with_token(token, NEW_PW, NEW_PW)
+        auth_service.confirm_password_reset(token)
     assert str(excinfo.value) == MSG_RESET_LINK_INVALID
     assert _fresh(world['citizen'].id).check_password('password123')
 

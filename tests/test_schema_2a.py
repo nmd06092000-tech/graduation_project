@@ -57,7 +57,8 @@ def test_password_reset_tokens_table_columns_constraints(app):
     indexed = [index['column_names'] for index in inspector.get_indexes('password_reset_tokens')]
 
     # Assert
-    assert set(columns) == {'id', 'user_id', 'token_hash', 'created_at', 'expires_at', 'used_at'}
+    assert set(columns) == {'id', 'user_id', 'token_hash', 'created_at', 'expires_at', 'used_at', 'pending_password_hash'}
+    assert columns['pending_password_hash']['nullable'] is True   # 確認待ちの新しいパスワードのハッシュ（e5b2c8f1a937）
     assert columns['used_at']['nullable'] is True
     assert columns['expires_at']['nullable'] is False
     assert columns['token_hash']['nullable'] is False

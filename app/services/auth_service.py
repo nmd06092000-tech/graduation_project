@@ -120,21 +120,29 @@ def set_password_by_operator(login_id, password):
     return user
 
 
-def request_password_reset(email):
-    """市民のパスワード再設定メールを送る（1 つ目の画面）。パスワード再設定 基本フロー2〜3
+def request_password_reset(email, new_password, confirm_password):
+    """市民のパスワード再設定を申請する（メールアドレス・新しいパスワードを 1 画面で入力）。パスワード再設定 基本フロー2〜3
 
-    入力エラー（未入力・@ なし）は ValidationError（'warning'）。それ以外は結果を返さない：
-    メールアドレスが未登録・市民以外・利用停止中・送りすぎ（RESET_MAIL_*）・送信失敗のどれでも、呼び出し側は
-    同じ MSG_RESET_MAIL_SENT を表示する（登録の有無が分からないように）。
+    入力エラー（メールアドレスの未入力・@ なし、パスワードの規則・確認欄の不一致）は、まとめて ValidationError（'warning'）。
+    それ以外は結果を返さない：メールアドレスが未登録・市民以外・利用停止中・送りすぎ（RESET_MAIL_*）・送信失敗のどれでも、
+    呼び出し側は同じ MSG_RESET_MAIL_SENT を表示する（登録の有無が分からないように）。
+    新しいパスワードはハッシュにして確認待ち（pending_password_hash）で保存するだけで、ユーザーのパスワードは
+    まだ変えない（メールのリンクを開いて確定するまで、元のパスワードでログインできる → confirm_password_reset）。
     有効なトークンは 1 つだけ（古いものは使用済みにする）。メールはコミットのあとに送り、
-    送信に失敗したら作ったトークンを消す（失敗を送信回数に数えない）。トークンそのものはログに出さない。
+    送信に失敗したら作ったトークンを消す（失敗を送信回数に数えない）。トークン・パスワードはログに出さない。
     """
     email = (email or '').strip().lower()
+    errors = []
     if not email:
-        raise ValidationError([('warning', MSG_EMAIL_REQUIRED)])
-    if '@' not in email:
-        raise ValidationError([('warning', MSG_EMAIL_NO_AT.format(email=email))])
+        errors.append(('warning', MSG_EMAIL_REQUIRED))
+    elif '@' not in email:
+        errors.append(('warning', MSG_EMAIL_NO_AT.format(email=email)))
+    errors.extend(validate_operator_password(new_password, confirm_password))
+    if errors:
+        raise ValidationError(errors)
 
+    # 登録の有無で応答時間が大きく変わらないよう、ユーザーを探す前にハッシュを計算する（User.set_password と同じ方法）
+    pending_hash = generate_password_hash(new_password)
     now = _now()
     # 同じアカウントへの同時リクエストで回数制限をすり抜けないよう、行ロックを取って順番に処理する
     user = db.session.execute(
@@ -149,7 +157,8 @@ def request_password_reset(email):
     raw_token = secrets.token_urlsafe(32)
     token = PasswordResetToken(
         user_id=user_id, token_hash=_hash_secret(raw_token), created_at=now,
-        expires_at=now + timedelta(minutes=current_app.config['PASSWORD_RESET_TOKEN_MINUTES']))
+        expires_at=now + timedelta(minutes=current_app.config['PASSWORD_RESET_TOKEN_MINUTES']),
+        pending_password_hash=pending_hash)
     db.session.add(token)
     db.session.commit()
     token_id = token.id
@@ -164,7 +173,10 @@ def request_password_reset(email):
 
 
 def is_reset_token_valid(token):
-    """メールのリンクのトークンがまだ使えるか（未使用・期限内・市民の有効なアカウント）。表示用で、消費はしない"""
+    """メールのリンクのトークンがまだ使えるか（未使用・期限内・確認待ちのパスワードあり・市民の有効なアカウント）。
+
+    確認画面の表示用で、消費はしない。
+    """
     if not token:
         return False
     return db.session.execute(
@@ -172,30 +184,33 @@ def is_reset_token_valid(token):
     ).first() is not None
 
 
-def reset_password_with_token(token, new_password, confirm_password):
-    """メールのリンクのトークンで市民のパスワードを再設定する（2 つ目の画面）。パスワード再設定 基本フロー5〜6
+def confirm_password_reset(token):
+    """メールのリンクの確認画面で「確定する」を押したとき、確認待ちのパスワードを有効にする。パスワード再設定 基本フロー5〜6
 
-    パスワードの入力チェックを先に行う（入力ミスでトークンを使い切らない）→ トークンを 1 本の UPDATE で
-    消費する（同時に 2 回使えない）→ 市民の有効なアカウントのパスワードを変更し、失敗回数・ロックを解除し、
-    ほかのトークンも使用済みにして 1 回でコミットする。
-    入力エラーは ValidationError、トークンが無効・期限切れ・使用済みは ServiceError(MSG_RESET_LINK_INVALID)。
+    トークンを 1 本の UPDATE で消費して確認待ちのハッシュを受け取る（同時に 2 回使えない）→ 市民の有効な
+    アカウントのパスワードにそのハッシュを入れ、失敗回数・ロックを解除し、ほかのトークンも使用済みにして
+    1 回でコミットする。使った確認待ちのハッシュは消す。
+    トークンが無効・期限切れ・使用済み・確認待ちのパスワードなしは ServiceError(MSG_RESET_LINK_INVALID)。
     """
-    errors = validate_operator_password(new_password, confirm_password)
-    if errors:
-        raise ValidationError(errors)
-
     now = _now()
-    user_id = db.session.execute(
+    # RETURNING は更新後の値を返すので、確認待ちのハッシュはここでは消さず、受け取ったあとに別の文で消す（同じトランザクション）
+    consumed = db.session.execute(
         update(PasswordResetToken).where(_usable_mail_token(_hash_secret(token or ''), now))
-        .values(used_at=now).returning(PasswordResetToken.user_id)
+        .values(used_at=now)
+        .returning(PasswordResetToken.id, PasswordResetToken.user_id, PasswordResetToken.pending_password_hash)
         .execution_options(synchronize_session=False)
-    ).scalar_one_or_none()
-    if user_id is None:
+    ).one_or_none()
+    if consumed is None:
         db.session.rollback()
         raise ServiceError(MSG_RESET_LINK_INVALID)
 
+    token_id, user_id, pending_hash = consumed
+    db.session.execute(
+        update(PasswordResetToken).where(PasswordResetToken.id == token_id)
+        .values(pending_password_hash=None).execution_options(synchronize_session=False))
     user = db.session.get(User, user_id)
-    _apply_new_password(user, new_password, now)
+    user.password_hash = pending_hash
+    _finish_password_change(user, now)
     db.session.commit()
     return user
 
@@ -328,13 +343,14 @@ def _reset_link(raw_token):
 
 
 def _usable_mail_token(token_hash, now):
-    """UPDATE / SELECT の WHERE 条件：未使用・期限内で、持ち主が使える（利用停止・削除済みでない）市民のトークン
+    """UPDATE / SELECT の WHERE 条件：未使用・期限内・確認待ちのパスワードありで、持ち主が使える（利用停止・削除済みでない）市民のトークン
 
-    職員・管理者のコードは含めない。
+    職員・管理者のコードは含めない。確認待ちのパスワードがない（申請の仕組みが変わる前に送ったメールなど）トークンは使えない。
     """
     return and_(PasswordResetToken.token_hash == token_hash,
                 PasswordResetToken.used_at.is_(None),
                 PasswordResetToken.expires_at > now,
+                PasswordResetToken.pending_password_hash.is_not(None),
                 PasswordResetToken.user_id.in_(
                     select(User.id).where(User.role == User.ROLE_CITIZEN, User.is_usable)))
 
@@ -349,10 +365,13 @@ def _reset_mail_throttled(user_id, now):
 
 
 def _invalidate_reset_tokens(user_id, now):
-    """そのユーザーの未使用の再設定トークン・コードをすべて使用済みにする（コミットは呼び出し側）"""
+    """そのユーザーの未使用の再設定トークン・コードをすべて使用済みにする（コミットは呼び出し側）
+
+    確認待ちのパスワードのハッシュも消す（DB に残す期間をトークンの有効期間内に抑える）。
+    """
     db.session.execute(
         update(PasswordResetToken).where(PasswordResetToken.user_id == user_id, PasswordResetToken.used_at.is_(None))
-        .values(used_at=now).execution_options(synchronize_session=False))
+        .values(used_at=now, pending_password_hash=None).execution_options(synchronize_session=False))
 
 
 def _apply_new_password(user, new_password, now):
@@ -361,6 +380,14 @@ def _apply_new_password(user, new_password, now):
     コミットは呼び出し側。パスワードの印が変わるので、変更前のセッション・「ログイン状態を保持する」Cookie は無効になる。
     """
     user.set_password(new_password)
+    _finish_password_change(user, now)
+
+
+def _finish_password_change(user, now):
+    """パスワードを変えたあとの共通処理：失敗回数・ロックを解除し、未使用の再設定トークン・コードを使用済みにする
+
+    ハッシュを直接入れる再設定の確定（confirm_password_reset）と _apply_new_password で共有する。コミットは呼び出し側。
+    """
     user.failed_login_count = 0
     user.locked_until = None
     _invalidate_reset_tokens(user.id, now)

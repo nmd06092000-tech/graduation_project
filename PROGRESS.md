@@ -159,6 +159,9 @@ Kế hoạch A20261116-122658. Người dùng chốt: danh sách chỉ 職員 v�
 **Trạng thái**: đã nghiệm thu 2026-11-16 (1025 pass/0/0; security ĐẠT, architecture đã sửa).
 
 ## Việc nhỏ ngoài lộ trình
+- 2026-11-17 (kế hoạch A20261117-100122): 市民 パスワード再設定 trả về **một màn** (email + mật khẩu mới + xác nhận), mật khẩu chỉ có hiệu lực khi mở link trong mail rồi bấm 「パスワードの変更を確定する」 (POST). Backend xong (frontend/tester làm song song):
+  - Migration `e5b2c8f1a937` (sau `d4a91c7e5b36`): `password_reset_tokens.pending_password_hash VARCHAR(255) NULL`. **Người dùng tự chạy `flask --app run db upgrade`** (local và EC2); chưa chạy trên DB dev. Link gửi trước khi deploy bị vô hiệu.
+  - `auth_service`: `request_password_reset(email, new_password, confirm_password)` (đổi chữ ký), `confirm_password_reset(token)` (mới), bỏ `reset_password_with_token`; `is_reset_token_valid` thêm điều kiện có hash chờ. Hash chờ bị xoá khi token dùng/vô hiệu. `MSG_RESET_MAIL_SENT`, `MAIL_RESET_BODY` đổi chữ. Luồng 職員/管理者 và `citizen/change_password` không đổi.
 - 2026-11-16 (kế hoạch A20261116-144424): ダッシュボード 職員 thêm khung 地域の問題マップ (Google Maps, dùng lại `map.js` của 地図表示); `staff.dashboard` truyền `map_reports`, `google_maps_api_key`, `google_maps_map_id`. Chờ tester/người dùng nghiệm thu.
 
 ## Hướng dẫn thử như khách hàng

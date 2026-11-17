@@ -5,11 +5,12 @@ import re
 
 import pytest
 from flask import g
+from werkzeug.security import check_password_hash
 
 from app.constants import (
     MSG_CSRF_EXPIRED, MSG_CURRENT_PASSWORD_WRONG, MSG_DEPARTMENT_INVALID, MSG_DEPARTMENT_REQUIRED, MSG_EMAIL_NO_AT,
     MSG_EMAIL_REQUIRED, MSG_ID_HAS_AT, MSG_ID_TAKEN, MSG_LOGIN_LOCKED, MSG_NAME_REQUIRED, MSG_PASSWORD_CHANGED,
-    MSG_PASSWORD_MISMATCH, MSG_PASSWORD_PUBLIC, MSG_PASSWORD_SAME_AS_CURRENT, MSG_PASSWORD_TOO_SHORT,
+    MSG_PASSWORD_MISMATCH, MSG_PASSWORD_PUBLIC, MSG_PASSWORD_REQUIRED, MSG_PASSWORD_SAME_AS_CURRENT, MSG_PASSWORD_TOO_SHORT,
     MSG_RESET_CODE_INVALID, MSG_RESET_CODE_REQUIRED, MSG_RESET_LINK_INVALID, MSG_RESET_MAIL_SENT, MSG_ROLE_REQUIRED,
 )
 from app.extensions import db
@@ -76,18 +77,25 @@ def _reset_staff(client, login_id, code, password=NEW_PW, confirm=None, path='/l
 
 
 # ---------------------------------------------------------------------------
-# 市民 パスワード再設定 1 つ目：/reset-password（メールアドレス）
+# 市民 パスワード再設定 1 つ目：/reset-password（メールアドレス・新しいパスワード・確認欄を 1 画面で入力）
 # ---------------------------------------------------------------------------
 
-def test_reset_password_page_asks_only_for_email(client):
+def _post_reset(client, email='taro@example.com', new=NEW_PW, confirm=None, **extra):
+    """/reset-password へ POST する（confirm を省くと new と同じ値）"""
+    return client.post('/reset-password', data={'email': email, 'new_password': new,
+                                                'confirm_password': new if confirm is None else confirm, **extra})
+
+
+def test_reset_password_page_asks_email_and_new_password_on_one_screen(client):
     # Act
     response = client.get('/reset-password')
     html = response.get_data(as_text=True)
 
     # Assert
     assert response.status_code == 200
-    assert 'name="email"' in html and 'name="csrf_token"' in html
-    assert 'name="new_password"' not in html and 'name="confirm_password"' not in html
+    for field in ('email', 'new_password', 'confirm_password', 'csrf_token'):
+        assert f'name="{field}"' in html
+    assert 'パスワードを変更する' in html
 
 
 def test_reset_password_citizen_with_multi_address_login_id_is_neutral_and_token_removed(app, client):
@@ -95,7 +103,7 @@ def test_reset_password_citizen_with_multi_address_login_id_is_neutral_and_token
     odd = _make_user('a@x.com,b@y.com', '変な 市民', User.ROLE_CITIZEN)
 
     # Act
-    response = client.post('/reset-password', data={'email': 'a@x.com,b@y.com'})
+    response = _post_reset(client, 'a@x.com,b@y.com')
 
     # Assert: 500 にならず中立メッセージ、作成したトークンは消える
     assert response.status_code == 302
@@ -105,23 +113,58 @@ def test_reset_password_citizen_with_multi_address_login_id_is_neutral_and_token
 
 def test_reset_password_registered_email_sends_mail_and_shows_neutral_message(client, citizen, outbox):
     # Act
-    response = client.post('/reset-password', data={'email': 'taro@example.com'})
+    response = _post_reset(client)
 
-    # Assert
+    # Assert: PRG（同じ画面へ redirect）・メール 1 通・確認待ちのハッシュ付きトークン 1 つ
     assert response.status_code == 302
     assert response.headers['Location'] == '/reset-password'
     assert _flashes(client) == [('success', MSG_RESET_MAIL_SENT)]
     outbox.assert_called_once()
     assert outbox.call_args.args[0] == 'taro@example.com'
-    assert PasswordResetToken.query.filter_by(user_id=citizen.id).count() == 1
+    [token] = PasswordResetToken.query.filter_by(user_id=citizen.id).all()
+    assert check_password_hash(token.pending_password_hash, NEW_PW)
+
+
+def test_reset_password_success_message_text_and_page_after_redirect(client, citizen, outbox):
+    # Act
+    _post_reset(client)
+    html = _text(client.get('/reset-password'))
+
+    # Assert: 変更はまだ確定していない旨・リンクを開く旨がある（文言は constants のもの）
+    assert '確認メールを送信しました' in MSG_RESET_MAIL_SENT and 'パスワードの変更を確定してください' in MSG_RESET_MAIL_SENT
+    assert MSG_RESET_MAIL_SENT in html
+    assert NEW_PW not in html
+
+
+def test_reset_password_post_does_not_change_password_yet(client, citizen, outbox, login):
+    # Act
+    _post_reset(client)
+
+    # Assert: 古いパスワードでログインでき、新しいパスワードではまだ入れない（メールのリンクで確定するまで）
+    assert _password_of(citizen.id).check_password('password123')
+    assert not _logged_in(login(client.application.test_client(), User.ROLE_CITIZEN, 'taro@example.com', NEW_PW))
+    assert _logged_in(login(client.application.test_client(), User.ROLE_CITIZEN, 'taro@example.com', 'password123'))
+
+
+def test_reset_password_post_keeps_existing_session_valid(app, client, citizen, outbox, login):
+    # Arrange: 別の端末でログイン中
+    old_device = app.test_client()
+    login(old_device, User.ROLE_CITIZEN, 'taro@example.com')
+    assert _status(old_device, '/citizen/mypage') == 200
+
+    # Act: 申請だけ（確定していない）
+    _post_reset(client)
+
+    # Assert: ログイン中のセッションは無効にならない
+    assert _status(old_device, '/citizen/mypage') == 200
 
 
 def test_reset_password_unknown_email_looks_identical_and_sends_nothing(client, citizen, outbox):
     # Act
-    known = client.post('/reset-password', data={'email': 'taro@example.com'})
+    known = _post_reset(client)
     known_flashes = _flashes(client)
     unknown_client = client.application.test_client()
-    unknown = unknown_client.post('/reset-password', data={'email': 'nobody@example.com'})
+    unknown = _post_reset(unknown_client, 'nobody@example.com')
 
     # Assert: ステータス・移動先・メッセージが同じ（登録の有無が分からない）
     assert (unknown.status_code, unknown.headers['Location']) == (known.status_code, known.headers['Location'])
@@ -130,33 +173,114 @@ def test_reset_password_unknown_email_looks_identical_and_sends_nothing(client, 
     assert PasswordResetToken.query.count() == 1
 
 
+@pytest.mark.parametrize('role', [User.ROLE_STAFF, User.ROLE_ADMIN])
+def test_reset_password_staff_or_admin_email_looks_identical_and_creates_no_token(client, outbox, role):
+    # Arrange: メールアドレス形式の ID を持つ職員・管理者
+    operator = _make_user('ops@example.com', '運用', role)
+
+    # Act
+    response = _post_reset(client, 'ops@example.com')
+
+    # Assert: 未登録と同じ表示。トークンもメールもなく、パスワードも変わらない
+    assert response.status_code == 302 and response.headers['Location'] == '/reset-password'
+    assert _flashes(client) == [('success', MSG_RESET_MAIL_SENT)]
+    outbox.assert_not_called()
+    assert PasswordResetToken.query.filter_by(user_id=operator.id).count() == 0
+    assert _password_of(operator.id).check_password('password123')
+
+
+def test_reset_password_inactive_citizen_looks_identical_and_creates_no_token(client, citizen, outbox):
+    # Arrange
+    citizen.is_active = False
+    db.session.commit()
+
+    # Act
+    response = _post_reset(client)
+
+    # Assert
+    assert response.status_code == 302 and _flashes(client) == [('success', MSG_RESET_MAIL_SENT)]
+    outbox.assert_not_called()
+    assert PasswordResetToken.query.count() == 0
+
+
 def test_reset_password_throttled_request_looks_identical(client, citizen, clock, outbox):
     # Arrange
-    client.post('/reset-password', data={'email': 'taro@example.com'})
+    _post_reset(client)
     other = client.application.test_client()
 
     # Act: 60 秒以内の 2 回目
-    response = other.post('/reset-password', data={'email': 'taro@example.com'})
+    response = _post_reset(other)
 
     # Assert
     assert response.status_code == 302 and response.headers['Location'] == '/reset-password'
     assert _flashes(other) == [('success', MSG_RESET_MAIL_SENT)]
     assert outbox.call_count == 1
+    assert PasswordResetToken.query.count() == 1
 
 
-@pytest.mark.parametrize('email, message', [
-    ('', MSG_EMAIL_REQUIRED),
-    ('   ', MSG_EMAIL_REQUIRED),
-    ('taro.example.com', MSG_EMAIL_NO_AT.format(email='taro.example.com')),
+def test_reset_password_limited_to_3_mails_per_hour_with_same_message(client, citizen, clock, outbox):
+    # Arrange: 61 秒おきに 3 回
+    for _ in range(3):
+        _post_reset(client.application.test_client())
+        clock.advance(seconds=61)
+
+    # Act: 4 回目
+    other = client.application.test_client()
+    response = _post_reset(other)
+
+    # Assert: 送られず、表示は同じ
+    assert outbox.call_count == 3
+    assert response.status_code == 302 and _flashes(other) == [('success', MSG_RESET_MAIL_SENT)]
+
+
+@pytest.mark.parametrize('email, new, confirm, message', [
+    ('', NEW_PW, NEW_PW, MSG_EMAIL_REQUIRED),
+    ('   ', NEW_PW, NEW_PW, MSG_EMAIL_REQUIRED),
+    ('taro.example.com', NEW_PW, NEW_PW, MSG_EMAIL_NO_AT.format(email='taro.example.com')),
+    ('taro@example.com', '', '', MSG_PASSWORD_REQUIRED),
+    ('taro@example.com', 'short', 'short', MSG_PASSWORD_TOO_SHORT.format(length=5)),
+    ('taro@example.com', NEW_PW, NEW_PW + 'x', MSG_PASSWORD_MISMATCH),
+    ('taro@example.com', 'password123', 'password123', MSG_PASSWORD_PUBLIC),
 ])
-def test_reset_password_input_error_shows_message(client, citizen, outbox, email, message):
+def test_reset_password_input_error_rerenders_with_email_and_without_password(client, citizen, outbox, email, new,
+                                                                              confirm, message):
     # Act
-    response = client.post('/reset-password', data={'email': email})
+    response = _post_reset(client, email, new, confirm)
+    html = response.get_data(as_text=True)
 
-    # Assert: 画面を表示し直し、メッセージを出す。メールは送らない
+    # Assert: 画面を表示し直し、メッセージを出す。メールもトークンもなし
     assert response.status_code == 200
-    assert message in _text(response)
+    assert message in html_lib.unescape(html)
     outbox.assert_not_called()
+    assert PasswordResetToken.query.count() == 0
+    # 入力したメールアドレスは戻し、パスワードは HTML のどこにも入らない
+    assert f'value="{email}"' in html
+    for secret in {new, confirm} - {''}:
+        if len(secret) >= 8:
+            assert secret not in html
+    assert _password_of(citizen.id).check_password('password123')
+
+
+def test_reset_password_both_email_and_password_errors_are_shown_together(client, citizen, outbox):
+    # Act
+    response = _post_reset(client, '', 'short', 'x')
+    text = _text(response)
+
+    # Assert: メールとパスワードの誤りが 1 回の応答にまとめて出る
+    assert response.status_code == 200
+    assert MSG_EMAIL_REQUIRED in text and MSG_PASSWORD_TOO_SHORT.format(length=5) in text
+    outbox.assert_not_called()
+
+
+def test_reset_password_input_error_with_registered_email_does_not_leak_password(client, citizen, outbox):
+    # Act: 登録済みのメールで確認欄だけ違う
+    response = _post_reset(client, 'taro@example.com', NEW_PW, 'Different-pw-1')
+    html = response.get_data(as_text=True)
+
+    # Assert
+    assert response.status_code == 200
+    assert NEW_PW not in html and 'Different-pw-1' not in html
+    assert 'value="taro@example.com"' in html
 
 
 def test_reset_password_mail_failure_still_shows_neutral_message(client, citizen, outbox):
@@ -164,18 +288,18 @@ def test_reset_password_mail_failure_still_shows_neutral_message(client, citizen
     outbox.side_effect = MailError('SMTPException')
 
     # Act
-    response = client.post('/reset-password', data={'email': 'taro@example.com'})
+    response = _post_reset(client)
 
-    # Assert: 失敗してもエラー画面にならず、同じメッセージ。トークンは残らない
+    # Assert: 失敗してもエラー画面にならず、同じメッセージ。トークンは残らず、パスワードも変わらない
     assert response.status_code == 302
     assert _flashes(client) == [('success', MSG_RESET_MAIL_SENT)]
     assert PasswordResetToken.query.count() == 0
+    assert _password_of(citizen.id).check_password('password123')
 
 
 def test_reset_link_uses_public_base_url_not_request_host(client, citizen, outbox):
     # Act: Host や X-Forwarded-Host を偽装して送る
-    client.post('/reset-password', data={'email': 'taro@example.com'},
-                headers={'Host': 'evil.example', 'X-Forwarded-Host': 'evil.example'})
+    _post_reset(client, headers={'Host': 'evil.example', 'X-Forwarded-Host': 'evil.example'})
 
     # Assert
     body = outbox.call_args.args[2]
@@ -183,10 +307,19 @@ def test_reset_link_uses_public_base_url_not_request_host(client, citizen, outbo
     assert 'evil.example' not in body
 
 
+def test_reset_mail_body_has_no_password_and_explains_confirm_button(client, citizen, outbox):
+    # Act
+    _post_reset(client)
+
+    # Assert: 本文にパスワードはなく、「開くだけでは変更されない・ボタンで確定する」と書いてある
+    body = outbox.call_args.args[2]
+    assert NEW_PW not in body
+    assert 'パスワードの変更を確定する' in body and 'リンクを開くだけでは変更されません' in body
+
+
 def test_reset_password_without_csrf_token_is_rejected(csrf_client, citizen, outbox):
     # Act
-    response = csrf_client.post('/reset-password', data={'email': 'taro@example.com'},
-                                headers={'Referer': 'http://localhost/reset-password'})
+    response = _post_reset(csrf_client, headers={'Referer': 'http://localhost/reset-password'})
 
     # Assert
     assert response.status_code == 302
@@ -200,7 +333,7 @@ def test_reset_password_with_csrf_token_works(csrf_client, citizen, outbox):
     token = get_csrf_token(csrf_client, '/reset-password')
 
     # Act
-    response = csrf_client.post('/reset-password', data={'email': 'taro@example.com', 'csrf_token': token})
+    response = _post_reset(csrf_client, csrf_token=token)
 
     # Assert
     assert response.status_code == 302 and _flashes(csrf_client) == [('success', MSG_RESET_MAIL_SENT)]
@@ -208,18 +341,32 @@ def test_reset_password_with_csrf_token_works(csrf_client, citizen, outbox):
 
 
 # ---------------------------------------------------------------------------
-# 市民 パスワード再設定 2 つ目：/reset-password/confirm/<token>
+# 市民 パスワード再設定 2 つ目：/reset-password/confirm/<token>（GET は確認画面だけ。POST の「確定する」で変更）
 # ---------------------------------------------------------------------------
 
 @pytest.fixture
 def reset_link(citizen, clock, outbox):
-    """メールで届いたリンクの URL とトークン（市民 taro。service で送り、クライアントのセッションには触れない）"""
-    auth_service.request_password_reset('taro@example.com')
+    """メールで届いたリンクの URL とトークン（市民 taro。service で申請し、クライアントのセッションには触れない）"""
+    auth_service.request_password_reset('taro@example.com', NEW_PW, NEW_PW)
     raw = sent_reset_token(outbox)
     return raw, f'/reset-password/confirm/{raw}'
 
 
-def test_confirm_page_with_valid_token_shows_form_with_privacy_headers(app, reset_link):
+def _pending_of(user_id):
+    db.session.expire_all()
+    return [t.pending_password_hash for t in PasswordResetToken.query.filter_by(user_id=user_id).order_by(
+        PasswordResetToken.id).all()]
+
+
+def _assert_link_invalid_redirect(client, response):
+    """リンク無効：1 つ目の画面へ redirect・flash・ヘッダ"""
+    assert response.status_code == 302 and response.headers['Location'] == '/reset-password'
+    assert _flashes(client) == [('danger', MSG_RESET_LINK_INVALID)]
+    assert response.headers['Referrer-Policy'] == 'no-referrer'
+    assert response.headers['Cache-Control'] == 'no-store'
+
+
+def test_confirm_page_with_valid_token_shows_confirm_form_with_privacy_headers(app, reset_link):
     # Arrange
     raw, url = reset_link
 
@@ -227,11 +374,34 @@ def test_confirm_page_with_valid_token_shows_form_with_privacy_headers(app, rese
     response = app.test_client().get(url)
     html = response.get_data(as_text=True)
 
-    # Assert
+    # Assert: 確認画面（パスワード欄なし・POST フォーム 1 つ・確定ボタン）
     assert response.status_code == 200
-    assert 'name="new_password"' in html and 'name="confirm_password"' in html
+    assert 'パスワード変更の確認' in html
+    assert 'パスワードの変更を確定する' in html
+    assert 'name="csrf_token"' in html
+    assert 'name="new_password"' not in html and 'name="confirm_password"' not in html
+    assert 'type="password"' not in html
+    assert len(re.findall(r'<form\b', html)) == 1 and 'method="POST"' in html
+    assert f'action="{url}"' in html
     assert response.headers['Referrer-Policy'] == 'no-referrer'
     assert response.headers['Cache-Control'] == 'no-store'
+
+
+def test_confirm_page_get_changes_nothing(app, reset_link, citizen, login):
+    # Arrange
+    raw, url = reset_link
+    pending_before = _pending_of(citizen.id)
+
+    # Act: 何度開いても（リンクのプリフェッチ・メールのセキュリティスキャン相当）
+    for _ in range(3):
+        assert app.test_client().get(url).status_code == 200
+
+    # Assert: パスワードは元のまま・新しいパスワードでは入れない・トークンは未使用で確認待ちも残る・まだ確定できる
+    assert _password_of(citizen.id).check_password('password123')
+    assert not _logged_in(login(app.test_client(), User.ROLE_CITIZEN, 'taro@example.com', NEW_PW))
+    token = PasswordResetToken.query.filter_by(user_id=citizen.id).one()
+    assert token.used_at is None and _pending_of(citizen.id) == pending_before
+    assert auth_service.is_reset_token_valid(raw) is True
 
 
 @pytest.mark.parametrize('token', ['unknown-token', 'A' * 43, '0'])
@@ -240,10 +410,7 @@ def test_confirm_page_with_unknown_token_redirects_with_message(client, citizen,
     response = client.get(f'/reset-password/confirm/{token}')
 
     # Assert
-    assert response.status_code == 302 and response.headers['Location'] == '/reset-password'
-    assert _flashes(client) == [('danger', MSG_RESET_LINK_INVALID)]
-    assert response.headers['Referrer-Policy'] == 'no-referrer'
-    assert response.headers['Cache-Control'] == 'no-store'
+    _assert_link_invalid_redirect(client, response)
 
 
 def test_confirm_page_with_expired_token_redirects(client, reset_link, clock):
@@ -255,20 +422,58 @@ def test_confirm_page_with_expired_token_redirects(client, reset_link, clock):
     response = client.get(url)
 
     # Assert
-    assert response.status_code == 302 and response.headers['Location'] == '/reset-password'
-    assert _flashes(client) == [('danger', MSG_RESET_LINK_INVALID)]
+    _assert_link_invalid_redirect(client, response)
 
 
-def test_confirm_post_sets_new_password_and_user_can_log_in(client, reset_link, citizen, login):
+def test_confirm_page_with_used_token_redirects(client, reset_link, citizen):
+    # Arrange: 使用済みにする
+    raw, url = reset_link
+    auth_service.confirm_password_reset(raw)
+
+    # Act
+    response = client.get(url)
+
+    # Assert
+    _assert_link_invalid_redirect(client, response)
+
+
+def test_confirm_page_with_superseded_token_redirects(client, reset_link, citizen, clock):
+    # Arrange: 新しい申請で古いリンクが無効になる
+    raw, url = reset_link
+    clock.advance(seconds=61)
+    auth_service.request_password_reset('taro@example.com', 'Second-pw-1', 'Second-pw-1')
+
+    # Act
+    response = client.get(url)
+
+    # Assert
+    _assert_link_invalid_redirect(client, response)
+
+
+def test_confirm_page_with_token_without_pending_hash_redirects(client, reset_link, citizen):
+    # Arrange: 確認待ちのパスワードがないトークン（仕組みが変わる前に送ったメール相当）
+    raw, url = reset_link
+    PasswordResetToken.query.filter_by(user_id=citizen.id).update({'pending_password_hash': None})
+    db.session.commit()
+
+    # Act
+    response = client.get(url)
+
+    # Assert
+    _assert_link_invalid_redirect(client, response)
+
+
+def test_confirm_post_sets_pending_password_and_user_can_log_in(client, reset_link, citizen, login):
     # Arrange
     raw, url = reset_link
 
-    # Act
-    response = client.post(url, data={'new_password': NEW_PW, 'confirm_password': NEW_PW})
+    # Act: フォームは csrf だけ（パスワードは送らない）
+    response = client.post(url)
 
     # Assert
     assert response.status_code == 302 and response.headers['Location'] == '/reset-password/complete'
     assert response.headers['Cache-Control'] == 'no-store'
+    assert response.headers['Referrer-Policy'] == 'no-referrer'
     assert _password_of(citizen.id).check_password(NEW_PW)
     assert client.get('/reset-password/complete').status_code == 200
     # 新しいパスワードでログインでき、古いパスワードでは入れない
@@ -277,46 +482,96 @@ def test_confirm_post_sets_new_password_and_user_can_log_in(client, reset_link, 
     assert not _logged_in(login(client.application.test_client(), User.ROLE_CITIZEN, 'taro@example.com', 'password123'))
 
 
+def test_confirm_post_ignores_password_fields_in_form(client, reset_link, citizen):
+    # Arrange
+    raw, url = reset_link
+
+    # Act: 改ざんして別のパスワードを送っても、申請したパスワードが有効になる
+    client.post(url, data={'new_password': 'Evil-pw-12345', 'confirm_password': 'Evil-pw-12345'})
+
+    # Assert
+    user = _password_of(citizen.id)
+    assert user.check_password(NEW_PW) and not user.check_password('Evil-pw-12345')
+
+
+def test_confirm_post_nulls_pending_hash_and_marks_token_used(client, reset_link, citizen):
+    # Arrange
+    raw, url = reset_link
+
+    # Act
+    client.post(url)
+
+    # Assert
+    token = PasswordResetToken.query.filter_by(user_id=citizen.id).one()
+    assert token.used_at is not None and _pending_of(citizen.id) == [None]
+
+
 def test_confirm_post_link_cannot_be_used_twice(client, reset_link, citizen):
     # Arrange
     raw, url = reset_link
-    client.post(url, data={'new_password': NEW_PW, 'confirm_password': NEW_PW})
+    client.post(url)
     second_client = client.application.test_client()
 
     # Act
-    response = second_client.post(url, data={'new_password': 'Another-pw-1', 'confirm_password': 'Another-pw-1'})
+    response = second_client.post(url)
 
     # Assert: リンク無効 → 1 つ目の画面へ
-    assert response.status_code == 302 and response.headers['Location'] == '/reset-password'
-    assert _flashes(second_client) == [('danger', MSG_RESET_LINK_INVALID)]
+    _assert_link_invalid_redirect(second_client, response)
     assert _password_of(citizen.id).check_password(NEW_PW)
     # 使用済みのリンクを開き直しても同じ
     assert second_client.get(url).status_code == 302
 
 
-@pytest.mark.parametrize('new, confirm, message', [
-    (NEW_PW, 'different-pw-1', MSG_PASSWORD_MISMATCH),
-    ('short', 'short', MSG_PASSWORD_TOO_SHORT.format(length=5)),
-    ('', '', None),
-    ('password123', 'password123', MSG_PASSWORD_PUBLIC),
-])
-def test_confirm_post_input_error_keeps_link_usable(client, reset_link, citizen, new, confirm, message):
+def test_confirm_post_with_expired_token_is_rejected(client, reset_link, citizen, clock):
     # Arrange
-    raw, url = reset_link
+    _, url = reset_link
+    clock.advance(minutes=30)
 
     # Act
-    response = client.post(url, data={'new_password': new, 'confirm_password': confirm})
+    response = client.post(url)
 
-    # Assert: 同じリンクの画面へ戻る。リンクは使い切られず、パスワードも変わらない
-    assert response.status_code == 302 and response.headers['Location'] == url
-    flashes = _flashes(client)
-    assert flashes and all(category == 'warning' for category, _ in flashes)
-    if message:
-        assert ('warning', message) in flashes
+    # Assert
+    _assert_link_invalid_redirect(client, response)
     assert _password_of(citizen.id).check_password('password123')
-    assert client.get(url).status_code == 200
-    retry = client.post(url, data={'new_password': NEW_PW, 'confirm_password': NEW_PW})
-    assert retry.headers['Location'] == '/reset-password/complete'
+
+
+def test_confirm_post_with_superseded_token_is_rejected(client, reset_link, citizen, clock):
+    # Arrange
+    raw, url = reset_link
+    clock.advance(seconds=61)
+    auth_service.request_password_reset('taro@example.com', 'Second-pw-1', 'Second-pw-1')
+
+    # Act
+    response = client.post(url)
+
+    # Assert: 古いリンクでは変わらない
+    _assert_link_invalid_redirect(client, response)
+    assert _password_of(citizen.id).check_password('password123')
+
+
+def test_confirm_post_with_token_without_pending_hash_is_rejected(client, reset_link, citizen):
+    # Arrange
+    raw, url = reset_link
+    PasswordResetToken.query.filter_by(user_id=citizen.id).update({'pending_password_hash': None})
+    db.session.commit()
+
+    # Act
+    response = client.post(url)
+
+    # Assert
+    _assert_link_invalid_redirect(client, response)
+    assert _password_of(citizen.id).check_password('password123')
+    assert PasswordResetToken.query.filter_by(user_id=citizen.id).one().used_at is None
+
+
+@pytest.mark.parametrize('token', ['unknown-token', 'A' * 43])
+def test_confirm_post_with_unknown_token_is_rejected(client, citizen, token):
+    # Act
+    response = client.post(f'/reset-password/confirm/{token}')
+
+    # Assert
+    _assert_link_invalid_redirect(client, response)
+    assert _password_of(citizen.id).check_password('password123')
 
 
 def test_confirm_post_unlocks_account(client, reset_link, citizen, clock, login):
@@ -328,9 +583,9 @@ def test_confirm_post_unlocks_account(client, reset_link, citizen, clock, login)
     raw, url = reset_link
 
     # Act
-    client.post(url, data={'new_password': NEW_PW, 'confirm_password': NEW_PW})
+    client.post(url)
 
-    # Assert
+    # Assert: ロック解除・失敗回数 0 で、新しいパスワードで入れる
     user = _password_of(citizen.id)
     assert user.locked_until is None and user.failed_login_count == 0
     assert _logged_in(login(client.application.test_client(), User.ROLE_CITIZEN, 'taro@example.com', NEW_PW))
@@ -344,7 +599,7 @@ def test_confirm_post_logs_out_existing_session(app, citizen, reset_link, login)
     raw, url = reset_link
 
     # Act
-    app.test_client().post(url, data={'new_password': NEW_PW, 'confirm_password': NEW_PW})
+    app.test_client().post(url)
 
     # Assert: 古いセッションはログイン画面へ戻される
     assert _status(old_device, '/citizen/mypage') == 302
@@ -355,38 +610,42 @@ def test_confirm_post_without_csrf_token_is_rejected(csrf_client, reset_link, ci
     raw, url = reset_link
 
     # Act
-    response = csrf_client.post(url, data={'new_password': NEW_PW, 'confirm_password': NEW_PW},
-                                headers={'Referer': f'http://localhost{url}'})
+    response = csrf_client.post(url, headers={'Referer': f'http://localhost{url}'})
 
-    # Assert
+    # Assert: CSRF で止まり、パスワードは変わらず、リンクは使えるまま
     assert response.status_code == 302
     assert ('warning', MSG_CSRF_EXPIRED) in _flashes(csrf_client)
     assert _password_of(citizen.id).check_password('password123')
     assert auth_service.is_reset_token_valid(raw) is True
+    assert _pending_of(citizen.id)[0] is not None
 
 
-def test_confirm_form_with_csrf_token_works(csrf_client, reset_link, citizen):
+def test_confirm_form_with_csrf_token_works_and_get_has_no_store(csrf_client, reset_link, citizen):
     # Arrange
     raw, url = reset_link
     token = get_csrf_token(csrf_client, url)
+    assert csrf_client.get(url).headers['Cache-Control'] == 'no-store'
 
     # Act
-    response = csrf_client.post(url, data={'new_password': NEW_PW, 'confirm_password': NEW_PW, 'csrf_token': token})
+    response = csrf_client.post(url, data={'csrf_token': token})
 
     # Assert
     assert response.headers['Location'] == '/reset-password/complete'
+    assert response.headers['Cache-Control'] == 'no-store'
     assert _password_of(citizen.id).check_password(NEW_PW)
 
 
-def test_confirm_page_rejects_staff_reset_code_as_token(client, staff):
+@pytest.mark.parametrize('method', ['get', 'post'])
+def test_confirm_page_rejects_staff_reset_code_as_token(client, staff, method):
     # Arrange
     code = _issue_code('staff01')
 
     # Act
-    response = client.get(f'/reset-password/confirm/{code}')
+    response = getattr(client, method)(f'/reset-password/confirm/{code}')
 
     # Assert
-    assert response.status_code == 302 and response.headers['Location'] == '/reset-password'
+    _assert_link_invalid_redirect(client, response)
+    assert _password_of(staff.id).check_password('password123')
 
 
 # ---------------------------------------------------------------------------

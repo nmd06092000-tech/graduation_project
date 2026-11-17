@@ -151,14 +151,15 @@ def _flash_errors(error):
         flash(str(error), 'danger')
 
 
-# 市民 パスワード再設定画面（1 つ目：メールアドレスを入れると、再設定リンクのメールを送る）
-# 登録の有無が分からないよう、入力が正しければ常に同じメッセージを表示する
+# 市民 パスワード再設定画面（1 画面：メールアドレスと新しいパスワードを入れると、確認用のリンクをメールで送る）
+# 登録の有無が分からないよう、入力が正しければ常に同じメッセージを表示する。パスワードは画面に戻さない
 @auth_bp.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():
     if request.method == 'POST':
         email = request.form.get('email', '')
         try:
-            auth_service.request_password_reset(email)
+            auth_service.request_password_reset(
+                email, request.form.get('new_password', ''), request.form.get('confirm_password', ''))
         except ValidationError as e:
             _flash_errors(e)
             return render_template('auth/reset_password.html', email=email)
@@ -167,18 +168,13 @@ def reset_password():
     return render_template('auth/reset_password.html', email='')
 
 
-# 市民 パスワード再設定画面（2 つ目：メールのリンクから開き、新しいパスワードを入れる）
+# 市民 パスワード再設定の確認画面（メールのリンクから開く。GET は表示だけで、「確定する」ボタン（POST）で初めて変更する）
 # リンクのトークンが Referer や履歴・キャッシュに残らないよう、応答にヘッダを付ける
 @auth_bp.route('/reset-password/confirm/<token>', methods=['GET', 'POST'])
 def reset_password_confirm(token):
     if request.method == 'POST':
         try:
-            auth_service.reset_password_with_token(
-                token, request.form.get('new_password', ''), request.form.get('confirm_password', ''))
-        except ValidationError as e:
-            # 入力エラー：トークンは消費されていないので、同じリンクの画面に戻す
-            _flash_errors(e)
-            return _no_leak(redirect(url_for('auth.reset_password_confirm', token=token)))
+            auth_service.confirm_password_reset(token)
         except ServiceError as e:
             flash(str(e), 'danger')
             return _no_leak(redirect(url_for('auth.reset_password')))

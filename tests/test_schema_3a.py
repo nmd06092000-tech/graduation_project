@@ -20,6 +20,7 @@ from tests.conftest import make_account, soft_delete
 MIGRATIONS_DIR = str(Path(__file__).resolve().parent.parent / 'migrations')
 REVISION = 'd4a91c7e5b36'
 PREVIOUS_REVISION = '2422f95d18ff'
+LATEST_REVISION = 'e5b2c8f1a937'   # パスワード再設定の確認待ちハッシュ（pending_password_hash）。d4a91c7e5b36 の次
 SOFT_DELETE_COLUMNS = {'del_flag', 'deleted_at', 'deleted_by_id'}
 
 
@@ -187,7 +188,7 @@ def test_duplicate_login_id_is_still_rejected_even_when_existing_row_is_deleted(
 # マイグレーションのスクリプト（DB には触れない）
 # ---------------------------------------------------------------------------
 
-def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_is_single_head():
+def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_head_is_e5b2c8f1a937():
     # Arrange
     config = AlembicConfig()
     config.set_main_option('script_location', MIGRATIONS_DIR)
@@ -198,7 +199,21 @@ def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_is_single_head():
 
     # Assert
     assert revision.down_revision == PREVIOUS_REVISION
-    assert script.get_heads() == [REVISION]
+    assert script.get_heads() == [LATEST_REVISION]
+
+def test_migration_e5b2c8f1a937_follows_d4a91c7e5b36_and_is_single_head():
+    # Arrange
+    config = AlembicConfig()
+    config.set_main_option('script_location', MIGRATIONS_DIR)
+    script = ScriptDirectory.from_config(config)
+
+    # Act
+    revision = script.get_revision(LATEST_REVISION)
+
+    # Assert
+    assert revision.down_revision == REVISION
+    assert script.get_heads() == [LATEST_REVISION]
+
 
 
 # ---------------------------------------------------------------------------
@@ -330,3 +345,85 @@ def test_migration_downgrade_removes_columns_and_keeps_rows_then_upgrades_again(
     assert SOFT_DELETE_COLUMNS <= _column_names()
     with db.engine.connect() as connection:
         assert connection.execute(sa.text("SELECT del_flag FROM users WHERE login_id = 'legacy'")).scalar() is False
+
+
+# ---------------------------------------------------------------------------
+# マイグレーション e5b2c8f1a937（password_reset_tokens.pending_password_hash）の往復
+# ---------------------------------------------------------------------------
+
+def _token_columns():
+    return {column['name']: column for column in _inspector().get_columns('password_reset_tokens')}
+
+
+@pytest.fixture
+def migrated_before_pending(app):
+    """テスト DB を d4a91c7e5b36（pending_password_hash の直前）まで alembic で作った状態で渡す"""
+    db.session.remove()
+    db.drop_all()
+    with db.engine.begin() as connection:
+        connection.execute(sa.text('DROP TABLE IF EXISTS alembic_version'))
+    _migrate_up(REVISION)
+    yield
+    db.session.remove()
+    with db.engine.begin() as connection:
+        connection.execute(sa.text('DROP TABLE IF EXISTS alembic_version'))
+    db.drop_all()
+
+
+def test_migration_e5b2c8f1a937_adds_nullable_column_and_old_tokens_become_null(migrated_before_pending):
+    # Arrange: 直前のリビジョン（列なし）。既存のトークンが 1 行ある
+    assert 'pending_password_hash' not in _token_columns()
+    with db.engine.begin() as connection:
+        connection.execute(sa.text(
+            "INSERT INTO users (login_id, name, role, password_hash) VALUES ('old@example.com', '旧', 'citizen', 'x')"))
+        connection.execute(sa.text(
+            "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) "
+            "SELECT id, repeat('a', 64), now() + interval '1 hour' FROM users WHERE login_id = 'old@example.com'"))
+
+    # Act
+    _migrate_up()
+
+    # Assert: NULL 可の文字列 255 の列ができ、既存のトークンは NULL（= メールのリンクとしては使えない）
+    column = _token_columns()['pending_password_hash']
+    assert column['nullable'] is True and column['type'].length == 255
+    with db.engine.connect() as connection:
+        assert connection.execute(sa.text(
+            "SELECT pending_password_hash FROM password_reset_tokens WHERE token_hash = repeat('a', 64)")).scalar() is None
+
+
+def test_migration_e5b2c8f1a937_matches_models_for_password_reset_tokens(migrated_before_pending):
+    # Arrange
+    _migrate_up()
+
+    # Act
+    with db.engine.connect() as connection:
+        diff = compare_metadata(MigrationContext.configure(connection), db.metadata)
+
+    # Assert: password_reset_tokens にモデルとの差分がない
+    assert [item for item in diff if 'password_reset_tokens' in repr(item)] == []
+
+
+def test_migration_e5b2c8f1a937_downgrade_drops_column_keeps_rows_and_upgrades_again(migrated_before_pending):
+    # Arrange
+    _migrate_up()
+    with db.engine.begin() as connection:
+        connection.execute(sa.text(
+            "INSERT INTO users (login_id, name, role, password_hash) VALUES ('t@example.com', 't', 'citizen', 'x')"))
+        connection.execute(sa.text(
+            "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at, pending_password_hash) "
+            "SELECT id, repeat('b', 64), now() + interval '1 hour', 'hash' FROM users WHERE login_id = 't@example.com'"))
+
+    # Act
+    _migrate_down(REVISION)
+
+    # Assert: 列だけが消え、トークンの行は残る
+    assert 'pending_password_hash' not in _token_columns()
+    with db.engine.connect() as connection:
+        assert connection.execute(sa.text(
+            "SELECT count(*) FROM password_reset_tokens WHERE token_hash = repeat('b', 64)")).scalar() == 1
+
+    # Act: もう一度 upgrade（往復できる）
+    _migrate_up()
+
+    # Assert
+    assert 'pending_password_hash' in _token_columns()
