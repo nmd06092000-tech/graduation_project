@@ -9,6 +9,7 @@
 <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4 citizen-header">
     <span class="navbar-brand fw-bold text-primary"><i class="bi bi-geo-alt-fill me-1"></i>埼玉県の困りごと報告システム</span>
     <div class="ms-auto d-flex align-items-center">
+        {% include 'components/_citizen_bell.html' %}
         <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
         <!-- モーダル呼び出しボタン -->
         <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">

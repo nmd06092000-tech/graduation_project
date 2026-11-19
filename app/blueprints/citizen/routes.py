@@ -1,5 +1,5 @@
 from flask import (
-    Blueprint, render_template, request, redirect, url_for, flash, session, abort, send_file, current_app,
+    Blueprint, render_template, request, redirect, url_for, flash, session, abort, send_file, current_app, jsonify,
 )
 from flask_login import current_user, login_user
 from flask_login.config import COOKIE_NAME
@@ -11,7 +11,8 @@ from app.constants import (
 )
 from app.models import User
 from app.services import (
-    ServiceError, ValidationError, auth_service, report_service, storage_service, user_service,
+    ServiceError, ValidationError, auth_service, citizen_notification_service, report_service, storage_service,
+    user_service,
 )
 from app.services.report_service import InappropriatePhotoError
 from app.utils.decorators import role_required
@@ -30,6 +31,14 @@ PROFILE_FORM_KEY = 'profile_form'
 def upload_too_large(error):
     flash(MSG_UPLOAD_TOO_LARGE, 'warning')
     return redirect(request.url)
+
+
+# ヘッダーの通知ベルに表示する未読のお知らせ件数（市民以外・未ログインは 0 で、DB にアクセスしない）
+@citizen_bp.context_processor
+def inject_unread_count():
+    if not (current_user.is_authenticated and current_user.role == User.ROLE_CITIZEN):
+        return {'citizen_unread_count': 0}
+    return {'citizen_unread_count': citizen_notification_service.count_unread_or_zero(current_user.id)}
 
 
 # 4. 市民マイページ（報告件数のサマリーと最近の報告）
@@ -149,6 +158,32 @@ def report_complete(report_id):
 def report_list():
     reports = report_service.list_by_citizen(current_user.id)
     return render_template('citizen/report_list.html', reports=reports)
+
+
+# 市民お知らせ画面（本人のお知らせを新しい順に表示する。既読にするのは下の2つの POST だけ）
+@citizen_bp.route('/notifications')
+@role_required(User.ROLE_CITIZEN)
+def notifications():
+    return render_template('citizen/notifications.html',
+                           notifications=citizen_notification_service.list_for_user(current_user.id))
+
+
+# お知らせを開いたとき、1件を既読にする（fetch。戻り値はヘッダーのバッジに反映する未読件数）
+@citizen_bp.route('/notifications/<int:notification_id>/read', methods=['POST'])
+@role_required(User.ROLE_CITIZEN)
+def notification_read(notification_id):
+    unread_count = citizen_notification_service.mark_read(notification_id, user_id=current_user.id)
+    if unread_count is None:
+        abort(404)
+    return jsonify(unread_count=unread_count)
+
+
+# 「すべて既読にする」（履歴を増やさない form なので、お知らせ画面へ redirect する）
+@citizen_bp.route('/notifications/read', methods=['POST'])
+@role_required(User.ROLE_CITIZEN)
+def notifications_read_all():
+    citizen_notification_service.mark_all_read(current_user.id)
+    return redirect(url_for('citizen.notifications'))
 
 
 # 市民プロフィール設定画面（お名前・メールアドレスの変更）

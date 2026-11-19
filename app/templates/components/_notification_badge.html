@@ -1,0 +1,9 @@
+{# お知らせの種別バッジ（報告受付・AI判定・職員から） #}
+{# 色は種別のコードで決め、表示名は constants.py のラベル（type_label）を使う。未知のコードは secondary #}
+{# 使い方: {% with type_code=..., type_label=..., badge_class='px-3 py-2' %}{% include 'components/_notification_badge.html' %}{% endwith %} #}
+{%- set type_colors = {
+    'report_received': 'bg-success-subtle text-success',
+    'ai_judged': 'bg-danger-subtle text-danger',
+    'staff_update': 'bg-primary-subtle text-primary',
+} -%}
+<span class="badge rounded-pill {{ type_colors.get(type_code, 'bg-secondary-subtle text-secondary') }} {{ badge_class or '' }}">{{ type_label }}</span>

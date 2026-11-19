@@ -23,7 +23,7 @@ from app.constants import (
 )
 from app.extensions import db
 from app.models import AiAnalysis, Category, Department, Report, ReportPhoto, ReportStatusHistory
-from app.services import ServiceError, ValidationError, status_service, storage_service
+from app.services import ServiceError, ValidationError, citizen_notification_service, status_service, storage_service
 from app.utils import geo
 
 # 画面に表示する日時のタイムゾーン（DB は timestamptz で保存）
@@ -197,6 +197,9 @@ def create_report(*, citizen_id, title, description, address, latitude, longitud
 
     saved = []
     try:
+        # 受付のお知らせ（件名・報告番号を含むため、報告番号を採番してから報告と同じトランザクションで追加する）
+        db.session.flush()
+        citizen_notification_service.notify_report_received(report)
         if draft_photo:
             saved.append(storage_service.move(draft_photo, storage_service.REPORT_DIR))
         saved.extend(storage_service.save(image, storage_service.REPORT_DIR) for image in images)
@@ -250,6 +253,9 @@ def analyze_report(report_id, trigger_type=AiAnalysisTrigger.INITIAL.value):
             return None
 
     analysis = _add_succeeded_analysis(report, result, trigger_type)
+    # 初回判定の成功（rule_based への切り替え後を含む）だけ市民に知らせる。再判定・失敗は知らせない
+    if trigger_type == AiAnalysisTrigger.INITIAL.value:
+        citizen_notification_service.notify_ai_judged(report, analysis)
     db.session.commit()
     return analysis
 

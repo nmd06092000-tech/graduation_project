@@ -156,7 +156,7 @@ task-app/
     ├── __init__.py              ✅ create_app(): config, extensions, đăng ký blueprint và lệnh CLI
     ├── cli.py                   ✅ lệnh flask: `rejudge-urgency` (AI再判定, chạy định kỳ), `create-admin`, `create-staff`, `issue-reset-code`, `set-password`, `restore-user`, `remove-test-users` (xem mục 1)
     ├── extensions.py            ✅ db, login_manager, migrate
-    ├── constants.py             ✅ Role, ReportStatus, Urgency, AiAnalysisStatus, DuplicateGroupStatus, luồng trạng thái, nhãn tiếng Nhật
+    ├── constants.py             ✅ Role, ReportStatus, Urgency, AiAnalysisStatus, DuplicateGroupStatus, CitizenNotificationType, luồng trạng thái, nhãn tiếng Nhật
     ├── models/
     │   ├── __init__.py          ✅ import mọi model
     │   ├── user.py              ✅ User + user_loader (`get_id()` = `id:HMAC(SECRET_KEY, password_hash)[:20]`, 2b)
@@ -166,7 +166,7 @@ task-app/
     │   ├── status_history.py    ✅ 対応履歴
     │   ├── ai_analysis.py       ✅ kết quả AI
     │   ├── duplicate_group.py   ✅ nhóm báo cáo nghi trùng
-    │   └── notification.py      ✅ thông báo cho 職員 (AI再判定), 既読 chung
+    │   └── notification.py      ✅ StaffNotification (thông báo cho 職員, AI再判定, 既読 chung) và CitizenNotification (お知らせ của 市民, 既読 theo từng người)
     ├── services/                nghiệp vụ (xem mục 4). ✅ phần 職員 và 市民 của report/status/duplicate/stats/storage/user, đăng nhập, khoá tạm, đặt lại và đổi mật khẩu trong auth_service, tạo 職員/管理者 và lệnh tài khoản trong user_service. ⬜ assignment_service, quản lý tài khoản (khoá/mở, danh sách) trong user_service
     ├── ai/                      ✅ AI: Gemini và phân loại theo từ khóa (xem mục 4)
     ├── forms/                   ⬜ Flask-WTF forms
@@ -226,6 +226,7 @@ Mỗi file là một nhóm bảng. Khi thêm model mới, phải import nó tron
 | `report_status_histories` | `from_status` (NULL là mới tiếp nhận), `to_status`, `changed_by_id` (NULL là hệ thống), `from_urgency`/`to_urgency` (職員 đổi 緊急度; `to_urgency` NULL là không đổi, `from_urgency` NULL là từ 未判定), `urgency_reason` (判断変更理由), `comment` (ghi chú nội bộ), `public_message` (lời nhắn gửi người dân), thời điểm. Đây là 対応履歴, chỉ thêm dòng |
 | `ai_analyses` | Mỗi lần AI phân tích: `status` (succeeded/failed), `trigger_type` (`initial` khi tạo báo cáo, `rejudge` khi phán định lại), category, urgency, department, `confidence` (0 đến 1), `raw_response` (JSONB), `model_name`, `error_message` |
 | `staff_notifications` | Thông báo cho 職員: `report_id`, `message`, `created_at`, `read_at`/`read_by_id` (NULL là chưa đọc). 既読 dùng chung cho mọi 職員 |
+| `citizen_notifications` | お知らせ của 市民 (2026-11-18, migration `f6c3d9a2b148`): `user_id` (FK `users.id` CASCADE, chủ báo cáo), `report_id` (FK RESTRICT, index), `type` (`report_received`/`ai_judged`/`staff_update`, CHECK từ `CitizenNotificationType`), `message` (một dòng), `detail` (NULL thì hiện `message`), `created_at`, `read_at` (NULL là chưa đọc). 既読 **theo từng người** (khác `staff_notifications`). Index `(user_id, created_at)` |
 | `duplicate_groups` | Nhóm báo cáo nghi trùng: `status` (open/merged/dismissed), `similarity`, người và thời điểm xử lý |
 
 Không lưu `priority`. 対応優先度 tính từ `urgency` và trạng thái chưa xong. Mọi báo cáo đều do người dân gửi (`citizen_id NOT NULL`).
@@ -275,6 +276,7 @@ Chỉ `status_service.py` được đổi trạng thái. Mỗi lần đổi ph�
 | `storage_service.py` | ✅ Kiểm tra định dạng thật (Pillow: JPEG, PNG, WebP) và dung lượng (10MB một ảnh), đặt tên ngẫu nhiên, lưu vào `UPLOAD_FOLDER` (`reports/`, `drafts/`, `icons/`), đọc GPS từ EXIF |
 | `stats_service.py` | Đếm theo trạng thái, category, urgency, khu vực cho dashboard, bản đồ, thống kê |
 | `notification_service.py` | ✅ Thông báo cho 職員: tạo, danh sách chưa đọc, 既読 (chung cho mọi 職員) |
+| `citizen_notification_service.py` | ✅ お知らせ của 市民 (tách khỏi `notification_service`). Tạo, **không commit** (cùng transaction với sự kiện gốc): `create(report, type_, message, detail=None)`, `notify_report_received(report)`, `notify_ai_judged(report, analysis)`, `notify_status_changed(report, from_status, to_status, *, public_message=None)`. Đọc: `list_for_user(user_id, limit=100)` (mới nhất trước; mỗi phần tử là dict `id, report_id, type, type_label, created_at_text, message, detail` (thay bằng `message` nếu NULL), `is_unread`), `count_unread(user_id)`, `count_unread_or_zero(user_id)` (cho chuông; lỗi DB thì 0). Ghi (có commit): `mark_read(notification_id, *, user_id)` (trả số chưa đọc còn lại; `None` nếu không thuộc user hoặc không tồn tại ⇒ route trả 404), `mark_all_read(user_id)`. Mọi truy vấn lọc `user_id`. Được gọi từ `report_service.create_report`, `report_service.analyze_report`, `status_service.change_status` |
 
 ### app/ai/
 | File | Nhiệm vụ |
@@ -329,6 +331,8 @@ Mỗi actor trong sơ đồ use case là một blueprint. Mỗi blueprint gồm 
 | 市民 | 履歴を表示する | `/citizen/reports` | ✅ `citizen.report_list` | report_service |
 | 市民 | 対応状況を表示する | `/citizen/reports/<id>` | ⬜ | report_service |
 | 市民 | 報告を取り消す | `POST /citizen/reports/<id>/cancel` | ⬜ | status_service |
+| 市民 | お知らせを表示する (chuông ở header + màn お知らせ) | `/citizen/notifications` | ✅ `citizen.notifications` | citizen_notification_service (`list_for_user`). Biến template `notifications`. Chỉ 市民, 職員/管理者 bị chặn. Mọi template của `citizen_bp` có biến `citizen_unread_count` (context processor; 0 nếu chưa đăng nhập hoặc không phải 市民) |
+| 市民 | お知らせを既読にする | `POST /citizen/notifications/<id>/read` (fetch, header `X-CSRFToken`, trả JSON `{"unread_count": n}`, không phải của mình ⇒ 404), `POST /citizen/notifications/read` (「すべて既読にする」, redirect về `citizen.notifications`) | ✅ `citizen.notification_read`, `citizen.notifications_read_all` | citizen_notification_service (`mark_read`, `mark_all_read`) |
 | 市民 | パスワード変更 | `/citizen/password` | ✅ `citizen.change_password` | auth_service. Thành công thì `session.clear()` + `login_user` lại (giữ remember nếu có) nên phiên khác bị đăng xuất |
 | 市民 | プロフィール設定 | `/citizen/profile` | ✅ `citizen.profile` | user_service |
 | 市民 | アイコン設定 | `/citizen/profile/icon`, ảnh: `/citizen/profile/icon/image` | ✅ `citizen.profile_icon`, `citizen.profile_icon_image` | user_service, storage_service |
@@ -438,7 +442,13 @@ Nếu thêm blueprint mới, hãy tạo `app/blueprints/<tên>/__init__.py` và 
   - Chưa phát hiện nhóm trùng khi tạo báo cáo (`duplicate_service`).
   - Thông báo kiểm tra phía trình duyệt (JS) ở ログイン, アカウント作成, パスワード再設定 của 県民 đã theo câu chữ Excel 県民. Thông báo phía server của ログイン (cả 3 vai trò) đã theo Excel qua `auth_service` (`MSG_ID_*`, `MSG_PASSWORD_*` trong `constants.py`); アカウント作成 và パスワード再設定 trong `auth/routes.py` vẫn chưa giống hẳn (ví dụ còn 「パスワードは8文字以上で入力してください。」, câu khi bỏ trống hết). Màn hình パスワード変更 (đặt lại bằng email) chưa làm, xem bước 4.
 - **Màn hình `auth` (ログイン, アカウント作成, パスワード再設定) chưa dùng `navigation.js`.** Khi nhập sai, route render lại template ngay trong POST, nên lịch sử có thêm một mục của cùng màn hình. Muốn sửa thì chuyển sang PRG như form của 市民 (xem mục 4, static/js).
-- **緊急度の判定, AI再判定, trạng thái mới (2026-11-10) chưa có trong [docs/db/db_design.md](docs/db/db_design.md) và sơ đồ trong `docs/`.** Cột `report_status_histories.from_urgency/to_urgency/urgency_reason`, `ai_analyses.trigger_type`, bảng `staff_notifications` và 5 trạng thái mới mới chỉ được mô tả trong README này.
+- **緊急度の判定, AI再判定, trạng thái mới (2026-11-10) chưa có trong [docs/db/db_design.md](docs/db/db_design.md) và sơ đồ trong `docs/`.** Cột `report_status_histories.from_urgency/to_urgency/urgency_reason`, `ai_analyses.trigger_type` và 5 trạng thái mới mới chỉ được mô tả trong README này (bảng `staff_notifications` và `citizen_notifications` đã có ở mục 3.9, 3.10 của db_design.md từ 2026-11-18).
+- **お知らせ của 市民 (2026-11-18).** Thông báo chỉ sinh từ lúc deploy, **không backfill** cho báo cáo cũ. Ba nguồn, cùng transaction với sự kiện gốc (insert thông báo lỗi thì cả bước đó bị rollback):
+  - `create_report` ⇒ 報告受付. `analyze_report` ⇒ AI判定, **chỉ** khi `trigger_type=initial` và có kết quả thành công (kể cả khi Gemini lỗi rồi rơi về `rule_based`); AI lỗi hoàn toàn và 再判定 (`rejudge`) **không** báo cho 市民.
+  - `status_service.change_status` ⇒ 職員から, **chỉ** khi actor là 職員 và trạng thái thực sự đổi (kể cả 一括変更). Chỉ thêm ghi chú, chỉ đổi 緊急度, hay 市民 tự 取り消し thì không báo. `comment` (ghi chú nội bộ), tên 職員 và `urgency_reason` không bao giờ vào `message`/`detail`; chỉ `public_message` được thêm vào cuối `detail`.
+  - 「すべて既読にする」 (`mark_all_read`) đánh dấu **mọi** thông báo chưa đọc của người đó, kể cả những cái nằm ngoài 100 dòng đang hiện. Danh sách chỉ hiện 100 mới nhất; thông báo tăng không giới hạn và không bị dọn.
+  - Câu chữ `MSG_CNOTICE_*` không có trong Excel (người dùng duyệt cùng kế hoạch A20261118-123834). Chưa có link từ thông báo sang 対応状況 (route `/citizen/reports/<id>` chưa làm) và chưa gửi mail.
+  - Sau khi deploy phải chạy lệnh `db upgrade` của Flask-Migrate (local và EC2). DB dev đang ở `d4a91c7e5b36` nên sẽ áp cả `e5b2c8f1a937` và `f6c3d9a2b148`.
 - **AI再判定:** `analyze_report()` commit kết quả AI trước, sau đó mới tạo thông báo. Nếu bước tạo thông báo lỗi, báo cáo vẫn tính là đã phán định lại, nên thông báo đó bị mất. Nút 「すべて既読にする」 đánh dấu mọi thông báo chưa đọc, kể cả những cái nằm ngoài 10 dòng đang hiện.
 - **Màn hình nhân viên đã đọc và ghi DB thật, nhưng còn thiếu:**
   - Nút AIモデル再実行 ở AI分析 chưa hoạt động (có thể gọi `report_service.analyze_report()`).

@@ -20,7 +20,8 @@ from tests.conftest import make_account, soft_delete
 MIGRATIONS_DIR = str(Path(__file__).resolve().parent.parent / 'migrations')
 REVISION = 'd4a91c7e5b36'
 PREVIOUS_REVISION = '2422f95d18ff'
-LATEST_REVISION = 'e5b2c8f1a937'   # パスワード再設定の確認待ちハッシュ（pending_password_hash）。d4a91c7e5b36 の次
+PENDING_REVISION = 'e5b2c8f1a937'   # パスワード再設定の確認待ちハッシュ（pending_password_hash）。d4a91c7e5b36 の次
+LATEST_REVISION = 'f6c3d9a2b148'    # 市民向けお知らせ（citizen_notifications）。e5b2c8f1a937 の次
 SOFT_DELETE_COLUMNS = {'del_flag', 'deleted_at', 'deleted_by_id'}
 
 
@@ -188,7 +189,7 @@ def test_duplicate_login_id_is_still_rejected_even_when_existing_row_is_deleted(
 # マイグレーションのスクリプト（DB には触れない）
 # ---------------------------------------------------------------------------
 
-def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_head_is_e5b2c8f1a937():
+def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_head_is_f6c3d9a2b148():
     # Arrange
     config = AlembicConfig()
     config.set_main_option('script_location', MIGRATIONS_DIR)
@@ -201,7 +202,20 @@ def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_head_is_e5b2c8f1a937():
     assert revision.down_revision == PREVIOUS_REVISION
     assert script.get_heads() == [LATEST_REVISION]
 
-def test_migration_e5b2c8f1a937_follows_d4a91c7e5b36_and_is_single_head():
+def test_migration_e5b2c8f1a937_follows_d4a91c7e5b36():
+    # Arrange
+    config = AlembicConfig()
+    config.set_main_option('script_location', MIGRATIONS_DIR)
+    script = ScriptDirectory.from_config(config)
+
+    # Act
+    revision = script.get_revision(PENDING_REVISION)
+
+    # Assert
+    assert revision.down_revision == REVISION
+
+
+def test_migration_f6c3d9a2b148_follows_e5b2c8f1a937_and_is_single_head():
     # Arrange
     config = AlembicConfig()
     config.set_main_option('script_location', MIGRATIONS_DIR)
@@ -211,7 +225,7 @@ def test_migration_e5b2c8f1a937_follows_d4a91c7e5b36_and_is_single_head():
     revision = script.get_revision(LATEST_REVISION)
 
     # Assert
-    assert revision.down_revision == REVISION
+    assert revision.down_revision == PENDING_REVISION
     assert script.get_heads() == [LATEST_REVISION]
 
 
@@ -427,3 +441,117 @@ def test_migration_e5b2c8f1a937_downgrade_drops_column_keeps_rows_and_upgrades_a
 
     # Assert
     assert 'pending_password_hash' in _token_columns()
+
+
+# ---------------------------------------------------------------------------
+# citizen_notifications（市民向けお知らせ。マイグレーション f6c3d9a2b148）
+# ---------------------------------------------------------------------------
+
+def _notification_columns():
+    return {column['name']: column for column in _inspector().get_columns('citizen_notifications')}
+
+
+def _assert_notification_schema():
+    columns = _notification_columns()
+    assert set(columns) == {'id', 'user_id', 'report_id', 'type', 'message', 'detail', 'created_at', 'read_at'}
+    for name in ('user_id', 'report_id', 'type', 'message', 'created_at'):
+        assert columns[name]['nullable'] is False
+    for name in ('detail', 'read_at'):
+        assert columns[name]['nullable'] is True
+    assert columns['type']['type'].length == 20
+    assert columns['created_at']['type'].timezone is True and columns['read_at']['type'].timezone is True
+    assert 'ck_citizen_notifications_type' in {c['name'] for c in _inspector().get_check_constraints('citizen_notifications')}
+    foreign_keys = {fk['constrained_columns'][0]: fk for fk in _inspector().get_foreign_keys('citizen_notifications')}
+    assert foreign_keys['user_id']['referred_table'] == 'users'
+    assert foreign_keys['user_id']['options']['ondelete'] == 'CASCADE'
+    assert foreign_keys['report_id']['referred_table'] == 'reports'
+    assert foreign_keys['report_id']['options']['ondelete'] == 'RESTRICT'
+    index_columns = [index['column_names'] for index in _inspector().get_indexes('citizen_notifications')]
+    assert ['user_id', 'created_at'] in index_columns and ['report_id'] in index_columns
+
+
+def test_citizen_notifications_schema_from_models(app):
+    # Act / Assert: create_all で作ったテーブルの列・CHECK・外部キー・索引
+    _assert_notification_schema()
+
+
+def test_citizen_notifications_check_rejects_unknown_type(citizen, make_report, make_citizen_notification):
+    # Arrange
+    report = make_report()
+
+    # Act / Assert: 種類は report_received / ai_judged / staff_update だけ
+    with pytest.raises(IntegrityError, match='ck_citizen_notifications_type'):
+        make_citizen_notification(report, type='unknown')
+    db.session.rollback()
+
+
+def test_citizen_notifications_report_delete_is_restricted(citizen, make_report, make_citizen_notification):
+    # Arrange
+    report = make_report()
+    make_citizen_notification(report)
+
+    # Act / Assert: お知らせのある報告は消せない（ON DELETE RESTRICT）
+    with pytest.raises(IntegrityError):
+        db.session.execute(sa.text('DELETE FROM reports WHERE id = :id'), {'id': report.id})
+        db.session.commit()
+    db.session.rollback()
+
+
+def test_citizen_notifications_are_deleted_with_their_user(citizen, make_report, make_citizen_notification):
+    # Arrange: 宛先が別の市民のお知らせ（報告者とは別ユーザーを消す）
+    other = make_account('other@example.com', User.ROLE_CITIZEN)
+    make_citizen_notification(make_report(), user_id=other.id)
+
+    # Act
+    db.session.execute(sa.text('DELETE FROM users WHERE id = :id'), {'id': other.id})
+    db.session.commit()
+
+    # Assert: ON DELETE CASCADE で一緒に消える
+    assert db.session.execute(sa.text('SELECT count(*) FROM citizen_notifications')).scalar() == 0
+
+
+@pytest.fixture
+def migrated_before_notifications(app):
+    """テスト DB を e5b2c8f1a937（citizen_notifications の直前）まで alembic で作った状態で渡す"""
+    db.session.remove()
+    db.drop_all()
+    with db.engine.begin() as connection:
+        connection.execute(sa.text('DROP TABLE IF EXISTS alembic_version'))
+    _migrate_up(PENDING_REVISION)
+    yield
+    db.session.remove()
+    with db.engine.begin() as connection:
+        connection.execute(sa.text('DROP TABLE IF EXISTS alembic_version'))
+    db.drop_all()
+
+
+def test_migration_f6c3d9a2b148_creates_citizen_notifications_matching_models(migrated_before_notifications):
+    # Arrange: 直前のリビジョンにはテーブルがない
+    assert 'citizen_notifications' not in _inspector().get_table_names()
+
+    # Act
+    _migrate_up()
+
+    # Assert: 列・CHECK・外部キー・索引ができ、モデルとの差分がない
+    _assert_notification_schema()
+    with db.engine.connect() as connection:
+        diff = compare_metadata(MigrationContext.configure(connection), db.metadata)
+    assert [item for item in diff if 'citizen_notifications' in repr(item)] == []
+
+
+def test_migration_f6c3d9a2b148_downgrade_drops_table_and_upgrades_again(migrated_before_notifications):
+    # Arrange
+    _migrate_up()
+
+    # Act
+    _migrate_down(PENDING_REVISION)
+
+    # Assert: テーブルだけが消え、users などは残る
+    assert 'citizen_notifications' not in _inspector().get_table_names()
+    assert 'users' in _inspector().get_table_names()
+
+    # Act: もう一度 upgrade（往復できる）
+    _migrate_up()
+
+    # Assert
+    assert 'citizen_notifications' in _inspector().get_table_names()

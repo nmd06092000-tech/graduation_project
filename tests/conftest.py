@@ -13,9 +13,9 @@ from sqlalchemy.engine import make_url
 from werkzeug.datastructures import FileStorage
 
 from app import create_app
-from app.constants import Urgency
+from app.constants import CitizenNotificationType, Urgency
 from app.extensions import db
-from app.models import Category, Department, Report, User
+from app.models import Category, CitizenNotification, Department, Report, User
 from config import TestingConfig
 
 
@@ -199,6 +199,24 @@ def make_report(citizen):
         db.session.add(report)
         db.session.commit()
         return report
+    return _make
+
+
+@pytest.fixture
+def make_citizen_notification():
+    """市民向けお知らせを1件作るヘルパー（make_citizen_notification(report, **values)。宛先は報告者本人、既定は未読）"""
+    def _make(report, **values):
+        values = {
+            'user_id': report.citizen_id,
+            'report_id': report.id,
+            'type': CitizenNotificationType.REPORT_RECEIVED.value,
+            'message': f'報告 #{report.id}「{report.title}」を受け付けました。',
+            **values,
+        }
+        notification = CitizenNotification(**values)
+        db.session.add(notification)
+        db.session.commit()
+        return notification
     return _make
 
 

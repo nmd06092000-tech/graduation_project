@@ -7,5 +7,5 @@ from app.models.duplicate_group import DuplicateGroup  # noqa: F401
 from app.models.report import Report, ReportPhoto  # noqa: F401
 from app.models.status_history import ReportStatusHistory  # noqa: F401
 from app.models.ai_analysis import AiAnalysis  # noqa: F401
-from app.models.notification import StaffNotification  # noqa: F401
+from app.models.notification import CitizenNotification, StaffNotification  # noqa: F401
 from app.models.password_reset_token import PasswordResetToken  # noqa: F401

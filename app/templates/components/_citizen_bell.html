@@ -1,0 +1,8 @@
+{# 県民ヘッダーの通知ベル（未読のお知らせ件数のバッジ付き。お知らせ画面へのリンク） #}
+{# 件数は citizen_unread_count（citizen_bp の context_processor）を使う。0 件のときはバッジを隠し、100 件以上は 99+ と表示する #}
+{# バッジは常に出力する（お知らせ画面の js/citizen_notifications.js が既読にしたときに件数を書き換えるため） #}
+{%- set unread = citizen_unread_count|default(0) -%}
+<a href="{{ url_for('citizen.notifications') }}" class="citizen-bell me-3" data-citizen-bell aria-label="お知らせ">
+    <i class="bi bi-bell-fill" aria-hidden="true"></i>
+    <span class="badge rounded-pill bg-danger citizen-bell-badge" data-bell-badge{% if unread <= 0 %} hidden{% endif %}><span data-bell-count>{{ '99+' if unread > 99 else unread }}</span><span class="visually-hidden"> 件の未読のお知らせ</span></span>
+</a>

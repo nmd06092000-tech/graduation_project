@@ -1,0 +1,133 @@
+{% extends 'layouts/base.html' %}
+
+{% block title %}お知らせ - 埼玉県の困りごと報告システム{% endblock %}
+
+{# 市民のお知らせ画面（報告受付・AI判定・職員からの更新）。詳細を開くと既読になる #}
+{% block layout %}
+<div class="citizen-page citizen-notifications-page">
+<!-- ヘッダー -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4 citizen-header">
+    <span class="navbar-brand fw-bold text-primary"><i class="bi bi-geo-alt-fill me-1"></i>埼玉県の困りごと報告システム</span>
+    <div class="ms-auto d-flex align-items-center">
+        {% include 'components/_citizen_bell.html' %}
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            ログアウト
+        </button>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー（お知らせへはヘッダーのベルから入るので、リンクは置かない） -->
+        <div class="col-12 col-md-2 sidebar p-3">
+            <a href="{{ url_for('citizen.mypage') }}"><i class="bi bi-speedometer2 me-2"></i>マイページ</a>
+            <a href="{{ url_for('citizen.report_new') }}"><i class="bi bi-plus-circle me-2"></i>新規報告</a>
+            <a href="{{ url_for('citizen.report_list') }}"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('citizen.profile') }}"><i class="bi bi-gear me-2"></i>プロフィール設定</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-12 col-md-10 p-4 citizen-main">
+            <!-- ページタイトル -->
+            <div class="bg-primary text-white rounded-3 p-3 mb-3 shadow-sm">
+                <h3 class="fw-bold mb-0"><i class="bi bi-bell-fill me-2"></i>お知らせ</h3>
+            </div>
+
+            <!-- CSRF エラーなどのメッセージ表示エリア -->
+            {% include 'components/_flash.html' %}
+
+            <!-- お知らせ一覧 -->
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-3">
+
+                    {# 未読があるときだけ表示する（0 件になったら js/citizen_notifications.js が隠す）。履歴を増やさない form（js/navigation.js） #}
+                    {% if citizen_unread_count|default(0) > 0 %}
+                    <form method="post" action="{{ url_for('citizen.notifications_read_all') }}" class="d-flex justify-content-end mb-3" data-nav="replace" data-read-all-form>
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-outline-primary btn-sm"><i class="bi bi-check2-all me-1"></i>すべて既読にする</button>
+                    </form>
+                    {% endif %}
+
+                    {# .list-group-item は responsive.css の !important の規則に当たるため、ul + 独自クラスにする #}
+                    <ul class="list-unstyled mb-0 notification-list" data-notification-list data-csrf-token="{{ csrf_token() }}">
+                        {% for notification in notifications %}
+                        <!-- お知らせ1件 -->
+                        <li class="notification-item{% if notification.is_unread %} is-unread{% endif %}"
+                            data-notification-item
+                            data-read-url="{{ url_for('citizen.notification_read', notification_id=notification.id) }}">
+                            <div class="notification-row">
+                                <!-- 日時 -->
+                                <span class="notification-date small fw-semibold">{{ notification.created_at_text }}</span>
+
+                                <!-- 種別 -->
+                                <span class="notification-type">
+                                    {% with type_code=notification.type, type_label=notification.type_label, badge_class='' %}{% include 'components/_notification_badge.html' %}{% endwith %}
+                                </span>
+
+                                <!-- 内容（未読は色だけに頼らず、スクリーンリーダー用の文字も付ける） -->
+                                <span class="notification-message small">{% if notification.is_unread %}<span class="visually-hidden" data-unread-label>未読：</span>{% endif %}{{ notification.message }}</span>
+
+                                <!-- 右向き矢印（詳細を展開） -->
+                                <button type="button" class="btn btn-link text-secondary p-0 notification-toggle"
+                                        data-bs-toggle="collapse"
+                                        data-bs-target="#notificationDetail{{ notification.id }}"
+                                        aria-expanded="false"
+                                        aria-controls="notificationDetail{{ notification.id }}"
+                                        aria-label="お知らせの詳細を開く">
+                                    <i class="bi bi-chevron-right fs-5 notification-arrow" aria-hidden="true"></i>
+                                </button>
+                            </div>
+
+                            <!-- 展開される詳細内容 -->
+                            <div class="collapse" id="notificationDetail{{ notification.id }}">
+                                <div class="bg-light border-top p-4">
+                                    <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>お知らせ詳細</h6>
+                                    <p class="mb-0 notification-detail">{{ notification.detail }}</p>
+                                </div>
+                            </div>
+                        </li>
+                        {% else %}
+                        <li class="text-muted small py-2 notification-empty">お知らせはまだありません。</li>
+                        {% endfor %}
+                    </ul>
+
+                    <!-- マイページに戻る -->
+                    <div class="mt-4">
+                        <a href="{{ url_for('citizen.mypage') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-1"></i>マイページに戻る
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ログアウト確認モーダル -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="logoutModalLabel">ログアウト確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                ログアウトしますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <form method="post" action="{{ url_for('auth.logout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger px-4">ログアウト</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/citizen_notifications.js') }}"></script>
+{% endblock %}

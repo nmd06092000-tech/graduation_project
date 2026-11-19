@@ -59,3 +59,97 @@
     align-items: center;
     justify-content: center;
 }
+
+/* =================================
+   県民：通知ベル（ヘッダー。components/_citizen_bell.html）
+================================= */
+.citizen-bell {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 50%;
+    color: var(--bs-secondary-color);
+    font-size: 1.25rem;
+    text-decoration: none;
+}
+
+.citizen-bell:hover,
+.citizen-bell:focus-visible {
+    background-color: var(--bs-light);
+    color: var(--bs-primary);
+}
+
+/* 未読件数のバッジ：ベルの右上に重ねる（0 件のときは hidden で隠れる） */
+.citizen-bell-badge {
+    position: absolute;
+    top: 0;
+    right: -0.35rem;
+    min-width: 1.25rem;
+    padding: 0.25em 0.4em;
+    font-size: 0.65rem;
+    line-height: 1;
+}
+
+.citizen-bell-badge[hidden] {
+    display: none;
+}
+
+/* =================================
+   県民：お知らせ画面（citizen/notifications.html）
+================================= */
+.citizen-notifications-page .notification-list {
+    border-top: 1px solid var(--bs-border-color);
+}
+
+/* 未読は左の線と背景色で目立たせる（既読も同じ幅の透明な線を持たせ、文字位置をそろえる） */
+.citizen-notifications-page .notification-item {
+    border-bottom: 1px solid var(--bs-border-color);
+    border-left: 4px solid transparent;
+}
+
+.citizen-notifications-page .notification-item.is-unread {
+    border-left-color: var(--bs-primary);
+    /* 種別バッジ（subtle 色）と同化しないよう、ごく薄い青にする */
+    background-color: rgba(var(--bs-primary-rgb), 0.06);
+}
+
+/* 1 件の基本情報：日時 | 種別 | 内容 | 矢印（スマホは responsive.css で 2 行にする） */
+.citizen-notifications-page .notification-row {
+    display: grid;
+    grid-template-columns: 160px 125px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0 1rem;
+    padding: 1rem;
+}
+
+.citizen-notifications-page .notification-type .badge {
+    display: block;
+    padding: 0.5rem 1rem;
+    white-space: nowrap;
+}
+
+.citizen-notifications-page .notification-message {
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+
+.citizen-notifications-page .is-unread .notification-message {
+    font-weight: 700;
+}
+
+.citizen-notifications-page .notification-detail {
+    overflow-wrap: anywhere;
+}
+
+/* 詳細を開いたら矢印を下向きに回す */
+.citizen-notifications-page .notification-arrow {
+    display: inline-block;
+    transition: transform 0.2s ease;
+}
+
+.citizen-notifications-page .notification-toggle[aria-expanded="true"] .notification-arrow {
+    transform: rotate(90deg);
+}

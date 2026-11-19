@@ -92,6 +92,13 @@ AI_ERROR_GENERIC_MESSAGE = 'AI判定の設定に問題があるため、判定�
 AI_ERROR_UNKNOWN_MESSAGE = 'AI判定に失敗しました'
 
 
+class CitizenNotificationType(LabeledEnum):
+    """市民向けお知らせの種類（citizen_notifications.type）。お知らせ画面のバッジに表示する"""
+    REPORT_RECEIVED = ('report_received', '報告受付')
+    AI_JUDGED = ('ai_judged', 'AI判定')
+    STAFF_UPDATE = ('staff_update', '職員から')
+
+
 class DuplicateGroupStatus(LabeledEnum):
     OPEN = ('open', '確認待ち')
     MERGED = ('merged', '統合済み')
@@ -245,6 +252,21 @@ MSG_EMAIL_TAKEN = 'このメールアドレスは既に登録されています�
 MSG_ICON_REQUIRED = '画像ファイルを選択してください。'
 MSG_ICON_UPDATED = 'プロフィールアイコンを更新しました。'
 MSG_ICON_DELETED = 'プロフィールアイコンを削除しました。'
+
+# 市民のお知らせ（設計書にない新規の文言。計画 A20261118-123834 で承認済み）
+# 一覧に出す1行の文言（message）と、開いたときに表示する詳細（detail）。職員名・内部メモ・緊急度の理由は含めない
+# 報告を受け付けたとき
+MSG_CNOTICE_RECEIVED = '報告 #{report_id}「{title}」を受け付けました。'
+MSG_CNOTICE_RECEIVED_DETAIL = ('報告 #{report_id}「{title}」を受け付けました。'
+                               '内容は職員が確認します。対応状況は報告一覧で確認できます。')
+# AI の判定（初回）が終わったとき
+MSG_CNOTICE_AI_JUDGED = '報告 #{report_id}「{title}」のAI判定が完了しました（緊急度：{urgency}）。'
+MSG_CNOTICE_AI_JUDGED_DETAIL = ('報告 #{report_id}「{title}」をAIが判定しました。カテゴリ：{category}、緊急度：{urgency}。'
+                                'この判定は目安で、最終的な緊急度は職員が内容を確認して決定します。')
+# 職員が対応状況を変更したとき（公開メッセージがあれば detail の末尾に付ける）
+MSG_CNOTICE_STATUS = '報告 #{report_id}「{title}」の対応状況が「{status}」になりました。'
+MSG_CNOTICE_STATUS_DETAIL = ('報告 #{report_id}「{title}」の対応状況が「{from_status}」から「{status}」に変更されました。')
+MSG_CNOTICE_STAFF_MESSAGE = '職員からのメッセージ：{message}'
 
 
 # ログイン・アカウント作成・パスワード（ユースケース記述の文言どおり）

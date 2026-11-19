@@ -268,15 +268,17 @@ def test_ai_analysis_page_failed_row(staff_client, make_report, road):
     assert 'badge bg-info text-dark">判定完了・自動分類済み' in ok_row
 
 
-# 受け入れ基準4：市民マイページは 200 のまま、お知らせ（ベル）ボタンは出さない
-def test_citizen_mypage_renders_without_bell(client, login, citizen):
+# 受け入れ基準4：市民マイページは 200 のまま。職員向けのAI通知（ダッシュボードの未読表示）は出さない
+# （A20261118-123834 で県民のお知らせベルをヘッダーに追加したため、旧「bi-bell が無い」の期待を更新）
+def test_citizen_mypage_renders_with_citizen_bell_but_no_staff_notice(client, login, citizen):
     login(client, User.ROLE_CITIZEN, citizen.login_id)
 
     response = client.get('/citizen/mypage')
     html = response.get_data(as_text=True)
 
     assert response.status_code == 200
-    assert 'bi-bell' not in html
+    assert html.count('data-citizen-bell') == 1
+    assert '（未読' not in html
 
 
 # 権限：未ログインはログインへ、市民は職員画面に入れない

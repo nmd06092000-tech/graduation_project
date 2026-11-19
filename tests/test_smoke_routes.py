@@ -165,6 +165,7 @@ def test_citizen_forbidden_on_staff_status_update(client, login, citizen, make_r
     ('/citizen/mypage', User.ROLE_CITIZEN),
     ('/citizen/reports', User.ROLE_CITIZEN),
     ('/citizen/report', User.ROLE_CITIZEN),
+    ('/citizen/notifications', User.ROLE_CITIZEN),
     ('/staff/dashboard', User.ROLE_STAFF),
     ('/staff/reports', User.ROLE_STAFF),
     ('/admin/portal', User.ROLE_ADMIN),
@@ -194,7 +195,7 @@ def test_report_complete_of_other_citizen_is_404(app, client, login, citizen, ma
     assert client.get(f'/citizen/reports/{own_report.id}/complete').status_code == 200
 
 
-@pytest.mark.parametrize('path', ['/citizen/mypage', '/citizen/reports', '/citizen/report'])
+@pytest.mark.parametrize('path', ['/citizen/mypage', '/citizen/reports', '/citizen/report', '/citizen/notifications'])
 def test_staff_cannot_use_citizen_pages(client, login, staff, path):
     # Arrange
     login(client, User.ROLE_STAFF, staff.login_id)

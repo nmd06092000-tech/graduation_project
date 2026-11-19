@@ -2,11 +2,11 @@
 # 職員による緊急度の変更も対応履歴に記録するため、ここで行う
 from app.constants import (
     MSG_COMMENT_REQUIRED, MSG_GROUP_INVALID_STATUS, MSG_INVALID_STATUS, MSG_INVALID_URGENCY,
-    MSG_URGENCY_REASON_REQUIRED, AiAnalysisStatus, ReportStatus, Urgency, next_statuses,
+    MSG_URGENCY_REASON_REQUIRED, AiAnalysisStatus, ReportStatus, Role, Urgency, next_statuses,
 )
 from app.extensions import db
 from app.models import DuplicateGroup, Report, ReportStatusHistory, User
-from app.services import ServiceError
+from app.services import ServiceError, citizen_notification_service
 
 
 def record_received(report, *, actor_id):
@@ -23,15 +23,17 @@ def change_status(report, to_status, *, actor, comment=None, public_message=None
 
     to_status が現在と同じ場合はコメントのみの更新として履歴だけを残す。
     urgency が現在の緊急度と異なる場合は、緊急度も変更して同じ履歴の行に記録する。
+    職員がステータスを実際に変更した場合は、報告した市民にお知らせを追加する（コメントのみ・緊急度のみ・市民の取り消しは対象外）。
     """
     to_status = ReportStatus(to_status)
-    if to_status != report.status and to_status not in next_statuses(report.status, actor.role):
+    from_status = report.status
+    if to_status != from_status and to_status not in next_statuses(from_status, actor.role):
         raise ServiceError(MSG_INVALID_STATUS.format(
-            current=ReportStatus.label_of(report.status), status=to_status.label))
+            current=ReportStatus.label_of(from_status), status=to_status.label))
 
     history = ReportStatusHistory(
         report=report,
-        from_status=report.status,
+        from_status=from_status,
         to_status=to_status.value,
         changed_by_id=actor.id,
         comment=comment or None,
@@ -44,6 +46,9 @@ def change_status(report, to_status, *, actor, comment=None, public_message=None
         report.urgency = urgency
     db.session.add(history)
     report.status = to_status.value
+    if actor.role == Role.STAFF.value and to_status.value != from_status:
+        citizen_notification_service.notify_status_changed(
+            report, from_status, to_status.value, public_message=public_message)
     return report
 
 

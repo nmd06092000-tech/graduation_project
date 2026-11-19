@@ -1017,3 +1017,36 @@
         letter-spacing: 0.1em;
     }
 }
+
+/* 県民のお知らせ画面：スマホでは 1 件を 2 行にする（1 行目：日時・種別・矢印、2 行目：内容） */
+@media (max-width: 576px) {
+    .citizen-notifications-page .notification-row {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        grid-template-areas:
+            "date type toggle"
+            "message message message";
+        gap: 8px 10px;
+        padding: 12px;
+    }
+
+    .citizen-notifications-page .notification-date {
+        grid-area: date;
+    }
+
+    .citizen-notifications-page .notification-type {
+        grid-area: type;
+    }
+
+    .citizen-notifications-page .notification-message {
+        grid-area: message;
+    }
+
+    .citizen-notifications-page .notification-toggle {
+        grid-area: toggle;
+    }
+
+    .citizen-notifications-page .notification-type .badge {
+        padding: 6px 10px;
+        font-size: 0.75rem;
+    }
+}
