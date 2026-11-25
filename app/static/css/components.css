@@ -153,3 +153,11 @@
 .citizen-notifications-page .notification-toggle[aria-expanded="true"] .notification-arrow {
     transform: rotate(90deg);
 }
+
+/* =================================
+   職員：AIモデル再実行ボタン（staff/ai_analysis.html）
+================================= */
+/* 送信中（navigation.js がボタンを disabled にした間）だけ「実行中…」を表示する */
+.btn-reanalyze .reanalyze-busy { display: none; }
+.btn-reanalyze:disabled .reanalyze-busy { display: inline; }
+.btn-reanalyze:disabled .reanalyze-idle { display: none; }

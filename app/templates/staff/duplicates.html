@@ -38,20 +38,24 @@
             {% if duplicate_groups %}
             <div class="alert alert-warning border-0 shadow-sm mb-4" role="alert">
                 <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
-                <strong>{{ duplicate_groups|length }}件の重複グループ（計{{ duplicate_groups|map(attribute='reports')|map('length')|sum }}件の報告）</strong>がAIによって検出されています。統合処理または個別対応を選択してください。
+                <strong>{{ duplicate_groups|length }}件の重複グループ（計{{ duplicate_groups|map(attribute='reports')|map('length')|sum }}件の報告）</strong>が自動検出されています。統合処理または個別対応を選択してください。
             </div>
             {% endif %}
 
             <!-- 重複グループカード一覧 -->
             {% for group in duplicate_groups %}
             <div class="card border-0 shadow-sm mb-4">
-                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <div>
                         <span class="badge bg-danger me-2">重複グループ #{{ group.group_id }}</span>
                         <span class="badge bg-secondary me-2">{{ group.category }}</span>
                         <span class="fw-bold text-dark">{{ group.title }}</span>
                     </div>
                     <div>
+                        {# 検出日時（バックエンド未対応の間は表示しない） #}
+                        {% if group.detected_at %}
+                        <span class="text-muted small me-2"><i class="bi bi-clock me-1"></i>検出日時: {{ group.detected_at }}</span>
+                        {% endif %}
                         <span class="badge bg-info text-dark me-2"><i class="bi bi-geo-alt me-1"></i>類似度: {{ group.similarity }}</span>
                     </div>
                 </div>
@@ -60,25 +64,24 @@
                         <table class="table table-hover align-middle mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th class="ps-3" style="width: 12%;">報告ID</th>
-                                    <th style="width: 33%;">タイトル</th>
-                                    <th style="width: 20%;">報告者</th>
-                                    <th style="width: 20%;">報告日時</th>
-                                    <th class="text-end pe-3" style="width: 15%;">個別操作</th>
+                                    <th class="ps-3" style="width: 9%;">報告ID</th>
+                                    <th style="width: 20%;">タイトル</th>
+                                    <th style="width: 20%;">住所</th>
+                                    <th style="width: 9%;">距離</th>
+                                    <th style="width: 14%;">報告者</th>
+                                    <th style="width: 15%;">報告日時</th>
+                                    <th class="text-end pe-3" style="width: 13%;">個別操作</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {% for r in group.reports %}
                                 <tr>
-                                    <!-- ID表示列（AI検知の報告は緑文字とロボットアイコンで表示） -->
-                                    <td class="ps-3 fw-bold">
-                                        {% if r.ai_detected %}
-                                            <span class="text-success">#{{ r.id }} <i class="bi bi-robot"></i></span>
-                                        {% else %}
-                                            <span class="text-dark">#{{ r.id }}</span>
-                                        {% endif %}
-                                    </td>
+                                    <!-- ID表示列（自動検出になったためロボットアイコンは付けない） -->
+                                    <td class="ps-3 fw-bold"><span class="text-dark">#{{ r.id }}</span></td>
                                     <td class="fw-bold">{{ r.title }}</td>
+                                    <td><small class="text-muted">{{ r.address|default('—', true) }}</small></td>
+                                    <!-- 距離（先頭の報告は基準なので「—」） -->
+                                    <td class="text-nowrap"><small class="text-muted">{% if r.distance_m is not none and r.distance_m is not undefined %}{{ r.distance_m }}m{% else %}—{% endif %}</small></td>
                                     <td><span class="badge bg-light text-dark border">{{ r.reporter }}</span></td>
                                     <td><small class="text-muted">{{ r.date }}</small></td>
                                     <!-- 個別操作列（AI検知は AI分析画面、それ以外は報告一覧を1件に絞り込んで表示） -->
@@ -95,7 +98,9 @@
                         </table>
                     </div>
                 </div>
-                <div class="card-footer bg-white text-end py-3 d-flex justify-content-end gap-2">
+                <div class="card-footer bg-white py-3 d-flex justify-content-end flex-wrap gap-2">
+                    <!-- 重複なしとして確定（確認モーダルを開く） -->
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#dismissModal{{ group.group_id }}"><i class="bi bi-x-circle me-1"></i>重複なし</button>
                     <a href="{{ url_for('staff.duplicate_merge', group_id=group.group_id) }}" class="btn btn-outline-success btn-sm"><i class="bi bi-check-all me-1"></i>代表案件に統合する</a>
                     <a href="{{ url_for('staff.duplicate_batch_status', group_id=group.group_id) }}" class="btn btn-primary btn-sm"><i class="bi bi-scissors me-1"></i>一括対応ステータス変更</a>
                 </div>
@@ -105,6 +110,31 @@
         </div>
     </div>
 </div>
+
+<!-- 重複なし確認モーダル（グループごと。カードの外に置いてバックドロップの重なりを避ける） -->
+{% for group in duplicate_groups %}
+<div class="modal fade" id="dismissModal{{ group.group_id }}" tabindex="-1" aria-labelledby="dismissModalLabel{{ group.group_id }}" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="dismissModalLabel{{ group.group_id }}">重複なしとして確定</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                重複グループ #{{ group.group_id }} を重複なしにしますか？統合はされず、一覧から外れます。
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                {# 一覧へ戻るPOST（ログアウトと同じく data-nav は付けない） #}
+                <form method="post" action="{{ url_for('staff.duplicate_dismiss', group_id=group.group_id) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-secondary px-4">重複なしにする</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endfor %}
 
 <!-- ログアウト確認モーダル -->
 <div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">

@@ -10,6 +10,13 @@ import urllib.request
 
 logger = logging.getLogger(__name__)
 
+# 地球の平均半径（m）。Haversine の距離計算に使う
+EARTH_RADIUS_M = 6371008.8
+# 緯度1度あたりの距離（m）の下限の近似。bounding_box の範囲を実際より少し広めにして取りこぼしを防ぐ
+_METERS_PER_DEGREE_LAT = 110000
+# 極に近い緯度で経度の幅が無限に広がらないようにする cos(緯度) の下限
+_MIN_COS_LAT = 0.01
+
 # 逆ジオコーダーが返す市区町村コード（muniCd）→ 市区町村名。埼玉県のみ
 # 出典：国土地理院 地理院地図の市区町村コード表（maps.gsi.go.jp/js/muni.js）。町村は郡名を省略
 SAITAMA_PREFECTURE = '埼玉県'
@@ -91,6 +98,26 @@ SAITAMA_MUNICIPALITIES = {
 
 # 逆ジオコーダーで町名がない場所の値
 _NO_TOWN_NAMES = {'', '-', '－'}
+
+
+def distance_m(lat1, lng1, lat2, lng2):
+    """2地点（緯度・経度、度）の距離をメートルで返す（Haversine 公式）"""
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = phi2 - phi1
+    d_lambda = math.radians(lng2 - lng1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    # 浮動小数点の誤差で 1 をわずかに超えても asin が失敗しないようにする
+    return 2 * EARTH_RADIUS_M * math.asin(min(1.0, math.sqrt(a)))
+
+
+def bounding_box(lat, lng, radius_m):
+    """中心から radius_m メートル以内の地点を含む緯度・経度の範囲 (min_lat, max_lat, min_lng, max_lng)
+
+    SQL の絞り込み（粗い候補抽出）用。範囲は実際の円より少し広いので、厳密な距離は distance_m で確認すること。
+    """
+    d_lat = radius_m / _METERS_PER_DEGREE_LAT
+    d_lng = d_lat / max(math.cos(math.radians(lat)), _MIN_COS_LAT)
+    return lat - d_lat, lat + d_lat, lng - d_lng, lng + d_lng
 
 
 def search_address(address, *, url, timeout=5):

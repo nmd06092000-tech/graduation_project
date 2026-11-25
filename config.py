@@ -104,6 +104,15 @@ class Config:
     # AI緊急度の再判定ルール：未対応のまま、報告からこの時間（時間単位）たった報告を AI で再判定する
     # （flask --app run rejudge-urgency を定期実行する）
     AI_REJUDGE_HOURS = int(os.environ.get('AI_REJUDGE_HOURS', '12'))
+    # AI分析画面「AIモデル再実行」（全体）で、1回に再実行する報告の最大件数と、かけてよい時間（秒）の上限
+    # （どちらも整数で 1 以上。違反は起動時に ValueError）
+    AI_RERUN_BATCH_LIMIT = _env_int('AI_RERUN_BATCH_LIMIT', 5, 1)
+    AI_RERUN_TIME_BUDGET_SECONDS = _env_int('AI_RERUN_TIME_BUDGET_SECONDS', 20, 1)
+
+    # 重複報告の自動検出：同カテゴリで、距離が DUPLICATE_RADIUS_M メートル以内、報告日時の差が
+    # DUPLICATE_WINDOW_DAYS 日以内の未完了の報告を同じ重複グループにする（どちらも整数で 1 以上。違反は起動時に ValueError）
+    DUPLICATE_RADIUS_M = _env_int('DUPLICATE_RADIUS_M', 100, 1)
+    DUPLICATE_WINDOW_DAYS = _env_int('DUPLICATE_WINDOW_DAYS', 30, 1)
 
     # 写真・アイコンの保存先（個人情報を含むため static ではなく instance/uploads に置く）
     UPLOAD_FOLDER = os.environ.get('UPLOAD_FOLDER', os.path.join(BASE_DIR, 'instance', 'uploads'))

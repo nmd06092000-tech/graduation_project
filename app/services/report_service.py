@@ -3,6 +3,8 @@ import math
 import re
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
+from itertools import groupby
+from time import monotonic
 
 from flask import current_app
 from sqlalchemy import func, select
@@ -11,8 +13,9 @@ from sqlalchemy.orm import selectinload
 from app import ai
 from app.ai.base import AIError, Choice, ClassificationChoices
 from app.ai.gemini_client import prepare_image
+from app.ai.rule_based import MODEL_NAME as RULE_BASED_MODEL_NAME
 from app.constants import (
-    MSG_ADDRESS_NOT_ESTIMATED, MSG_ADDRESS_NOT_FOUND, MSG_ADDRESS_TOO_LONG, MSG_DESCRIPTION_REQUIRED,
+    MSG_AI_RERUN_CANCELLED, MSG_ADDRESS_NOT_ESTIMATED, MSG_ADDRESS_NOT_FOUND, MSG_ADDRESS_TOO_LONG, MSG_DESCRIPTION_REQUIRED,
     MSG_DESCRIPTION_TOO_LONG,
     MSG_GPS_NOT_FOUND, MSG_LOCATION_REQUIRED, MSG_PHOTO_INAPPROPRIATE, MSG_PHOTO_OUT_OF_FOCUS,
     MSG_PHOTO_REQUIRED, MSG_PHOTO_TOO_MANY, MSG_REPORT_ALL_REQUIRED, MSG_TITLE_REQUIRED, MSG_TITLE_TOO_LONG,
@@ -31,6 +34,13 @@ JST = timezone(timedelta(hours=9), 'JST')
 
 # AI分析画面「直近のAI自動判定結果」に表示する最大件数
 AI_LOG_LIMIT = 50
+
+# 「AIモデル再実行」（全体）で、直近にAI判定の行がある報告を対象から外す秒数（ボタンの連打対策）
+AI_RERUN_RECENT_SECONDS = 60
+# 再実行の結果（outcome）：成功 / AI が応答せずキーワード判定 / 失敗
+RERUN_SUCCEEDED = 'succeeded'
+RERUN_FALLBACK = 'fallback'
+RERUN_FAILED = 'failed'
 
 # 新規報告の入力上限（報告画面の maxlength・「写真添付（3枚まで）」と同じ）
 MAX_PHOTOS = 3
@@ -220,6 +230,15 @@ def create_report(*, citizen_id, title, description, address, latitude, longitud
         # AI 判定の想定外のエラーでも報告の登録は成功として扱う（職員が後で分類できる）
         db.session.rollback()
         current_app.logger.exception('AI 判定で想定外のエラーが発生しました report=%s', report.id)
+
+    # 重複の自動検出（カテゴリは AI 判定の結果を使うため、判定の後に行う）。失敗しても報告の登録は成功として扱う
+    try:
+        # duplicate_service が report_service を import しているため、循環を避けて関数内で import する
+        from app.services import duplicate_service
+        duplicate_service.detect_for_report(report.id)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('重複の検出で想定外のエラーが発生しました report=%s', report.id)
     return report
 
 
@@ -227,7 +246,8 @@ def analyze_report(report_id, trigger_type=AiAnalysisTrigger.INITIAL.value):
     """報告を AI で分類し、結果を ai_analyses に1行追加する。新規報告 基本フロー3
 
     Gemini が失敗した場合は失敗の行を残し、キーワード判定（rule_based）で判定し直す。
-    新規報告時（initial）は、報告のカテゴリ・緊急度・担当部署が未設定なら AI の結果を初期値にする（職員の設定値は上書きしない）。
+    新規報告時（initial）・職員の手動再実行（manual）は、報告のカテゴリ・緊急度・担当部署が未設定なら AI の結果を初期値にする
+    （職員の設定値は上書きしない）。市民へのお知らせは initial のときだけ。
     再判定（rejudge）では報告の値を変更しない（変更するかは職員が判断する）。
     """
     report = db.session.get(Report, report_id)
@@ -292,6 +312,106 @@ def rejudge_stale_reports(*, now=None):
             db.session.rollback()
             current_app.logger.exception('AI 再判定で想定外のエラーが発生しました report=%s', report_id)
     return count
+
+
+def reanalyze_report(report_id):
+    """報告1件の AI 判定を再実行する（AI分析画面の各行の「再実行」）。AI分析・自動判定ログ
+
+    取り消し以外の全ステータスが対象。ai_analyses に manual の行を追加し、成功したら報告の未設定の項目を埋める
+    （確定値は上書きしない・市民や職員への通知は作らない）。
+    戻り値は {'report_id', 'outcome', 'urgency'}（outcome は succeeded / fallback / failed）。報告がなければ None。
+    取り消された報告は ServiceError。
+    """
+    report = db.session.get(Report, report_id)
+    if report is None:
+        return None
+    if report.status == ReportStatus.CANCELLED.value:
+        raise ServiceError(MSG_AI_RERUN_CANCELLED)
+    return _run_manual_analysis(report_id)
+
+
+def reanalyze_pending_reports(*, limit=None, now=None):
+    """AI 判定が必要な未完了の報告をまとめて再実行する（AI分析画面の「AIモデル再実行」）。AI分析・自動判定ログ
+
+    対象は count_ai_rerun_targets と同じ。1回に limit 件（省略時 AI_RERUN_BATCH_LIMIT）・
+    AI_RERUN_TIME_BUDGET_SECONDS 秒までで打ち切り、残りは次回に回す（1件目は必ず実行する）。
+    1件ごとに commit し、想定外のエラーでも他の報告の再実行を止めない。
+    戻り値は {'targets', 'executed', 'succeeded', 'fallback', 'failed', 'remaining'}。
+    """
+    config = current_app.config
+    limit = limit or config['AI_RERUN_BATCH_LIMIT']
+    now = now or datetime.now(timezone.utc)
+    target_ids = _rerun_target_ids(now)
+
+    started = monotonic()
+    counts = {RERUN_SUCCEEDED: 0, RERUN_FALLBACK: 0, RERUN_FAILED: 0}
+    executed = 0
+    for report_id in target_ids[:limit]:
+        if executed and monotonic() - started >= config['AI_RERUN_TIME_BUDGET_SECONDS']:
+            break
+        counts[_run_manual_analysis(report_id)['outcome']] += 1
+        executed += 1
+    return {'targets': len(target_ids), 'executed': executed, **counts, 'remaining': len(target_ids) - executed}
+
+
+def count_ai_rerun_targets():
+    """「AIモデル再実行」（全体）の対象になる報告の件数（上限で打ち切る前の総数）"""
+    return len(_rerun_target_ids(datetime.now(timezone.utc)))
+
+
+# 手動再実行を1件行い、結果を outcome にまとめる。想定外のエラーも failed として扱い、他の処理を止めない
+def _run_manual_analysis(report_id):
+    result = {'report_id': report_id, 'outcome': RERUN_FAILED, 'urgency': None}
+    try:
+        analysis = analyze_report(report_id, trigger_type=AiAnalysisTrigger.MANUAL.value)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('AI 再実行で想定外のエラーが発生しました report=%s', report_id)
+        return result
+    if analysis is None:
+        return result
+    # Gemini を使う設定なのに rule_based の結果なら、Gemini が応答せずキーワード判定に切り替えたもの
+    fallback = ai.gemini_enabled() and analysis.model_name == RULE_BASED_MODEL_NAME
+    return {**result, 'outcome': RERUN_FALLBACK if fallback else RERUN_SUCCEEDED,
+            'urgency': Urgency.label_of(analysis.urgency, '-')}
+
+
+# 再実行の対象の報告 ID（実行する順）。未完了の報告のうち、AI の成功がない・Gemini の失敗で rule_based になっている報告
+# 判定の行が1度もない報告 → 最後の判定が古い報告 の順。直近 AI_RERUN_RECENT_SECONDS 秒以内に判定した報告は除く
+def _rerun_target_ids(now):
+    open_values = [s.value for s in OPEN_STATUSES]
+    reports = db.session.execute(select(Report.id, Report.created_at).where(Report.status.in_(open_values))).all()
+    rows = db.session.execute(
+        select(AiAnalysis.report_id, AiAnalysis.status, AiAnalysis.model_name, AiAnalysis.created_at)
+        .join(Report, Report.id == AiAnalysis.report_id)
+        .where(Report.status.in_(open_values))
+        .order_by(AiAnalysis.report_id, AiAnalysis.created_at.desc(), AiAnalysis.id.desc())).all()
+    # 報告ごとの判定（新しい順）
+    history = {report_id: list(group) for report_id, group in groupby(rows, key=lambda r: r.report_id)}
+    gemini = ai.gemini_enabled()
+    recent_limit = now - timedelta(seconds=AI_RERUN_RECENT_SECONDS)
+
+    targets = []
+    for report_id, created_at in reports:
+        analyses = history.get(report_id, [])
+        if analyses and analyses[0].created_at > recent_limit:
+            continue
+        if _needs_rerun(analyses, gemini):
+            targets.append(((bool(analyses), analyses[0].created_at if analyses else created_at, report_id),
+                            report_id))
+    targets.sort()
+    return [report_id for _, report_id in targets]
+
+
+# 再実行が必要か。analyses は報告の判定（新しい順）
+def _needs_rerun(analyses, gemini):
+    latest_succeeded = next((a for a in analyses if a.status == AiAnalysisStatus.SUCCEEDED.value), None)
+    if latest_succeeded is None:
+        return True
+    # Gemini が有効なのに最新の成功が rule_based で、同じ判定の中に Gemini の失敗の行がある（= Gemini が失敗して切り替えた）
+    return (gemini and latest_succeeded.model_name == RULE_BASED_MODEL_NAME
+            and any(a.status == AiAnalysisStatus.FAILED.value and a.created_at == latest_succeeded.created_at
+                    for a in analyses))
 
 
 # 再判定の結果を職員に知らせる通知の本文
@@ -442,7 +562,7 @@ def _add_succeeded_analysis(report, result, trigger_type=AiAnalysisTrigger.INITI
     )
     db.session.add(analysis)
     # 再判定では確定値を変更しない（職員が報告詳細で判断する）
-    if trigger_type != AiAnalysisTrigger.INITIAL.value:
+    if trigger_type == AiAnalysisTrigger.REJUDGE.value:
         return analysis
     # 未設定の確定値だけ AI の結果で埋める
     if report.category_id is None:
@@ -567,6 +687,14 @@ def list_ai_analyses(search='', report_id=None):
         stmt = stmt.where(AiAnalysis.report_id == report_id)
     elif search:
         stmt = stmt.where(Report.title.ilike(f'%{_escape_like(search)}%', escape='\\'))
+    # 一覧は新しい順なので、報告ごとの最初の行がその報告の最新のログ（「再実行」ボタンは最新の行だけに付ける）
+    seen = set()
+
+    def is_latest_of_report(analysis):
+        latest = analysis.report_id not in seen
+        seen.add(analysis.report_id)
+        return latest
+
     return [{
         'id': a.report_id,
         'title': a.report.title,
@@ -580,6 +708,8 @@ def list_ai_analyses(search='', report_id=None):
         'trigger_type': a.trigger_type,
         'trigger': AiAnalysisTrigger.label_of(a.trigger_type),
         'date': format_datetime(a.created_at),
+        # 「再実行」ボタンを出すか（報告の最新のログで、取り消し以外の報告）
+        'can_reanalyze': is_latest_of_report(a) and a.report.status != ReportStatus.CANCELLED.value,
     } for a in db.session.execute(stmt).scalars()]
 
 

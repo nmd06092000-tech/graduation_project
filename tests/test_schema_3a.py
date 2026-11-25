@@ -21,7 +21,8 @@ MIGRATIONS_DIR = str(Path(__file__).resolve().parent.parent / 'migrations')
 REVISION = 'd4a91c7e5b36'
 PREVIOUS_REVISION = '2422f95d18ff'
 PENDING_REVISION = 'e5b2c8f1a937'   # パスワード再設定の確認待ちハッシュ（pending_password_hash）。d4a91c7e5b36 の次
-LATEST_REVISION = 'f6c3d9a2b148'    # 市民向けお知らせ（citizen_notifications）。e5b2c8f1a937 の次
+NOTIFICATIONS_REVISION = 'f6c3d9a2b148'    # 市民向けお知らせ（citizen_notifications）。e5b2c8f1a937 の次
+LATEST_REVISION = 'a7d2e4b9c561'    # ai_analyses.trigger_type に manual（AIモデル再実行）を許可。f6c3d9a2b148 の次
 SOFT_DELETE_COLUMNS = {'del_flag', 'deleted_at', 'deleted_by_id'}
 
 
@@ -189,7 +190,7 @@ def test_duplicate_login_id_is_still_rejected_even_when_existing_row_is_deleted(
 # マイグレーションのスクリプト（DB には触れない）
 # ---------------------------------------------------------------------------
 
-def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_head_is_f6c3d9a2b148():
+def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_head_is_a7d2e4b9c561():
     # Arrange
     config = AlembicConfig()
     config.set_main_option('script_location', MIGRATIONS_DIR)
@@ -215,7 +216,20 @@ def test_migration_e5b2c8f1a937_follows_d4a91c7e5b36():
     assert revision.down_revision == REVISION
 
 
-def test_migration_f6c3d9a2b148_follows_e5b2c8f1a937_and_is_single_head():
+def test_migration_f6c3d9a2b148_follows_e5b2c8f1a937():
+    # Arrange
+    config = AlembicConfig()
+    config.set_main_option('script_location', MIGRATIONS_DIR)
+    script = ScriptDirectory.from_config(config)
+
+    # Act
+    revision = script.get_revision(NOTIFICATIONS_REVISION)
+
+    # Assert
+    assert revision.down_revision == PENDING_REVISION
+
+
+def test_migration_a7d2e4b9c561_follows_f6c3d9a2b148_and_is_single_head():
     # Arrange
     config = AlembicConfig()
     config.set_main_option('script_location', MIGRATIONS_DIR)
@@ -225,7 +239,7 @@ def test_migration_f6c3d9a2b148_follows_e5b2c8f1a937_and_is_single_head():
     revision = script.get_revision(LATEST_REVISION)
 
     # Assert
-    assert revision.down_revision == PENDING_REVISION
+    assert revision.down_revision == NOTIFICATIONS_REVISION
     assert script.get_heads() == [LATEST_REVISION]
 
 

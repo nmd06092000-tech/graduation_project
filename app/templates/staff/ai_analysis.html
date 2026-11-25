@@ -26,10 +26,18 @@
 
         <!-- メイン領域 -->
         <div class="col-md-10 p-4">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            {# 再実行対象件数：バックエンド未接続でも画面が落ちないよう、未定義なら件数表示・無効化をしない #}
+            {% set target_count = reanalyze_target_count|default(none) %}
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <h3 class="fw-bold mb-0"><i class="bi bi-robot me-2"></i>AI分析・自動判定ログ</h3>
-                <button class="btn btn-success btn-sm"><i class="bi bi-arrow-clockwise me-1"></i>AIモデル再実行</button>
+                <button type="button" class="btn btn-success btn-sm" data-bs-toggle="modal" data-bs-target="#reanalyzeAllModal"
+                        {% if target_count == 0 %}disabled{% endif %}>
+                    <i class="bi bi-arrow-clockwise me-1"></i>AIモデル再実行{% if target_count is not none %}（対象 {{ target_count }} 件）{% endif %}
+                </button>
             </div>
+
+            <!-- 再実行結果などのメッセージ（375px でも見える位置＝見出し直下に置く） -->
+            {% include 'components/_flash.html' %}
 
             <!-- 上部サマリーカード -->
             <div class="row g-3 mb-4">
@@ -64,9 +72,6 @@
                     </p>
                 </div>
             </div>
-
-            <!-- 検索結果が0件の場合のメッセージ（代替フロー4a-1） -->
-            {% include 'components/_flash.html' %}
 
             <!-- 検索・絞り込みフォーム -->
             <div class="card border-0 shadow-sm mb-4">
@@ -144,7 +149,14 @@
                                     </td>
                                     <!-- 再判定状況（初回判定 / 再判定済み） -->
                                     <td>
-                                        <span class="badge {{ 'bg-primary' if log.trigger_type == 'rejudge' else 'bg-light text-dark border' }}">{{ log.trigger }}</span>
+                                        {# 初回判定 / 再判定済み（rejudge）/ 手動再実行（manual）で色を分ける #}
+                                        {% if log.trigger_type == 'rejudge' %}
+                                        <span class="badge bg-primary">{{ log.trigger }}</span>
+                                        {% elif log.trigger_type == 'manual' %}
+                                        <span class="badge bg-info text-dark">{{ log.trigger }}</span>
+                                        {% else %}
+                                        <span class="badge bg-light text-dark border">{{ log.trigger }}</span>
+                                        {% endif %}
                                     </td>
                                     <td>
                                         {% if ai_failed %}
@@ -160,8 +172,20 @@
                                     </td>
                                     <td><span class="badge {{ 'bg-danger' if ai_failed else 'bg-info text-dark' }}">{{ log.status }}</span></td>
                                     <td><small class="text-muted">{{ log.date }}</small></td>
-                                    <td class="text-end pe-3">
+                                    <td class="text-end pe-3 text-nowrap">
                                         <a href="{{ url_for('staff.report_detail', report_id=log.id) }}" class="btn btn-outline-primary btn-sm px-3">詳細確認</a>
+                                        {# 報告ごとの最新行だけに出す（can_reanalyze）。search/id は PRG 後も絞り込みを保つため引き継ぐ #}
+                                        {% if log.can_reanalyze %}
+                                        <form method="post" action="{{ url_for('staff.report_reanalyze', report_id=log.id) }}" data-nav="replace" class="d-inline">
+                                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                            <input type="hidden" name="search" value="{{ request.args.get('search', '') }}">
+                                            <input type="hidden" name="id" value="{{ request.args.get('id', '') }}">
+                                            <button type="submit" class="btn btn-outline-success btn-sm px-3 btn-reanalyze" aria-label="報告 #{{ log.id }} をAIで再実行">
+                                                <span class="reanalyze-idle">再実行</span>
+                                                <span class="reanalyze-busy"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>実行中…</span>
+                                            </button>
+                                        </form>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% else %}
@@ -173,6 +197,33 @@
                         </table>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AIモデル再実行（一括）確認モーダル -->
+<div class="modal fade" id="reanalyzeAllModal" tabindex="-1" aria-labelledby="reanalyzeAllModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="reanalyzeAllModalLabel">AIモデル再実行の確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 fs-6">
+                AI判定に失敗した報告、または簡易判定（キーワード判定）になった報告を、AIで再実行します。{% if reanalyze_all_limit is defined %}最大 {{ reanalyze_all_limit }} 件まで処理します。{% endif %}数十秒かかる場合があります。よろしいですか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <form method="post" action="{{ url_for('staff.ai_reanalyze_all') }}" data-nav="replace">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="search" value="{{ request.args.get('search', '') }}">
+                    <input type="hidden" name="id" value="{{ request.args.get('id', '') }}">
+                    <button type="submit" class="btn btn-success px-4 btn-reanalyze">
+                        <span class="reanalyze-idle">再実行する</span>
+                        <span class="reanalyze-busy"><span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>実行中…</span>
+                    </button>
+                </form>
             </div>
         </div>
     </div>

@@ -4,8 +4,9 @@ from flask import Blueprint, current_app, render_template, request, redirect, ur
 from flask_login import current_user
 
 from app.constants import (
-    MSG_AI_LOG_NOT_FOUND, MSG_GROUP_MERGED, MSG_GROUP_STATUS_UPDATED, MSG_MAP_NO_RESULT,
-    MSG_NO_DUPLICATES, MSG_STATUS_UPDATED, ReportStatus,
+    MSG_AI_LOG_NOT_FOUND, MSG_AI_RERUN_BATCH_DONE, MSG_AI_RERUN_DONE, MSG_AI_RERUN_FAILED,
+    MSG_AI_RERUN_FALLBACK, MSG_AI_RERUN_NO_TARGET, MSG_AI_RERUN_REMAINING, MSG_GROUP_DISMISSED, MSG_GROUP_MERGED,
+    MSG_GROUP_STATUS_UPDATED, MSG_MAP_NO_RESULT, MSG_NO_DUPLICATES, MSG_STATUS_UPDATED, ReportStatus,
 )
 from app.models import User
 from app.services import (
@@ -121,7 +122,58 @@ def ai_analysis():
         flash(MSG_AI_LOG_NOT_FOUND, 'danger')
     return render_template('staff/ai_analysis.html', ai_logs=ai_logs, search_query=search_query,
                            ai_summary=report_service.ai_summary(),
-                           rejudge_hours=current_app.config['AI_REJUDGE_HOURS'])
+                           rejudge_hours=current_app.config['AI_REJUDGE_HOURS'],
+                           reanalyze_target_count=report_service.count_ai_rerun_targets(),
+                           reanalyze_all_limit=current_app.config['AI_RERUN_BATCH_LIMIT'])
+
+
+# AI分析画面に戻る（PRG）。絞り込み（search・id）は画面の hidden 項目から受け取り、url_for だけで URL を組み立てる
+def _redirect_to_ai_analysis():
+    search_query = (request.form.get('search') or request.args.get('search') or '').strip()
+    report_id = request.form.get('id', type=int) or request.args.get('id', type=int)
+    return redirect(url_for('staff.ai_analysis', search=search_query or None, id=report_id))
+
+
+# 行政職員 AIモデル再実行（全体）：AI 判定が必要な未完了の報告を、件数・時間の上限までまとめて再実行する
+@staff_bp.route('/ai-analysis/reanalyze', methods=['POST'])
+@role_required(User.ROLE_STAFF)
+def ai_reanalyze_all():
+    result = report_service.reanalyze_pending_reports()
+    if not result['executed']:
+        flash(MSG_AI_RERUN_NO_TARGET, 'info')
+        return _redirect_to_ai_analysis()
+    # 全件成功は緑、全件失敗は赤、それ以外（キーワード判定への切り替えを含む）は黄
+    if result['succeeded'] == result['executed']:
+        category = 'success'
+    elif result['failed'] == result['executed']:
+        category = 'danger'
+    else:
+        category = 'warning'
+    flash(MSG_AI_RERUN_BATCH_DONE.format(succeeded=result['succeeded'], fallback=result['fallback'],
+                                         failed=result['failed']), category)
+    if result['remaining']:
+        flash(MSG_AI_RERUN_REMAINING.format(executed=result['executed'], remaining=result['remaining']), 'info')
+    return _redirect_to_ai_analysis()
+
+
+# 行政職員 AIモデル再実行（報告1件）：AI分析画面の各行の「再実行」
+@staff_bp.route('/reports/<int:report_id>/reanalyze', methods=['POST'])
+@role_required(User.ROLE_STAFF)
+def report_reanalyze(report_id):
+    try:
+        result = report_service.reanalyze_report(report_id)
+    except ServiceError as e:
+        flash(str(e), 'danger')
+        return _redirect_to_ai_analysis()
+    if result is None:
+        abort(404)
+    if result['outcome'] == report_service.RERUN_SUCCEEDED:
+        flash(MSG_AI_RERUN_DONE.format(report_id=report_id, urgency=result['urgency']), 'success')
+    elif result['outcome'] == report_service.RERUN_FALLBACK:
+        flash(MSG_AI_RERUN_FALLBACK.format(report_id=report_id), 'warning')
+    else:
+        flash(MSG_AI_RERUN_FAILED.format(report_id=report_id), 'danger')
+    return _redirect_to_ai_analysis()
 
 
 # 行政職員 対応管理・重複確認画面
@@ -154,6 +206,21 @@ def duplicate_merge(group_id):
     if group is None:
         abort(404)
     return render_template('staff/duplicate_merge.html', group=group)
+
+
+# 行政職員 重複グループを重複なしにする（確認待ちの一覧から外れる）
+@staff_bp.route('/duplicates/<int:group_id>/dismiss', methods=['POST'])
+@role_required(User.ROLE_STAFF)
+def duplicate_dismiss(group_id):
+    try:
+        group = duplicate_service.dismiss_group(group_id, actor_id=current_user.id)
+    except ServiceError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('staff.duplicates'))
+    if group is None:
+        abort(404)
+    flash(MSG_GROUP_DISMISSED.format(group_id=group_id), 'success')
+    return redirect(url_for('staff.duplicates'))
 
 
 # 行政職員 重複グループの一括対応ステータス変更（status_service でグループ内の報告を1件ずつ遷移させる）

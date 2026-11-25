@@ -28,7 +28,7 @@ class AiAnalysis(db.Model):
     report_id = db.Column(db.BigInteger, db.ForeignKey('reports.id', ondelete='RESTRICT'), nullable=False)
     # 判定の成否（succeeded / failed）
     status = db.Column(db.String(20), nullable=False)
-    # 判定のきっかけ（initial = 新規報告時、rejudge = 未対応のまま一定時間たった報告の再判定）
+    # 判定のきっかけ（initial = 新規報告時、rejudge = 未対応のまま一定時間たった報告の再判定、manual = 職員の手動再実行）
     trigger_type = db.Column(db.String(20), nullable=False,
                         default=AiAnalysisTrigger.INITIAL.value, server_default=AiAnalysisTrigger.INITIAL.value)
     # AI 分類カテゴリ・判定緊急度・推定担当部署

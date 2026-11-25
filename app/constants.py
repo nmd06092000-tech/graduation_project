@@ -71,6 +71,8 @@ class AiAnalysisTrigger(LabeledEnum):
     """AI 判定のきっかけ（ai_analyses.trigger_type）。AI分析画面の「再判定状況」に表示する"""
     INITIAL = ('initial', '初回判定')
     REJUDGE = ('rejudge', '再判定済み')
+    # 職員が AI分析画面の「再実行」ボタンで実行した判定
+    MANUAL = ('manual', '手動再実行')
 
 
 # AI 判定失敗の種類（ai_analyses.error_message 先頭の [kind]）の画面表示ラベル。AIError.kind と対応
@@ -193,12 +195,22 @@ MSG_COMMENT_REQUIRED = '担当者メモ・進捗コメントを入力してく�
 MSG_MAP_NO_RESULT = '絞り込み結果が存在しません。'
 # AI分析・自動判定ログ 代替フロー4a-1
 MSG_AI_LOG_NOT_FOUND = 'AIログのタイトルが存在しません'
+# AI分析・自動判定ログ「AIモデル再実行」（設計書にない新規の文言。計画 A20261124-123404 で承認済み）
+MSG_AI_RERUN_DONE = '報告 #{report_id} のAI判定を再実行しました（緊急度「{urgency}」）。'
+MSG_AI_RERUN_FALLBACK = '報告 #{report_id} はAIモデルが応答しなかったため、キーワード判定で再実行しました。'
+MSG_AI_RERUN_FAILED = '報告 #{report_id} のAI判定に失敗しました。時間をおいて再度実行してください。'
+MSG_AI_RERUN_CANCELLED = '取り消された報告はAI再実行の対象外です。'
+MSG_AI_RERUN_NO_TARGET = '再実行が必要な報告はありません。'
+MSG_AI_RERUN_BATCH_DONE = 'AIモデルを再実行しました（成功 {succeeded} 件 / キーワード判定 {fallback} 件 / 失敗 {failed} 件）。'
+MSG_AI_RERUN_REMAINING = '対象が多いため今回は{executed}件のみ実行しました。残り{remaining}件は再度実行してください。'
 # 対応管理・重複確認 代替フロー1a-1
 MSG_NO_DUPLICATES = '現在重複した項目がありません'
 # 代表案件に統合する 基本フロー5
 MSG_GROUP_MERGED = '重複グループ #{group_id} を代表案件（#{report_id}）に統合しました！'
 # 一括対応ステータス変更 基本フロー5
 MSG_GROUP_STATUS_UPDATED = '重複グループ #{group_id} の対応ステータスを『{status}』に一括更新しました！'
+# 重複なしにする（設計書にない操作。確認待ちのグループを重複なしにして一覧から外す）
+MSG_GROUP_DISMISSED = '重複グループ {group_id} を重複なしにしました。'
 # 設計書にない業務エラー（不正な遷移・処理済みグループなど）
 MSG_INVALID_STATUS = '「{current}」から「{status}」には変更できません。'
 # AI緊急度の再判定の通知（ダッシュボード）

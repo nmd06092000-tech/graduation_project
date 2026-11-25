@@ -59,6 +59,10 @@
                                                 <span class="fw-bold fs-6 text-dark me-2">#{{ r.id }} {{ r.title }}</span>
                                                 <span class="badge bg-secondary">{{ r.reporter }}</span>
                                             </div>
+                                            {# 住所（バックエンド未対応の間は表示しない） #}
+                                            {% if r.address %}
+                                            <div class="small text-muted mb-1"><i class="bi bi-geo-alt me-1"></i>{{ r.address }}</div>
+                                            {% endif %}
                                             <div class="small text-muted"><i class="bi bi-clock me-1"></i>報告日時: {{ r.date }}</div>
                                         </label>
                                     </div>

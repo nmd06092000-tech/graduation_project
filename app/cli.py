@@ -2,7 +2,9 @@
 import click
 
 from app.constants import MSG_ACCOUNT_RESTORED, TEST_ACCOUNT_PW
-from app.services import ServiceError, ValidationError, auth_service, report_service, user_service
+from app.services import (
+    ServiceError, ValidationError, auth_service, duplicate_service, report_service, user_service,
+)
 from app.services.report_service import JST
 
 
@@ -22,6 +24,20 @@ def register_commands(app):
         """
         count = report_service.rejudge_stale_reports()
         click.echo(f'{count} 件の報告を再判定しました。')
+
+    @app.cli.command('detect-duplicates')
+    def detect_duplicates():
+        """未完了でグループのない報告をすべて調べ、重複する報告を重複グループにまとめる
+
+        報告を作ったときの自動検出で拾えなかった報告（AI の判定前・導入前の報告など）を後からまとめる。
+        すでにグループにいる報告は対象外なので、何度実行してもグループは増えない。
+        """
+        result = duplicate_service.detect_all()
+        click.echo(f"{result['scanned']} 件の報告を調べました："
+                   f"新しいグループ {result['created']} 件 / 既存グループへの追加 {result['joined']} 件 / "
+                   f"グループに入った報告 {result['grouped']} 件 / 失敗 {result['failed']} 件")
+        if result['failed']:
+            click.echo('失敗した報告はログを確認してください。原因を解消してからもう一度実行すると再検出されます。')
 
     @app.cli.command('create-admin')
     @click.option('--login-id', default=None, help='管理者ID（@ は使えません）。省略すると入力を求めます')

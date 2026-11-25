@@ -191,7 +191,7 @@ Chạy local: `python run.py` (interpreter `task-app\.venv\Scripts\python.exe`),
 
 - ポータル: danh sách tài khoản đã lấy từ DB (3a, backend và template). Reset mật khẩu, パスワード変更 và 新規アカウント登録 đã thật từ 2b.
 - 市民 chưa xem được chi tiết 対応状況, chưa 取り消し được.
-- 職員 không thấy ảnh đính kèm, chưa có 担当部署設定, nút AIモデル再実行 không chạy, 重複確認 trống.
+- 職員 không thấy ảnh đính kèm, chưa có 担当部署設定, 重複確認 trống. (Nút AIモデル再実行: đã nghiệm thu 2026-11-24 (A20261124-123404). 重複確認: đang làm theo kế hoạch A20261124-143227 (tự phát hiện báo cáo trùng + 重複なし); backend xong 2026-11-24, chờ frontend/test; sau deploy chạy `flask --app run detect-duplicates` một lần.)
 - Chưa có trang lỗi 403/404/500 riêng. (CSRF và logout POST đã có từ GĐ1.)
 - Giao diện 職員 trên điện thoại: sidebar có thể chiếm cả màn hình (chưa kiểm chứng).
 
