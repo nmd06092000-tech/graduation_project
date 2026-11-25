@@ -1,7 +1,7 @@
 # 報告（Report）と添付写真（ReportPhoto）モデル
 import sqlalchemy as sa
 
-from app.constants import LocationSource, ReportStatus, Urgency
+from app.constants import AiAnalysisStatus, LocationSource, ReportStatus, Urgency
 from app.extensions import db
 
 
@@ -74,6 +74,11 @@ class Report(db.Model):
     def latest_ai_analysis(self):
         """最新の AI 判定結果（なければ None）"""
         return self.ai_analyses[0] if self.ai_analyses else None
+
+    @property
+    def latest_succeeded_ai_analysis(self):
+        """成功した AI 判定のうち最新のもの（モデルは問わない。なければ None）"""
+        return next((a for a in self.ai_analyses if a.status == AiAnalysisStatus.SUCCEEDED.value), None)
 
     def __repr__(self):
         return f'<Report {self.id} {self.status}>'

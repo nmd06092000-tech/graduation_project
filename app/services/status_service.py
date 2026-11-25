@@ -2,7 +2,7 @@
 # 職員による緊急度の変更も対応履歴に記録するため、ここで行う
 from app.constants import (
     MSG_COMMENT_REQUIRED, MSG_GROUP_INVALID_STATUS, MSG_INVALID_STATUS, MSG_INVALID_URGENCY,
-    MSG_URGENCY_REASON_REQUIRED, AiAnalysisStatus, ReportStatus, Role, Urgency, next_statuses,
+    MSG_URGENCY_REASON_REQUIRED, ReportStatus, Role, Urgency, next_statuses,
 )
 from app.extensions import db
 from app.models import DuplicateGroup, Report, ReportStatusHistory, User
@@ -73,8 +73,9 @@ def update_report_status(report_id, to_status, *, actor_id, comment, urgency='',
     if urgency and urgency not in Urgency.values():
         raise ServiceError(MSG_INVALID_URGENCY)
     if urgency and urgency != report.urgency and not urgency_reason:
-        latest_ai = report.latest_ai_analysis
-        ai_urgency = latest_ai.urgency if latest_ai and latest_ai.status == AiAnalysisStatus.SUCCEEDED else None
+        # 報告詳細で職員が見ている AI 判定緊急度（最新の成功）と比べる
+        latest_ai = report.latest_succeeded_ai_analysis
+        ai_urgency = latest_ai.urgency if latest_ai else None
         if ai_urgency and urgency != ai_urgency:
             raise ServiceError(MSG_URGENCY_REASON_REQUIRED)
 

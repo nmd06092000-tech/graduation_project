@@ -78,7 +78,7 @@ class AiAnalysisTrigger(LabeledEnum):
 # AI 判定失敗の種類（ai_analyses.error_message 先頭の [kind]）の画面表示ラベル。AIError.kind と対応
 AI_ERROR_KIND_LABELS = {
     'config': '設定エラー',
-    'client': '入力エラー',
+    'client': '画像・入力エラー',
     'quota': '利用上限エラー',
     'auth': '認証エラー',
     'server': 'AIサーバーエラー',
@@ -88,10 +88,21 @@ AI_ERROR_KIND_LABELS = {
     'invalid_response': '応答形式エラー',
     'unknown': '不明なエラー',
 }
-# 設定・認証の詳細は構成情報を含み得るため画面には出さず、この共通文を表示する
-AI_ERROR_KINDS_HIDE_DETAIL = ('config', 'auth')
-AI_ERROR_GENERIC_MESSAGE = 'AI判定の設定に問題があるため、判定できませんでした。管理者へお問い合わせください'
-AI_ERROR_UNKNOWN_MESSAGE = 'AI判定に失敗しました'
+# 報告詳細に出す案内文は種類ごとの固定文のみ（技術的な詳細は構成情報を含み得るため画面に出さない。DB とログには残る）
+_AI_ERROR_CONFIG_MESSAGE = 'AI判定の設定に問題があるため、判定できませんでした。管理者へお問い合わせください。'
+_AI_ERROR_RETRY_SUFFIX = '時間をおいて再実行してください。'
+AI_ERROR_KIND_MESSAGES = {
+    'config': _AI_ERROR_CONFIG_MESSAGE,
+    'auth': _AI_ERROR_CONFIG_MESSAGE,
+    'client': '添付写真または報告内容をAIが正常に読み取れず、判定できませんでした。',
+    'quota': 'AIの利用上限に達したため、判定できませんでした。' + _AI_ERROR_RETRY_SUFFIX,
+    'server': 'AIサーバーで障害が発生したため、判定できませんでした。' + _AI_ERROR_RETRY_SUFFIX,
+    'timeout': 'AIの応答に時間がかかりすぎたため、判定できませんでした。' + _AI_ERROR_RETRY_SUFFIX,
+    'network': 'AIモデルに接続できず、判定できませんでした。通信状況を確認して再実行してください。',
+    'blocked': 'AIの安全性チェックにより判定できませんでした。報告内容を職員が確認してください。',
+    'invalid_response': 'AIの判定結果を読み取れなかったため、判定できませんでした。再実行してください。',
+    'unknown': 'AI判定に失敗しました。' + _AI_ERROR_RETRY_SUFFIX,
+}
 
 
 class CitizenNotificationType(LabeledEnum):
@@ -337,6 +348,35 @@ MSG_RESET_CODE_GONE = '再設定コードの表示時間が過ぎました。必
 MSG_ACCOUNT_NOT_DELETED = '「{login_id}」は削除されていないアカウントです。'
 MSG_ACCOUNT_DELETED_RESTORE_FIRST = '「{login_id}」は削除済みのアカウントです。先に restore-user で復元してください。'
 MSG_ACCOUNT_RESTORED = '「{login_id}」を復元しました。'
+
+# 設計書にない新規の文言（3b：マスタ管理＝部署・カテゴリの追加・名称変更・非表示／再表示）
+# {label} は 部署名 / カテゴリ名、{item} は 部署 / カテゴリ
+MSG_DEPARTMENT_NAME_REQUIRED = '部署名を入力してください。'
+# カテゴリ追加で名前・既定の担当部署の両方が空のとき（赤）。片方だけ空ならそれぞれ個別の文言（オレンジ）
+MSG_CATEGORY_NAME_DEPARTMENT_REQUIRED = 'カテゴリ名と既定の担当部署を入力してください。'
+MSG_CATEGORY_NAME_REQUIRED = 'カテゴリ名を入力してください。'
+MSG_CATEGORY_DEFAULT_DEPARTMENT_REQUIRED = '既定の担当部署を選択してください。'
+MSG_MASTER_NAME_TOO_LONG = '{label}は50文字以内で入力してください。'
+MSG_MASTER_NAME_INVALID = '{label}に使用できない文字が含まれています。'
+MSG_MASTER_NAME_TAKEN = 'この{label}は既に登録されています。'
+MSG_MASTER_NAME_TAKEN_HIDDEN = 'この{label}は非表示の{item}として登録されています。'
+# 画面の操作の対象が存在しない（範囲外の ID を含む）とき
+MSG_MASTER_TARGET_NOT_FOUND = '対象の{item}が見つかりません。'
+MSG_CATEGORY_DEFAULT_DEPARTMENT_INVALID = '既定の担当部署が見つかりません。'
+MSG_DEPARTMENT_IN_USE_BY_CATEGORY = ('既定の担当部署として使われているカテゴリ（{names}）があるため、非表示にできません。'
+                                     '先にカテゴリの既定の担当部署を変更してください。')
+MSG_CATEGORY_OTHER_PROTECTED = '「{name}」はAI判定の既定の分類として使うため、非表示にできません。'
+MSG_CATEGORY_RESTORE_DEPARTMENT_HIDDEN = ('既定の担当部署「{department}」が非表示のため、表示できません。'
+                                          '先に部署を表示してください。')
+MSG_MASTER_SAVE_FAILED = '保存できませんでした。しばらくしてからもう一度お試しください。'
+MSG_DEPARTMENT_CREATED = '部署「{name}」を登録しました。'
+MSG_DEPARTMENT_UPDATED = '部署「{name}」を更新しました。'
+MSG_DEPARTMENT_HIDDEN = '部署「{name}」を非表示にしました。'
+MSG_DEPARTMENT_RESTORED = '部署「{name}」を表示に戻しました。'
+MSG_CATEGORY_CREATED = 'カテゴリ「{name}」を登録しました。'
+MSG_CATEGORY_UPDATED = 'カテゴリ「{name}」を更新しました。'
+MSG_CATEGORY_HIDDEN = 'カテゴリ「{name}」を非表示にしました。'
+MSG_CATEGORY_RESTORED = 'カテゴリ「{name}」を表示に戻しました。'
 
 # パスワード再設定メール（件名・本文。{name} はお名前、{url} は再設定ページのリンク、{minutes} は有効期限（分））
 MAIL_RESET_SUBJECT = '【困りごと報告システム】パスワード再設定のご案内'

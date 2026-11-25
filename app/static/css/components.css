@@ -30,6 +30,46 @@
     gap: 0.25rem 0.5rem;
 }
 
+/* =================================
+   管理者：部署・カテゴリの管理（admin/departments.html, categories.html）
+================================= */
+/* 列が潰れないよう最小幅を持たせ、スマホでは table-responsive の横スクロールにする */
+.admin-master-page .admin-master-table {
+    min-width: 640px;
+}
+
+.admin-master-page .admin-master-table th {
+    white-space: nowrap;
+    font-size: 0.85rem;
+}
+
+/* 非表示の行は薄く見せて、有効な行と区別する */
+.admin-master-page .admin-master-row-hidden > td {
+    color: var(--bs-secondary-color);
+    background-color: var(--bs-tertiary-bg);
+}
+
+.admin-master-page .admin-master-state {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.5rem;
+}
+
+.admin-master-page .admin-master-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.admin-master-page .admin-master-actions form {
+    margin: 0;
+}
+
+.admin-master-page .admin-master-actions .btn {
+    white-space: nowrap;
+}
+
 /* 再設定コード：読み間違いを防ぐため等幅・大きめで表示し、ワンクリックで全選択できる */
 .reset-code-value {
     display: inline-block;

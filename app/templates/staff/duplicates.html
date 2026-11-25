@@ -52,7 +52,7 @@
                         <span class="fw-bold text-dark">{{ group.title }}</span>
                     </div>
                     <div>
-                        {# 検出日時（バックエンド未対応の間は表示しない） #}
+                        {# 検出日時（グループの作成日時。値がない場合は表示しない） #}
                         {% if group.detected_at %}
                         <span class="text-muted small me-2"><i class="bi bi-clock me-1"></i>検出日時: {{ group.detected_at }}</span>
                         {% endif %}

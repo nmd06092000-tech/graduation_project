@@ -11,7 +11,7 @@
 | 0 | Nền test & DB thật | Đã nghiệm thu 2026-11-11 |
 | 1 | Bảo mật nền: CSRF Flask-WTF, logout POST, cookie SECURE/SAMESITE, seed chỉ chạy ở dev | Đã nghiệm thu 2026-11-11 |
 | 2 | Tài khoản: `auth_service`, reset mật khẩu thật, パスワード変更 cho 市民, đăng ký 職員 lưu DB (`users.department_id`), xoá tài khoản thử taro/staff01/admin01 ở local và EC2. Tách 2a (khoá tạm, CLI, gỡ tài khoản thử, ProxyFix, session) và 2b (email reset, パスワード変更, đăng ký 職員) | 2a đã nghiệm thu 2026-11-12; 2b đã nghiệm thu 2026-11-16 |
-| 3 | Quản trị: ユーザー一覧, khoá/mở tài khoản, quản lý 部署/カテゴリ, bỏ dữ liệu viết cứng ở ポータル. Tách 3a (quản lý tài khoản 職員/管理者) và 3b (master 部署/カテゴリ) | 3a đã nghiệm thu 2026-11-16 (1025 pass/0/0); 3b chưa làm |
+| 3 | Quản trị: ユーザー一覧, khoá/mở tài khoản, quản lý 部署/カテゴリ, bỏ dữ liệu viết cứng ở ポータル. Tách 3a (quản lý tài khoản 職員/管理者) và 3b (master 部署/カテゴリ) | 3a đã nghiệm thu 2026-11-16 (1025 pass/0/0); 3b backend xong 2026-11-25 (kế hoạch A20261125-103451), chờ frontend/test/nghiệm thu |
 | 4 | 市民 còn thiếu: route trả ảnh có kiểm quyền, 対応状況を表示, 報告を取り消す | Chưa làm |
 | 5 | 職員 còn thiếu: 担当部署, AI再実行, `urgency_code` + `_urgency_badge`, phân trang, tự phát hiện trùng | Chưa làm |
 | 6 | Chất lượng giao diện: responsive 職員, trang lỗi, dọn JS inline, a11y; gom màu 緊急度 (gồm `staff/map.html`, `static/js/map.js`), xoá `mockup_report_triage.html` | Chưa làm |
@@ -150,7 +150,7 @@ Kế hoạch A20261112-111447. Không có migration (dùng bảng `password_rese
 Kế hoạch A20261116-122658. Người dùng chốt: danh sách chỉ 職員 và 管理者; 削除 là **xoá mềm** (`del_flag`, `deleted_at`, `deleted_by_id`), khôi phục bằng `flask --app run restore-user`; không có nút 無効/有効; ID tài khoản đã xoá vẫn giữ chỗ.
 
 **Đã làm (backend, 2026-11-16)**
-- Migration `d4a91c7e5b36` (sau `2422f95d18ff`): 3 cột, index `ix_users_deleted_by_id`, FK `users_deleted_by_id_fkey` (RESTRICT), CHECK `ck_users_del_flag_consistent`. **Người dùng tự chạy `flask --app run db upgrade`** (local và EC2). Chưa chạy trên DB dev.
+- Migration `d4a91c7e5b36` (sau `2422f95d18ff`): 3 cột, index `ix_users_deleted_by_id`, FK `users_deleted_by_id_fkey` (RESTRICT), CHECK `ck_users_del_flag_consistent`. **Người dùng tự chạy `flask --app run db upgrade`** (local và EC2); đã áp ở local và EC2.
 - `User.is_usable` (hybrid: `is_active AND NOT del_flag`) thay `is_active` ở `load_user` và mọi đường auth; tài khoản đã xoá bị coi như ID không tồn tại ở `authenticate`.
 - `user_service`: `list_accounts`, `count_accounts`, `account_filters`, `account_row`, `delete_account`, `unlock_account`, `issue_reset_code_for_account`, `restore_account`, `list_deleted_accounts`. `auth_service`: `is_locked`, `invalidate_reset_tokens`.
 - Route: `admin.user_list`, `user_delete`, `user_unlock`, `user_reset_code`, `admin.portal` dữ liệu thật. Mã 再設定コード qua `session['reset_code']`, hiện 1 lần trong 120 giây.
@@ -158,13 +158,25 @@ Kế hoạch A20261116-122658. Người dùng chốt: danh sách chỉ 職員 v�
 
 **Trạng thái**: đã nghiệm thu 2026-11-16 (1025 pass/0/0; security ĐẠT, architecture đã sửa).
 
+## Giai đoạn 3b – Quản trị: master 部署/カテゴリ (2026-11-25, kế hoạch A20261125-103451)
+
+Người dùng chốt: 管理者 thêm, sửa tên, đổi 既定の担当部署, ẩn/hiện lại (xoá mềm) 部署 và カテゴリ; ポータル dữ liệu thật; không cấu hình AI trên màn hình.
+
+**Đã làm (backend, 2026-11-25)**
+- Migration `55278139fc30` (sau `a7d2e4b9c561`): `departments`/`categories` thêm `del_flag`, `deleted_at`, `deleted_by_id` (FK `users.id` RESTRICT, index) + CHECK `ck_<bảng>_del_flag_consistent`. **Người dùng tự chạy `flask --app run db upgrade`** (local và EC2); chưa áp. Vòng FK users ↔ departments: `use_alter=True` ở `departments.deleted_by_id`, `User.department` thêm `foreign_keys=[department_id]`.
+- `master_service` (mới): danh sách + đếm, `create/rename/hide/restore_department`, `create/update/hide/restore_category`, `portal_summary`. Quy tắc chặn: không ẩn 部署 đang là 既定部署 của カテゴリ chưa ẩn, không ẩn カテゴリ `other`, không chọn 部署 đã ẩn làm 既定, không hiện lại カテゴリ khi 部署 đang ẩn. Mã カテゴリ tự sinh `cat_` + 8 hex.
+- Lọc mục đã ẩn khỏi lựa chọn mới: `user_service.list_departments(include_deleted=False)`, `find_department`, `_department_by_id` (form tạo 職員 và `create-staff`), `report_service._classification_choices` (AI), `stats_service.map_filter_options`/`count_by_category` (hiện mục ẩn chỉ khi có báo cáo). Bộ lọc ユーザー一覧 dùng `include_deleted=True`.
+- Route (admin): `department_list/create/update/hide/restore`, `category_list/create/update/hide/restore`; `portal` thêm biến `master`. Hằng `MSG_*` khối 3b trong `constants.py`.
+- Chưa làm: template `admin/departments.html`, `admin/categories.html`, thẻ ポータル (frontend); test (tester); review.
+
 ## Việc nhỏ ngoài lộ trình
+- 2026-11-25 (kế hoạch A20261125-100849): EC2 đã `db upgrade` lên head `a7d2e4b9c561` (người dùng tự làm). Dọn 4 điểm kiến trúc sau 重複確認: `duplicate_service.merge_group` khoá dòng nhóm như `dismiss_group` (rollback trước khi báo lỗi); docstring `detect_for_report` ghi đủ ca trả None; README bỏ 2 câu lỗi thời (`DUPLICATE_RADIUS_M` đã có trong config, `merge_group` chưa khoá hàng); 3 comment trong template `staff/duplicate*.html` (frontend làm song song). Không đổi hành vi, không migration.
 - 2026-11-17 (kế hoạch A20261117-120553): ダッシュボード 職員: 本日の優先対応案件 hiện tối đa 10 (`PRIORITY_LIMIT` 5 → 10), thêm `stats_service.count_priority_reports()` và biến template `priority_total` để frontend hiện nút 報告一覧 khi có hơn 10; điều kiện 優先対応 tách vào `_priority_conditions()` dùng chung. Không đổi DB.
 - 2026-11-17 (kế hoạch A20261117-104147): sửa lỗi production trên HTTPS (`WTF_CSRF_SSL_STRICT=True`): trang có `Referrer-Policy: no-referrer` làm form POST không gửi Referer ⇒ Flask-WTF báo CSRFError 「The referrer header is missing.」 rồi bị đưa về `public.index`. Backend: đổi sang `Referrer-Policy: same-origin` ở `admin.user_list` và `_no_leak` (`auth/routes.py`, dùng cho trang `reset_password_confirm`); vẫn không gửi Referer ra site ngoài. Giữ `Cache-Control: no-store`. Test cũ (`test_account_routes_2b.py`, `test_admin_users_3a.py`) còn assert `no-referrer` ⇒ tester cập nhật.
 - 2026-11-17 (kế hoạch A20261117-100122): 市民 パスワード再設定 trả về **một màn** (email + mật khẩu mới + xác nhận), mật khẩu chỉ có hiệu lực khi mở link trong mail rồi bấm 「パスワードの変更を確定する」 (POST). Backend xong (frontend/tester làm song song):
-  - Migration `e5b2c8f1a937` (sau `d4a91c7e5b36`): `password_reset_tokens.pending_password_hash VARCHAR(255) NULL`. **Người dùng tự chạy `flask --app run db upgrade`** (local và EC2); chưa chạy trên DB dev. Link gửi trước khi deploy bị vô hiệu.
+  - Migration `e5b2c8f1a937` (sau `d4a91c7e5b36`): `password_reset_tokens.pending_password_hash VARCHAR(255) NULL`. **Người dùng tự chạy `flask --app run db upgrade`** (local và EC2); đã áp ở local và EC2. Link gửi trước khi deploy bị vô hiệu.
   - `auth_service`: `request_password_reset(email, new_password, confirm_password)` (đổi chữ ký), `confirm_password_reset(token)` (mới), bỏ `reset_password_with_token`; `is_reset_token_valid` thêm điều kiện có hash chờ. Hash chờ bị xoá khi token dùng/vô hiệu. `MSG_RESET_MAIL_SENT`, `MAIL_RESET_BODY` đổi chữ. Luồng 職員/管理者 và `citizen/change_password` không đổi.
-- 2026-11-16 (kế hoạch A20261116-144424): ダッシュボード 職員 thêm khung 地域の問題マップ (Google Maps, dùng lại `map.js` của 地図表示); `staff.dashboard` truyền `map_reports`, `google_maps_api_key`, `google_maps_map_id`. Chờ tester/người dùng nghiệm thu.
+- 2026-11-16 (kế hoạch A20261116-144424): ダッシュボード 職員 thêm khung 地域の問題マップ (Google Maps, dùng lại `map.js` của 地図表示); `staff.dashboard` truyền `map_reports`, `google_maps_api_key`, `google_maps_map_id`. Đã nghiệm thu 2026-11-16.
 
 ## Hướng dẫn thử như khách hàng
 
@@ -191,7 +203,7 @@ Chạy local: `python run.py` (interpreter `task-app\.venv\Scripts\python.exe`),
 
 - ポータル: danh sách tài khoản đã lấy từ DB (3a, backend và template). Reset mật khẩu, パスワード変更 và 新規アカウント登録 đã thật từ 2b.
 - 市民 chưa xem được chi tiết 対応状況, chưa 取り消し được.
-- 職員 không thấy ảnh đính kèm, chưa có 担当部署設定, 重複確認 trống. (Nút AIモデル再実行: đã nghiệm thu 2026-11-24 (A20261124-123404). 重複確認: đang làm theo kế hoạch A20261124-143227 (tự phát hiện báo cáo trùng + 重複なし); backend xong 2026-11-24, chờ frontend/test; sau deploy chạy `flask --app run detect-duplicates` một lần.)
+- 職員 không thấy ảnh đính kèm, chưa có 担当部署設定. (Nút AIモデル再実行: đã nghiệm thu 2026-11-24 (A20261124-123404). 重複確認: đã nghiệm thu 2026-11-24 (A20261124-143227; tự phát hiện báo cáo trùng + 重複なし); sau deploy chạy `flask --app run detect-duplicates` một lần.)
 - Chưa có trang lỗi 403/404/500 riêng. (CSRF và logout POST đã có từ GĐ1.)
 - Giao diện 職員 trên điện thoại: sidebar có thể chiếm cả màn hình (chưa kiểm chứng).
 

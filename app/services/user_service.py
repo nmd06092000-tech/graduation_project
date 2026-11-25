@@ -124,16 +124,23 @@ def delete_icon(user_id):
     return user
 
 
-def list_departments():
-    """所属部署の一覧 [(id, name)]（ID 順）。アカウント登録画面の選択肢。行は .id / .name でも読める"""
-    return db.session.execute(select(Department.id, Department.name).order_by(Department.id)).all()
+def list_departments(*, include_deleted=False):
+    """所属部署の一覧 [(id, name)]（ID 順）。アカウント登録画面・マスタ管理の選択肢。行は .id / .name でも読める
+
+    非表示の部署（3b）は既定では含めない（新しい選択肢にしないため）。
+    ユーザー一覧の絞り込みのように、非表示の部署に所属する職員も探したいときは include_deleted=True。
+    """
+    query = select(Department.id, Department.name).order_by(Department.id)
+    if not include_deleted:
+        query = query.where(Department.del_flag.is_(False))
+    return db.session.execute(query).all()
 
 
 def find_department(value):
     """部署名または ID（数字）から Department を探す（flask --app run create-staff の --department 用）
 
     数字だけなら ID として探し、なければ（または数字以外なら）部署名の完全一致で探す。
-    見つからなければ ServiceError(MSG_DEPARTMENT_INVALID)。
+    見つからない・非表示の部署なら ServiceError(MSG_DEPARTMENT_INVALID)。
     """
     value = (value or '').strip()
     department = None
@@ -141,7 +148,7 @@ def find_department(value):
         department = db.session.get(Department, int(value))
     if department is None and value:
         department = db.session.execute(select(Department).filter_by(name=value)).scalar_one_or_none()
-    if department is None:
+    if department is None or department.del_flag:
         raise ServiceError(MSG_DEPARTMENT_INVALID)
     return department
 
@@ -224,10 +231,11 @@ def _login_id_exists(login_id):
 
 
 def _department_by_id(text):
-    """ID（数字の文字列）から Department を返す。数字でない・範囲外・存在しないなら None"""
+    """ID（数字の文字列）から Department を返す。数字でない・範囲外・存在しない・非表示（3b）なら None"""
     if not (text.isascii() and text.isdigit()) or len(text) > 18:
         return None
-    return db.session.get(Department, int(text))
+    department = db.session.get(Department, int(text))
+    return None if department is None or department.del_flag else department
 
 
 def account_filters(role, department, q):

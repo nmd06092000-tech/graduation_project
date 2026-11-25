@@ -1,1 +1,264 @@
-{# カテゴリのマスタ管理 #}
+{# カテゴリのマスタ管理（追加・編集・非表示/再表示）。ポータルから開く独立画面なので nav_parent は使わない #}
+{% extends 'layouts/base.html' %}
+
+{% block title %}カテゴリの管理 | 埼玉県の困りごと報告システム{% endblock %}
+
+{% block layout %}
+{% set f = form or {} %}
+{# POST 後も「非表示も表示」の状態を保つための hidden（'1' のときだけ有効。CSRF は静的検査のため各フォームに直書き） #}
+{% macro keep_show_deleted() %}{% if show_deleted %}<input type="hidden" name="show_deleted" value="1">{% endif %}{% endmacro %}
+
+<div class="admin-master-page">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-secondary px-3 px-md-4">
+        <span class="navbar-brand fw-bold"><i class="bi bi-gear-fill me-2"></i>システム管理ポータル</span>
+        <div class="ms-auto d-flex align-items-center text-white">
+            <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+            <!-- モーダル呼び出しボタン -->
+            <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#systemAdminLogoutModal">
+                ログアウト
+            </button>
+        </div>
+    </nav>
+
+    <div class="container-fluid p-3 p-md-4">
+        <div class="mb-3">
+            <a href="{{ url_for('admin.portal') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>ポータルへ戻る</a>
+        </div>
+
+        <h4 class="fw-bold mb-3">カテゴリの管理</h4>
+
+        <!-- 操作結果などのメッセージ表示エリア -->
+        {% include 'components/_flash.html' %}
+
+        <!-- カテゴリの追加 -->
+        <section class="card border-0 shadow-sm mb-4" aria-labelledby="category-create-title">
+            <div class="card-header bg-white fw-bold py-3" id="category-create-title">カテゴリを追加</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('admin.category_create') }}" data-nav="replace" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {{ keep_show_deleted() }}
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-5">
+                            <label for="category-create-name" class="form-label fw-bold small mb-1">カテゴリ名 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="category-create-name" name="name" maxlength="50" placeholder="例: 道路の破損・陥没" autocomplete="off" value="{{ f.name or '' }}" required>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <label for="category-create-department" class="form-label fw-bold small mb-1">既定の担当部署 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="category-create-department" name="default_department_id" required>
+                                <option value="">選択してください</option>
+                                {% for d in departments or [] %}
+                                <option value="{{ d.id }}" {% if f.default_department_id|string == d.id|string %}selected{% endif %}>{{ d.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>追加する</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- 一覧の見出しと「非表示も表示」の切り替え -->
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <p class="small text-muted mb-0">{{ (categories or [])|length }}件表示{% if not show_deleted and hidden_count %}（非表示 {{ hidden_count }}件）{% endif %}</p>
+            {% if show_deleted %}
+            <a href="{{ url_for('admin.category_list') }}" class="btn btn-outline-secondary btn-sm" data-nav="replace"><i class="bi bi-eye-slash me-1"></i>非表示を隠す</a>
+            {% else %}
+            <a href="{{ url_for('admin.category_list', show_deleted=1) }}" class="btn btn-outline-secondary btn-sm" data-nav="replace"><i class="bi bi-eye me-1"></i>非表示も表示</a>
+            {% endif %}
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 admin-master-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">カテゴリ名</th>
+                            <th scope="col">既定の担当部署</th>
+                            <th scope="col" class="text-end">報告件数</th>
+                            <th scope="col">状態</th>
+                            <th scope="col">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for c in categories or [] %}
+                        <tr{% if c.is_deleted %} class="admin-master-row-hidden"{% endif %}>
+                            <td class="fw-bold">{{ c.name }}</td>
+                            <td>
+                                {% if c.default_department_name %}
+                                {{ c.default_department_name }}{% if c.default_department_is_deleted %} <span class="badge bg-secondary">非表示</span>{% endif %}
+                                {% else %}―{% endif %}
+                            </td>
+                            <td class="text-end">{{ c.report_count }}</td>
+                            <td>
+                                <span class="admin-master-state">
+                                    {% if c.is_deleted %}
+                                    <span class="badge bg-secondary">非表示</span>
+                                    {% if c.deleted_at_text %}<span class="small text-muted">{{ c.deleted_at_text }}</span>{% endif %}
+                                    {% else %}
+                                    <span class="badge bg-success">有効</span>
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="admin-master-actions">
+                                    {% if c.is_deleted %}
+                                    <form method="post" action="{{ url_for('admin.category_restore', category_id=c.id) }}" data-nav="replace">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        {{ keep_show_deleted() }}
+                                        <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="再表示する：{{ c.name }}">再表示する</button>
+                                    </form>
+                                    {% else %}
+                                    <button type="button" class="btn btn-outline-primary btn-sm"
+                                            data-bs-toggle="modal" data-bs-target="#categoryEditModal"
+                                            data-update-url="{{ url_for('admin.category_update', category_id=c.id) }}"
+                                            data-name="{{ c.name }}" data-department-id="{{ c.default_department_id or '' }}"
+                                            aria-label="編集：{{ c.name }}">編集</button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm"
+                                            data-bs-toggle="modal" data-bs-target="#categoryHideModal"
+                                            data-hide-url="{{ url_for('admin.category_hide', category_id=c.id) }}"
+                                            data-name="{{ c.name }}"
+                                            aria-label="非表示にする：{{ c.name }}">非表示にする</button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-5">表示できるカテゴリがありません。</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 編集モーダル（一覧で共通。対象の名前・既定部署・送信先は下の script で入れる） -->
+    <div class="modal fade" id="categoryEditModal" tabindex="-1" aria-labelledby="categoryEditModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post" id="category-edit-form" data-nav="replace" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {{ keep_show_deleted() }}
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold text-dark" id="categoryEditModalLabel">カテゴリの編集</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                    </div>
+                    <div class="modal-body py-4 text-dark">
+                        <div class="mb-3">
+                            <label for="category-edit-name" class="form-label fw-bold small mb-1">カテゴリ名 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="category-edit-name" name="name" maxlength="50" autocomplete="off" required>
+                        </div>
+                        <div>
+                            <label for="category-edit-department" class="form-label fw-bold small mb-1">既定の担当部署 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="category-edit-department" name="default_department_id" required>
+                                <option value="">選択してください</option>
+                                {% for d in departments or [] %}
+                                <option value="{{ d.id }}">{{ d.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="submit" class="btn btn-primary px-4">保存する</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 非表示確認モーダル（一覧で共通） -->
+    <div class="modal fade" id="categoryHideModal" tabindex="-1" aria-labelledby="categoryHideModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-dark" id="categoryHideModalLabel">カテゴリの非表示確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                </div>
+                <div class="modal-body py-4 text-dark">
+                    <p class="mb-0">「<strong id="category-hide-name"></strong>」を非表示にしますか？新しい報告・職員登録の選択肢から外れます（これまでの報告の表示は変わりません）。</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    {# action は開くときに対象ごとの URL を入れる（未設定のまま送られても一覧への POST は 405 になるだけ） #}
+                    <form method="post" id="category-hide-form" data-nav="replace">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {{ keep_show_deleted() }}
+                        <button type="submit" class="btn btn-danger px-4">非表示にする</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- システム管理者用 ログアウト確認モーダル -->
+    <div class="modal fade" id="systemAdminLogoutModal" tabindex="-1" aria-labelledby="systemAdminLogoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-dark" id="systemAdminLogoutModalLabel">ログアウト確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                </div>
+                <div class="modal-body py-4 text-center fs-6 text-dark">
+                    ログアウトしますか？
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <form method="post" action="{{ url_for('auth.logout') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger px-4">ログアウト</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    // 編集モーダル：押した行の名前・既定の担当部署・送信先を入れる（値は DOM のプロパティで入れ、HTML として解釈させない）
+    const editModal = document.getElementById('categoryEditModal');
+    if (editModal) {
+        const editForm = document.getElementById('category-edit-form');
+        const nameInput = document.getElementById('category-edit-name');
+        const departmentSelect = document.getElementById('category-edit-department');
+        editModal.addEventListener('show.bs.modal', function (event) {
+            const trigger = event.relatedTarget;
+            if (!trigger || !trigger.dataset.updateUrl) {
+                return;
+            }
+            editForm.action = trigger.dataset.updateUrl;
+            nameInput.value = trigger.dataset.name || '';
+            // 既定部署が非表示などで選択肢にない場合は value が空に戻り「選択してください」になる
+            departmentSelect.value = trigger.dataset.departmentId || '';
+        });
+        // 開いたらすぐ入力できるよう、名前欄にフォーカスする
+        editModal.addEventListener('shown.bs.modal', function () {
+            nameInput.focus();
+        });
+    }
+
+    // 非表示モーダル：対象の名前・送信先を入れる
+    const hideModal = document.getElementById('categoryHideModal');
+    if (hideModal) {
+        const hideForm = document.getElementById('category-hide-form');
+        const nameEl = document.getElementById('category-hide-name');
+        hideModal.addEventListener('show.bs.modal', function (event) {
+            const trigger = event.relatedTarget;
+            if (!trigger || !trigger.dataset.hideUrl) {
+                return;
+            }
+            hideForm.action = trigger.dataset.hideUrl;
+            nameEl.textContent = trigger.dataset.name || '';
+        });
+    }
+})();
+</script>
+{% endblock %}

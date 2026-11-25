@@ -57,7 +57,8 @@ class User(UserMixin, db.Model):
     updated_at = db.Column(db.DateTime(timezone=True), nullable=False,
                            server_default=sa.func.now(), onupdate=sa.func.now())
 
-    department = db.relationship('Department')
+    # departments.deleted_by_id も users を参照するため、結合に使う列を department_id に固定する
+    department = db.relationship('Department', foreign_keys=[department_id])
 
     @property
     def is_deleted(self):

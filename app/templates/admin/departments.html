@@ -1,1 +1,242 @@
-{# 担当部署のマスタ管理 #}
+{# 担当部署のマスタ管理（追加・名前変更・非表示/再表示）。ポータルから開く独立画面なので nav_parent は使わない #}
+{% extends 'layouts/base.html' %}
+
+{% block title %}部署の管理 | 埼玉県の困りごと報告システム{% endblock %}
+
+{% block layout %}
+{% set f = form or {} %}
+{# POST 後も「非表示も表示」の状態を保つための hidden（'1' のときだけ有効。CSRF は静的検査のため各フォームに直書き） #}
+{% macro keep_show_deleted() %}{% if show_deleted %}<input type="hidden" name="show_deleted" value="1">{% endif %}{% endmacro %}
+
+<div class="admin-master-page">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-secondary px-3 px-md-4">
+        <span class="navbar-brand fw-bold"><i class="bi bi-gear-fill me-2"></i>システム管理ポータル</span>
+        <div class="ms-auto d-flex align-items-center text-white">
+            <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+            <!-- モーダル呼び出しボタン -->
+            <button type="button" class="btn btn-outline-light btn-sm" data-bs-toggle="modal" data-bs-target="#systemAdminLogoutModal">
+                ログアウト
+            </button>
+        </div>
+    </nav>
+
+    <div class="container-fluid p-3 p-md-4">
+        <div class="mb-3">
+            <a href="{{ url_for('admin.portal') }}" class="btn btn-outline-secondary btn-sm"><i class="bi bi-arrow-left me-1"></i>ポータルへ戻る</a>
+        </div>
+
+        <h4 class="fw-bold mb-3">部署の管理</h4>
+
+        <!-- 操作結果などのメッセージ表示エリア -->
+        {% include 'components/_flash.html' %}
+
+        <!-- 部署の追加 -->
+        <section class="card border-0 shadow-sm mb-4" aria-labelledby="department-create-title">
+            <div class="card-header bg-white fw-bold py-3" id="department-create-title">部署を追加</div>
+            <div class="card-body">
+                <form method="post" action="{{ url_for('admin.department_create') }}" data-nav="replace" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {{ keep_show_deleted() }}
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-md-6">
+                            <label for="department-create-name" class="form-label fw-bold small mb-1">部署名 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="department-create-name" name="name" maxlength="50" placeholder="例: 道路維持課" autocomplete="off" value="{{ f.name or '' }}" required>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <button type="submit" class="btn btn-primary w-100"><i class="bi bi-plus-lg me-1"></i>追加する</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+        <!-- 一覧の見出しと「非表示も表示」の切り替え -->
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+            <p class="small text-muted mb-0">{{ (departments or [])|length }}件表示{% if not show_deleted and hidden_count %}（非表示 {{ hidden_count }}件）{% endif %}</p>
+            {% if show_deleted %}
+            <a href="{{ url_for('admin.department_list') }}" class="btn btn-outline-secondary btn-sm" data-nav="replace"><i class="bi bi-eye-slash me-1"></i>非表示を隠す</a>
+            {% else %}
+            <a href="{{ url_for('admin.department_list', show_deleted=1) }}" class="btn btn-outline-secondary btn-sm" data-nav="replace"><i class="bi bi-eye me-1"></i>非表示も表示</a>
+            {% endif %}
+        </div>
+
+        <div class="card border-0 shadow-sm">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 admin-master-table">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col">部署名</th>
+                            <th scope="col" class="text-end">所属職員</th>
+                            <th scope="col" class="text-end">カテゴリ数</th>
+                            <th scope="col" class="text-end">報告件数</th>
+                            <th scope="col">状態</th>
+                            <th scope="col">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for d in departments or [] %}
+                        <tr{% if d.is_deleted %} class="admin-master-row-hidden"{% endif %}>
+                            <td class="fw-bold">{{ d.name }}</td>
+                            <td class="text-end">{{ d.user_count }}名</td>
+                            <td class="text-end">{{ d.category_count }}</td>
+                            <td class="text-end">{{ d.report_count }}</td>
+                            <td>
+                                <span class="admin-master-state">
+                                    {% if d.is_deleted %}
+                                    <span class="badge bg-secondary">非表示</span>
+                                    {% if d.deleted_at_text %}<span class="small text-muted">{{ d.deleted_at_text }}</span>{% endif %}
+                                    {% else %}
+                                    <span class="badge bg-success">有効</span>
+                                    {% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                <div class="admin-master-actions">
+                                    {% if d.is_deleted %}
+                                    <form method="post" action="{{ url_for('admin.department_restore', department_id=d.id) }}" data-nav="replace">
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        {{ keep_show_deleted() }}
+                                        <button type="submit" class="btn btn-outline-primary btn-sm" aria-label="再表示する：{{ d.name }}">再表示する</button>
+                                    </form>
+                                    {% else %}
+                                    <button type="button" class="btn btn-outline-primary btn-sm"
+                                            data-bs-toggle="modal" data-bs-target="#departmentEditModal"
+                                            data-update-url="{{ url_for('admin.department_update', department_id=d.id) }}"
+                                            data-name="{{ d.name }}"
+                                            aria-label="名前を変更：{{ d.name }}">名前を変更</button>
+                                    <button type="button" class="btn btn-outline-danger btn-sm"
+                                            data-bs-toggle="modal" data-bs-target="#departmentHideModal"
+                                            data-hide-url="{{ url_for('admin.department_hide', department_id=d.id) }}"
+                                            data-name="{{ d.name }}" data-user-count="{{ d.user_count }}"
+                                            aria-label="非表示にする：{{ d.name }}">非表示にする</button>
+                                    {% endif %}
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-5">表示できる部署がありません。</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- 名前変更モーダル（一覧で共通。対象の名前・送信先は下の script で入れる） -->
+    <div class="modal fade" id="departmentEditModal" tabindex="-1" aria-labelledby="departmentEditModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form method="post" id="department-edit-form" data-nav="replace" novalidate>
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    {{ keep_show_deleted() }}
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold text-dark" id="departmentEditModalLabel">部署名の変更</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                    </div>
+                    <div class="modal-body py-4 text-dark">
+                        <label for="department-edit-name" class="form-label fw-bold small mb-1">部署名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="department-edit-name" name="name" maxlength="50" autocomplete="off" required>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                        <button type="submit" class="btn btn-primary px-4">保存する</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 非表示確認モーダル（一覧で共通） -->
+    <div class="modal fade" id="departmentHideModal" tabindex="-1" aria-labelledby="departmentHideModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-dark" id="departmentHideModalLabel">部署の非表示確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                </div>
+                <div class="modal-body py-4 text-dark">
+                    <p class="mb-2">「<strong id="department-hide-name"></strong>」を非表示にしますか？新しい報告・職員登録の選択肢から外れます（これまでの報告の表示は変わりません）。</p>
+                    <p class="small text-muted mb-0">所属職員 <span id="department-hide-user-count"></span>名</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    {# action は開くときに対象ごとの URL を入れる（未設定のまま送られても一覧への POST は 405 になるだけ） #}
+                    <form method="post" id="department-hide-form" data-nav="replace">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        {{ keep_show_deleted() }}
+                        <button type="submit" class="btn btn-danger px-4">非表示にする</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- システム管理者用 ログアウト確認モーダル -->
+    <div class="modal fade" id="systemAdminLogoutModal" tabindex="-1" aria-labelledby="systemAdminLogoutModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title fw-bold text-dark" id="systemAdminLogoutModalLabel">ログアウト確認</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+                </div>
+                <div class="modal-body py-4 text-center fs-6 text-dark">
+                    ログアウトしますか？
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                    <form method="post" action="{{ url_for('auth.logout') }}">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn btn-danger px-4">ログアウト</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+    'use strict';
+
+    // 名前変更モーダル：押した行の名前と送信先を入れる（値は DOM のプロパティで入れ、HTML として解釈させない）
+    const editModal = document.getElementById('departmentEditModal');
+    if (editModal) {
+        const editForm = document.getElementById('department-edit-form');
+        const nameInput = document.getElementById('department-edit-name');
+        editModal.addEventListener('show.bs.modal', function (event) {
+            const trigger = event.relatedTarget;
+            if (!trigger || !trigger.dataset.updateUrl) {
+                return;
+            }
+            editForm.action = trigger.dataset.updateUrl;
+            nameInput.value = trigger.dataset.name || '';
+        });
+        // 開いたらすぐ入力できるよう、名前欄にフォーカスする
+        editModal.addEventListener('shown.bs.modal', function () {
+            nameInput.focus();
+        });
+    }
+
+    // 非表示モーダル：対象の名前・所属職員数・送信先を入れる
+    const hideModal = document.getElementById('departmentHideModal');
+    if (hideModal) {
+        const hideForm = document.getElementById('department-hide-form');
+        const nameEl = document.getElementById('department-hide-name');
+        const countEl = document.getElementById('department-hide-user-count');
+        hideModal.addEventListener('show.bs.modal', function (event) {
+            const trigger = event.relatedTarget;
+            if (!trigger || !trigger.dataset.hideUrl) {
+                return;
+            }
+            hideForm.action = trigger.dataset.hideUrl;
+            nameEl.textContent = trigger.dataset.name || '';
+            countEl.textContent = trigger.dataset.userCount || '0';
+        });
+    }
+})();
+</script>
+{% endblock %}

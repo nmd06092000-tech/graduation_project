@@ -11,7 +11,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-from sqlalchemy import extract, func, select
+from sqlalchemy import exists, extract, func, select
 
 from app.constants import (
     HOLD_STATUSES, OPEN_STATUSES, URGENCY_DESCRIPTIONS, WORKING_STATUSES, ReportStatus, Urgency,
@@ -100,8 +100,14 @@ def count_priority_reports():
 
 
 def map_filter_options():
-    """地図の絞り込み欄の選択肢（カテゴリは categories.id、危険度は Urgency のコード）"""
-    categories = db.session.execute(select(Category.id, Category.name).order_by(Category.id)).all()
+    """地図の絞り込み欄の選択肢（カテゴリは categories.id、危険度は Urgency のコード）
+
+    非表示のカテゴリ（3b）は、地図に出る未完了の報告が 1 件以上あるときだけ含める（絞り込めるようにするため）。
+    """
+    has_open_report = exists().where(Report.category_id == Category.id, Report.status.in_(_OPEN_STATUS_VALUES))
+    categories = db.session.execute(
+        select(Category.id, Category.name).where(Category.del_flag.is_(False) | has_open_report)
+        .order_by(Category.id)).all()
     return {
         'categories': [(str(c.id), c.name) for c in categories],
         'urgencies': [(u.value, u.label) for u in Urgency],
@@ -167,11 +173,15 @@ def summary():
 
 
 def count_by_category():
-    """カテゴリ別の件数と割合（件数の多い順。未分類の報告があれば最後に追加）。統計・レポート分析 基本フロー1"""
+    """カテゴリ別の件数と割合（件数の多い順。未分類の報告があれば最後に追加）。統計・レポート分析 基本フロー1
+
+    非表示のカテゴリ（3b）は、集計対象の報告が 1 件以上あるときだけ含める（過去の報告を統計から消さないため）。
+    """
     counts = _count_by(Report.category_id)
     total = sum(counts.values())
-    categories = db.session.execute(select(Category.id, Category.name).order_by(Category.id)).all()
-    rows = [{'category': c.name, 'count': counts.get(c.id, 0)} for c in categories]
+    categories = db.session.execute(select(Category.id, Category.name, Category.del_flag).order_by(Category.id)).all()
+    rows = [{'category': c.name, 'count': counts.get(c.id, 0)}
+            for c in categories if not c.del_flag or counts.get(c.id, 0) > 0]
     rows.sort(key=lambda row: row['count'], reverse=True)
     if counts.get(None):
         rows.append({'category': '未分類', 'count': counts[None]})

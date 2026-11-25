@@ -23,6 +23,7 @@ PREVIOUS_REVISION = '2422f95d18ff'
 PENDING_REVISION = 'e5b2c8f1a937'   # パスワード再設定の確認待ちハッシュ（pending_password_hash）。d4a91c7e5b36 の次
 NOTIFICATIONS_REVISION = 'f6c3d9a2b148'    # 市民向けお知らせ（citizen_notifications）。e5b2c8f1a937 の次
 LATEST_REVISION = 'a7d2e4b9c561'    # ai_analyses.trigger_type に manual（AIモデル再実行）を許可。f6c3d9a2b148 の次
+HEAD_REVISION = '55278139fc30'    # 部署・カテゴリの非表示（3b）。a7d2e4b9c561 の次（現在の head）
 SOFT_DELETE_COLUMNS = {'del_flag', 'deleted_at', 'deleted_by_id'}
 
 
@@ -201,7 +202,7 @@ def test_migration_d4a91c7e5b36_follows_2422f95d18ff_and_head_is_a7d2e4b9c561():
 
     # Assert
     assert revision.down_revision == PREVIOUS_REVISION
-    assert script.get_heads() == [LATEST_REVISION]
+    assert script.get_heads() == [HEAD_REVISION]
 
 def test_migration_e5b2c8f1a937_follows_d4a91c7e5b36():
     # Arrange
@@ -240,7 +241,7 @@ def test_migration_a7d2e4b9c561_follows_f6c3d9a2b148_and_is_single_head():
 
     # Assert
     assert revision.down_revision == NOTIFICATIONS_REVISION
-    assert script.get_heads() == [LATEST_REVISION]
+    assert script.get_heads() == [HEAD_REVISION]
 
 
 

@@ -20,7 +20,7 @@ from app.constants import (
     MSG_GPS_NOT_FOUND, MSG_LOCATION_REQUIRED, MSG_PHOTO_INAPPROPRIATE, MSG_PHOTO_OUT_OF_FOCUS,
     MSG_PHOTO_REQUIRED, MSG_PHOTO_TOO_MANY, MSG_REPORT_ALL_REQUIRED, MSG_TITLE_REQUIRED, MSG_TITLE_TOO_LONG,
     MSG_NOTICE_REJUDGE_FAILED, MSG_NOTICE_REJUDGED_CHANGED, MSG_NOTICE_REJUDGED_SAME,
-    AI_ERROR_GENERIC_MESSAGE, AI_ERROR_KIND_LABELS, AI_ERROR_KINDS_HIDE_DETAIL, AI_ERROR_UNKNOWN_MESSAGE,
+    AI_ERROR_KIND_LABELS, AI_ERROR_KIND_MESSAGES,
     OPEN_STATUSES, URGENCY_DESCRIPTIONS, WORKING_STATUSES, AiAnalysisStatus, AiAnalysisTrigger, LocationSource,
     ReportStatus, Role, Urgency, next_statuses,
 )
@@ -510,10 +510,12 @@ def _parse_coordinates(latitude, longitude):
     return lat, lng
 
 
-# AI に渡す候補（カテゴリ・担当部署はマスタ、緊急度は constants.py）
+# AI に渡す候補（カテゴリ・担当部署はマスタ、緊急度は constants.py）。非表示（3b）のカテゴリ・部署は候補にしない
 def _classification_choices():
-    categories = db.session.execute(select(Category).order_by(Category.id)).scalars()
-    departments = db.session.execute(select(Department).order_by(Department.id)).scalars()
+    categories = db.session.execute(
+        select(Category).where(Category.del_flag.is_(False)).order_by(Category.id)).scalars()
+    departments = db.session.execute(
+        select(Department).where(Department.del_flag.is_(False)).order_by(Department.id)).scalars()
     return ClassificationChoices(
         categories=[Choice(c.code, c.name) for c in categories],
         urgencies=[Choice(u.value, f'{u.label}（{URGENCY_DESCRIPTIONS[u]}）') for u in Urgency],
@@ -574,33 +576,28 @@ def _add_succeeded_analysis(report, result, trigger_type=AiAnalysisTrigger.INITI
     return analysis
 
 
-# 設定変数名（GEMINI_API_KEY のような大文字＋アンダースコアの識別子。SAFETY / STOP や finish_reason は対象外）
-_CONFIG_NAME_PATTERN = r'(?<![A-Za-z0-9_])[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+(?![A-Za-z0-9_])'
-_CONFIG_NAME_RE = re.compile(_CONFIG_NAME_PATTERN)
-# 設定変数名を含む括弧書き（全角・半角）。直前の空白ごと取り除く
-_CONFIG_NAME_PAREN_RE = re.compile(r'\s*[（(][^（）()]*' + _CONFIG_NAME_PATTERN + r'[^（）()]*[）)]')
+# 報告詳細のエラー枠に出す失敗（なければ None）。analyses は新しい順
+# 最新の失敗が、主モデル（Gemini。無効なら rule_based を含む任意のモデル）の最新の成功より新しい場合のみ対象にする
+def _latest_unrecovered_failure(analyses):
+    failed = next((a for a in analyses if a.status == AiAnalysisStatus.FAILED.value), None)
+    if failed is None:
+        return None
+    gemini = ai.gemini_enabled()
+    primary_success = next((a for a in analyses if a.status == AiAnalysisStatus.SUCCEEDED.value
+                            and (not gemini or a.model_name != RULE_BASED_MODEL_NAME)), None)
+    if primary_success is None or (failed.created_at, failed.id) > (primary_success.created_at, primary_success.id):
+        return failed
+    return None
 
 
-# 画面に出すメッセージから設定変数名を取り除く（括弧書きごと削除 → なお残る場合は共通文に置き換え）
-def _hide_config_names(detail):
-    message = _CONFIG_NAME_PAREN_RE.sub('', detail).strip()
-    if _CONFIG_NAME_RE.search(message):
-        return AI_ERROR_GENERIC_MESSAGE
-    return message
-
-
-# 失敗した AI 判定の表示用情報（種類ラベル・メッセージ）。error_message は「[kind] 本文」形式（旧データは接頭辞なし・NULL もあり得る）
+# 失敗した AI 判定の表示用情報（種類ラベル・固定の案内文）。error_message は「[kind] 本文」形式（旧データは接頭辞なし・NULL もあり得る）
+# 本文（技術的な詳細）は画面に出さず、DB とログにのみ残す
 def _ai_error_info(analysis):
-    match = re.match(r'^\[(\w+)\]\s*(.*)$', analysis.error_message or '', re.DOTALL)
-    kind, detail = (match.group(1), match.group(2).strip()) if match else ('unknown', (analysis.error_message or '').strip())
+    match = re.match(r'^\[(\w+)\]', analysis.error_message or '')
+    kind = match.group(1) if match else 'unknown'
     if kind not in AI_ERROR_KIND_LABELS:
         kind = 'unknown'
-    # 設定・認証の詳細は構成情報を含み得るので共通文にする
-    if kind in AI_ERROR_KINDS_HIDE_DETAIL:
-        message = AI_ERROR_GENERIC_MESSAGE
-    else:
-        message = _hide_config_names(detail) or AI_ERROR_UNKNOWN_MESSAGE
-    return AI_ERROR_KIND_LABELS[kind], message
+    return AI_ERROR_KIND_LABELS[kind], AI_ERROR_KIND_MESSAGES[kind]
 
 
 def list_for_staff(search='', report_id=None):
@@ -632,11 +629,10 @@ def get_for_staff(report_id):
     if report is None:
         return None
 
-    latest_ai = report.latest_ai_analysis
-    ai_succeeded = latest_ai is not None and latest_ai.status == AiAnalysisStatus.SUCCEEDED
-    # 最新の AI 判定が失敗の場合のみエラー情報（種類・メッセージ・日時）を返す
-    ai_failed = latest_ai is not None and latest_ai.status == AiAnalysisStatus.FAILED
-    ai_error_type, ai_error_message = _ai_error_info(latest_ai) if ai_failed else (None, None)
+    # 結果の表示は最新の成功（モデルは問わない）、エラー枠は主モデルの失敗が最新の成功より新しいときだけ出す
+    ai_result = report.latest_succeeded_ai_analysis
+    failed_ai = _latest_unrecovered_failure(report.ai_analyses)
+    ai_error_type, ai_error_message = _ai_error_info(failed_ai) if failed_ai else (None, None)
     # 現在のステータス（コメントのみの更新用）と、職員が変更できる次のステータス
     status_options = [ReportStatus(report.status)] + next_statuses(report.status, Role.STAFF)
     return {
@@ -653,18 +649,20 @@ def get_for_staff(report_id):
         'status_options': [(s.value, s.label) for s in status_options],
         # 緊急度の判定：最新の AI 判定緊急度と、職員が最終判断として選べる緊急度（確定値は reports.urgency）
         'urgency_code': report.urgency,
-        'ai_urgency_code': latest_ai.urgency if ai_succeeded else None,
-        'ai_urgency': Urgency.label_of(latest_ai.urgency) if ai_succeeded else None,
+        'ai_urgency_code': ai_result.urgency if ai_result else None,
+        'ai_urgency': Urgency.label_of(ai_result.urgency) if ai_result else None,
         'urgency_options': [(u.value, u.label) for u in Urgency],
         # 確定した担当部署（職員が設定）と、最新の AI 判定での推定担当部署
         'department': report.department.name if report.department else None,
-        'ai_department': latest_ai.department.name if ai_succeeded and latest_ai.department else None,
-        'ai_confidence': format_percent(latest_ai.confidence) if ai_succeeded else None,
-        # 最新の AI 判定が失敗の場合のエラー情報（成功時・判定なしは False / None）
-        'ai_failed': ai_failed,
+        'ai_department': ai_result.department.name if ai_result and ai_result.department else None,
+        'ai_confidence': format_percent(ai_result.confidence) if ai_result else None,
+        # 結果がキーワード判定（rule_based）のとき True（「※キーワード判定の結果です」の表示用）
+        'ai_is_keyword': ai_result is not None and ai_result.model_name == RULE_BASED_MODEL_NAME,
+        # エラー枠の情報（失敗が最新の成功より新しい場合のみ。なければ False / None）
+        'ai_failed': failed_ai is not None,
         'ai_error_type': ai_error_type,
         'ai_error_message': ai_error_message,
-        'ai_error_date': format_datetime(latest_ai.created_at) if ai_failed else None,
+        'ai_error_date': format_datetime(failed_ai.created_at) if failed_ai else None,
         # TODO: 写真は instance/uploads/ から権限チェック付きのルートで配信する（storage_service と配信ルートが未実装）
         'image_url': '',
         'history': [_history_row(h) for h in report.histories],

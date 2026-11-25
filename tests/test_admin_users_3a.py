@@ -13,7 +13,7 @@ from app.constants import (
     MSG_ID_TAKEN, MSG_LOGIN_FAILED, MSG_RESET_CODE_GONE, MSG_RESET_CODE_INVALID, MSG_RESET_CODE_NOT_ALLOWED,
 )
 from app.extensions import db
-from app.models import Department, PasswordResetToken, User
+from app.models import Category, Department, PasswordResetToken, User
 from app.services import auth_service, user_service
 from tests.conftest import get_csrf_token, lock_account, make_account, soft_delete
 
@@ -1037,6 +1037,12 @@ def test_portal_shows_lock_and_disabled_badges(admin_client, world):
 
 
 def test_portal_keeps_category_department_mapping_card(admin_client):
+    # Arrange: 3b でカードは実データ（カテゴリ → 既定の担当部署）を出すので、対応する行を作っておく
+    for category, department in [('道路の破損・陥没', '道路維持課'), ('公園の設備故障', '都市公園課')]:
+        row = Department(name=department)
+        db.session.add(Category(code=f'c_{department}', name=category, default_department=row))
+    db.session.commit()
+
     # Act
     html = _text(_get(admin_client, '/admin/portal'))
 

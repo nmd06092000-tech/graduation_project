@@ -60,7 +60,7 @@
                             <h5 class="card-title fs-6 fw-bold mb-0"><i class="bi bi-file-text me-2"></i>報告内容</h5>
                         </div>
                         <div class="card-body">
-                            {# 最新の AI 判定が失敗したときだけエラーを表示（成功・未実行のときは出さない） #}
+                            {# Gemini の最新の判定が失敗したときにエラーを表示（キーワード判定の結果があっても表示する） #}
                             {% if report.ai_failed %}
                             <div class="alert alert-danger mb-4" role="alert">
                                 <div class="fw-bold mb-2">
@@ -109,7 +109,7 @@
 
                             <div class="row mb-3">
                                 <div class="col-md-6">
-                                    {# AI の推定担当部署（最新の判定）。確定した担当部署は report.department #}
+                                    {# AI の推定担当部署（成功した最新の判定）。確定した担当部署は report.department #}
                                     <small class="text-muted d-block">AI判定担当部署</small>
                                     <span class="fw-bold text-dark"><i class="bi bi-building me-1"></i>{{ report.ai_department or '未判定' }}</span>
                                 </div>
@@ -118,6 +118,9 @@
                                     <span class="badge bg-success">{{ report.ai_confidence or '未判定' }}</span>
                                 </div>
                             </div>
+                            {% if report.ai_is_keyword %}
+                            <small class="text-muted d-block mb-3">※キーワード判定の結果です</small>
+                            {% endif %}
 
                             <div class="mb-3">
                                 <small class="text-muted d-block mb-1">詳細説明</small>

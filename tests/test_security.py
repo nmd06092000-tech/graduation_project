@@ -507,8 +507,8 @@ def test_every_post_form_in_templates_has_csrf_token():
 
     # Assert: 走査対象が減っていない（form の取りこぼし・テンプレート削除を検知する）
     assert total >= 32
-    # citizen/change_password.html（2b で新設）と admin/user_list.html（3a で新設）と citizen/notifications.html（お知らせ画面で新設）に ログアウト のモーダルがあるので 16
-    assert logout_forms == 16
+    # citizen/change_password.html（2b で新設）と admin/user_list.html（3a で新設）と citizen/notifications.html（お知らせ画面で新設）と admin/departments.html・admin/categories.html（3b で新設）に ログアウト のモーダルがあるので 18
+    assert logout_forms == 18
     assert missing == []
 
 

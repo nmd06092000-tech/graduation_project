@@ -144,6 +144,19 @@ def test_update_report_status_urgency_reason_required(staff, make_report, road):
     assert _histories(report) == []
 
 
+# 理由の要否は「最新の成功」の緊急度で判定する（最新が失敗の行でも、以前の成功を使う）
+def test_update_report_status_urgency_reason_uses_latest_succeeded_analysis(staff, make_report, road):
+    report = make_report(urgency='high')
+    _ai_analysis(report, road, 'high')
+    db.session.add(AiAnalysis(report=report, status='failed', model_name='gemini', error_message='[timeout] x'))
+    db.session.commit()
+
+    with pytest.raises(ServiceError, match=MSG_URGENCY_REASON_REQUIRED):
+        status_service.update_report_status(report.id, 'received', actor_id=staff.id, comment='メモ', urgency='low')
+
+    assert report.urgency == 'high'
+
+
 # AI の判定に戻す場合・AI の判定がない場合は理由なしで変更できる
 def test_update_report_status_urgency_back_to_ai(staff, make_report, road):
     report = make_report(urgency='low')

@@ -48,13 +48,25 @@
         </div>
         <div class="col-md-6">
             <div class="card shadow-sm border-0">
-                <div class="card-header bg-white fw-bold py-3">部署・カテゴリー・AI判定設定</div>
+                {% set m = master or {} %}
+                <div class="card-header bg-white fw-bold py-3 d-flex justify-content-between align-items-center">
+                    <span>部署・カテゴリ設定</span>
+                    <span class="small fw-normal text-muted">全{{ m.category_total or 0 }}件</span>
+                </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-3">報告カテゴリと自動割り当て部署のマッピング設定</p>
+                    <p class="small text-muted mb-3">報告カテゴリと既定の担当部署の対応</p>
+                    {# route が渡す先頭の数件（カテゴリ名 → 既定の担当部署） #}
                     <ul class="list-group list-group-flush">
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0"><span>道路の破損・陥没</span><strong>→ 道路維持課</strong></li>
-                        <li class="list-group-item d-flex justify-content-between align-items-center px-0"><span>公園の設備故障</span><strong>→ 都市公園課</strong></li>
+                        {% for mp in m.mappings or [] %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center gap-2 px-0"><span>{{ mp.category_name }}</span><strong class="text-nowrap">→ {{ mp.department_name or '―' }}</strong></li>
+                        {% else %}
+                        <li class="list-group-item text-muted px-0">登録されているカテゴリはありません。</li>
+                        {% endfor %}
                     </ul>
+                </div>
+                <div class="card-footer bg-white d-flex flex-wrap justify-content-end gap-3">
+                    <a href="{{ url_for('admin.department_list') }}" class="small">部署の管理<i class="bi bi-chevron-right ms-1"></i></a>
+                    <a href="{{ url_for('admin.category_list') }}" class="small">カテゴリの管理<i class="bi bi-chevron-right ms-1"></i></a>
                 </div>
             </div>
         </div>

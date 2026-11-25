@@ -53,13 +53,16 @@ def merge_group(group_id, primary_report_id, *, actor_id):
     代表以外の報告の duplicate_of_id に代表案件を設定し、グループを統合済みにする。
     ステータスは変えないため対応履歴は残さない。存在しないグループは None。
     """
-    group = db.session.get(DuplicateGroup, group_id)
+    # 検出（detect_for_report）が同時に報告を追加するのを防ぐため、行をロックして読む
+    group = db.session.get(DuplicateGroup, group_id, with_for_update=True, populate_existing=True)
     if group is None:
         return None
     if group.status != DuplicateGroupStatus.OPEN.value:
+        db.session.rollback()
         raise ServiceError(MSG_GROUP_NOT_OPEN)
     primary = next((r for r in group.reports if r.id == primary_report_id), None)
     if primary is None:
+        db.session.rollback()
         raise ServiceError(MSG_PRIMARY_NOT_IN_GROUP)
 
     for report in group.reports:
@@ -98,7 +101,8 @@ def detect_for_report(report_id):
     候補が確認待ちのグループにいればそのグループに入り（複数なら類似度の最も高い組があるグループ。グループどうしは
     統合しない）、いなければ報告と「グループのない候補」で新しいグループを作る。
     グループにまとめたら結果の dict（group_id・created・size・added・similarity）、何もしなかったら None
-    （カテゴリ未設定・未完了でない・統合済み・すでにグループあり・候補なし）。1回のコミットで終える。
+    （報告が存在しない・カテゴリ未設定・未完了でない・統合済み・すでにグループあり・候補なし・
+    候補のグループがロック後に処理済み（重複なし・統合））。1回のコミットで終える。
     """
     # 同時に届いた報告が同じグループを2つ作らないよう、検出全体を直列にする（コミット・ロールバックで解放される）
     db.session.execute(select(func.pg_advisory_xact_lock(DETECT_LOCK_KEY)))
