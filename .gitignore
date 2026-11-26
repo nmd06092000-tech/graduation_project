@@ -22,3 +22,6 @@ deploy.ps1
 docs/
 # AI 用の内部ドキュメント（ベトナム語）。公開用は .github/README.md
 /README.md
+
+# progress
+/PROGRESS.md
