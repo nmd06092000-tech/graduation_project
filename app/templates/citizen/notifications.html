@@ -84,6 +84,12 @@
                                 <div class="bg-light border-top p-4">
                                     <h6 class="fw-bold mb-3"><i class="bi bi-info-circle me-2 text-primary"></i>お知らせ詳細</h6>
                                     <p class="mb-0 notification-detail">{{ notification.detail }}</p>
+                                    {# 詳細を開いたときに既読にする JS を動かすため、リンクは展開部分の中に置く #}
+                                    {% if notification.report_id %}
+                                    <a href="{{ url_for('citizen.report_detail', report_id=notification.report_id) }}" class="btn btn-outline-primary btn-sm mt-3">
+                                        <i class="bi bi-box-arrow-up-right me-1"></i>報告の詳細を見る
+                                    </a>
+                                    {% endif %}
                                 </div>
                             </div>
                         </li>

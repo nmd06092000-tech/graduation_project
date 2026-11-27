@@ -26,12 +26,12 @@ def _history_count(report_id):
 
 
 def test_register_then_login_citizen(client, login):
-    # Arrange: 大文字のメールアドレスとハイフンなしの郵便番号で登録する
+    # Arrange: 大文字のメールアドレスとハイフン付きの郵便番号で登録する
     response = client.post('/register', data={
-        'name': '佐藤 花子', 'email': 'Hanako@Example.COM', 'postal_code': '3309301',
+        'name': '佐藤 花子', 'email': 'Hanako@Example.COM', 'postal_code': '330-9301',
         'address': 'さいたま市浦和区高砂3-15-1', 'password': 'password123', 'confirm_password': 'password123'})
 
-    # Assert: 登録完了へ遷移し、メールは小文字・郵便番号はハイフン付きで保存される
+    # Assert: 登録完了へ遷移し、メールは小文字・郵便番号はそのまま保存される
     assert response.status_code == 302
     assert response.headers['Location'].endswith('/register/complete')
     assert client.get(response.headers['Location']).status_code == 200

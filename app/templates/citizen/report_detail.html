@@ -1,1 +1,188 @@
-{# 報告の詳細と対応状況、取り消しボタン #}
+{% extends 'layouts/base.html' %}
+
+{% block title %}報告の詳細 - 埼玉県の困りごと報告システム{% endblock %}
+
+{# 報告一覧の子画面（取り消し後の画面は履歴を置き換えて表示する。js/navigation.js） #}
+{% block nav_parent %}{{ url_for('citizen.report_list') }}{% endblock %}
+
+{# 市民の報告詳細・対応状況画面。取り消せる状態のときだけ取り消しボタンとモーダルを出す #}
+{% block layout %}
+<div class="citizen-page">
+<!-- ヘッダー -->
+<nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4 citizen-header">
+    <span class="navbar-brand fw-bold text-primary"><i class="bi bi-geo-alt-fill me-1"></i>埼玉県の困りごと報告システム</span>
+    <div class="ms-auto d-flex align-items-center">
+        {% include 'components/_citizen_bell.html' %}
+        <span class="me-3 small"><i class="bi bi-person-circle me-1"></i>{{ current_user.name }} さん</span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#logoutModal">
+            ログアウト
+        </button>
+    </div>
+</nav>
+
+<div class="container-fluid">
+    <div class="row">
+        <!-- 左サイドバー -->
+        <div class="col-12 col-md-2 sidebar p-3">
+            <a href="{{ url_for('citizen.mypage') }}"><i class="bi bi-speedometer2 me-2"></i>マイページ</a>
+            <a href="{{ url_for('citizen.report_new') }}"><i class="bi bi-plus-circle me-2"></i>新規報告</a>
+            <a href="{{ url_for('citizen.report_list') }}" class="active"><i class="bi bi-list-task me-2"></i>報告一覧</a>
+            <a href="{{ url_for('citizen.profile') }}"><i class="bi bi-gear me-2"></i>プロフィール設定</a>
+        </div>
+
+        <!-- メイン領域 -->
+        <div class="col-12 col-md-10 p-4 citizen-main citizen-report-detail-page">
+            <h4 class="fw-bold mb-3">報告の詳細</h4>
+
+            <!-- 取り消し結果などのメッセージ表示エリア -->
+            {% include 'components/_flash.html' %}
+
+            <!-- 報告内容 -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3 report-detail-head">
+                        <h5 class="fw-bold mb-0 report-detail-title">{{ report.title }}</h5>
+                        {% with status_code=report.status_code, status_label=report.status, badge_class='px-3 py-2' %}{% include 'components/_status_badge.html' %}{% endwith %}
+                    </div>
+
+                    <dl class="report-detail-list mb-0">
+                        <div class="report-detail-row">
+                            <dt>報告番号</dt>
+                            <dd>#{{ report.id }}</dd>
+                        </div>
+                        <div class="report-detail-row">
+                            <dt>送信日時</dt>
+                            <dd>{{ report.date }}</dd>
+                        </div>
+                        <div class="report-detail-row">
+                            <dt>カテゴリ</dt>
+                            <dd>{{ report.category }}</dd>
+                        </div>
+                        <div class="report-detail-row">
+                            <dt>緊急度</dt>
+                            <dd>{{ report.urgency }}</dd>
+                        </div>
+                        <div class="report-detail-row">
+                            <dt>担当部署</dt>
+                            <dd>{{ report.department or '未設定' }}</dd>
+                        </div>
+                        <div class="report-detail-row">
+                            <dt>発生場所</dt>
+                            <dd>{{ report.location }}</dd>
+                        </div>
+                        <div class="report-detail-row">
+                            <dt>内容</dt>
+                            <dd class="report-detail-text">{{ report.description }}</dd>
+                        </div>
+                        <div class="report-detail-row">
+                            <dt>添付写真</dt>
+                            <dd>
+                                {% if report.photos %}
+                                <div class="report-photo-grid">
+                                    {% for photo in report.photos %}
+                                    {% set photo_url = url_for('citizen.report_photo_file', report_id=report.id, photo_id=photo.id) %}
+                                    {# 拡大は新しいタブの原寸表示。リンク先は画像そのもの（ページ内の拡大機能は持たない） #}
+                                    <a href="{{ photo_url }}" class="report-photo-link" target="_blank" rel="noopener noreferrer">
+                                        <img src="{{ photo_url }}" alt="添付写真{{ photo.number }}" loading="lazy" class="report-photo-img">
+                                        <span class="visually-hidden">（新しいタブで拡大表示）</span>
+                                    </a>
+                                    {% endfor %}
+                                </div>
+                                {% else %}
+                                <span class="text-muted">添付写真はありません</span>
+                                {% endif %}
+                            </dd>
+                        </div>
+                    </dl>
+                </div>
+            </div>
+
+            <!-- 対応状況（履歴の時系列） -->
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4">
+                    <h5 class="fw-bold mb-3">対応状況</h5>
+                    {% if report.histories %}
+                    <ol class="list-unstyled mb-0 report-timeline">
+                        {% for history in report.histories %}
+                        <li class="report-timeline-item">
+                            <div class="report-timeline-head">
+                                {% with status_code=history.status_code, status_label=history.status, badge_class='' %}{% include 'components/_status_badge.html' %}{% endwith %}
+                                <span class="small text-muted">{{ history.date }}</span>
+                            </div>
+                            {% if history.text %}
+                            <p class="mb-0 small report-timeline-text">{{ history.text }}</p>
+                            {% endif %}
+                            {% if history.message %}
+                            <p class="mb-0 small report-timeline-message">{{ history.message }}</p>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                    </ol>
+                    {% else %}
+                    <p class="text-muted small mb-0">対応状況の更新はまだありません。</p>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- 操作ボタン -->
+            <div class="d-flex flex-wrap gap-2 report-detail-actions">
+                <a href="{{ url_for('citizen.report_list') }}" class="btn btn-outline-secondary" data-nav="replace">
+                    <i class="bi bi-arrow-left me-1"></i>報告一覧に戻る
+                </a>
+                {% if report.can_cancel %}
+                <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#cancelModal">
+                    <i class="bi bi-x-circle me-1"></i>この報告を取り消す
+                </button>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if report.can_cancel %}
+<!-- 報告の取り消し確認モーダル（POST 後は必ず詳細へ redirect されるので data-nav="replace"） -->
+<div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="cancelModalLabel">報告の取り消し確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                この報告を取り消しますか？取り消した報告は元に戻せません。
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <form method="post" action="{{ url_for('citizen.report_cancel', report_id=report.id) }}" data-nav="replace">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger px-4">取り消す</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ログアウト確認モーダル -->
+<div class="modal fade" id="logoutModal" tabindex="-1" aria-labelledby="logoutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title fw-bold" id="logoutModalLabel">ログアウト確認</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="閉じる"></button>
+            </div>
+            <div class="modal-body py-4 text-center fs-6">
+                ログアウトしますか？
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">キャンセル</button>
+                <form method="post" action="{{ url_for('auth.logout') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-danger px-4">ログアウト</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+{% endblock %}

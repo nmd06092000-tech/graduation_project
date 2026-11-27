@@ -14,7 +14,8 @@ from app.constants import (
     MAIL_RESET_BODY, MAIL_RESET_SUBJECT, MSG_ACCOUNT_DELETED_RESTORE_FIRST, MSG_ACCOUNT_DISABLED,
     MSG_CURRENT_PASSWORD_REQUIRED,
     MSG_CURRENT_PASSWORD_WRONG, MSG_EMAIL_NO_AT, MSG_EMAIL_REQUIRED, MSG_ID_HAS_AT, MSG_ID_OR_PASSWORD_REQUIRED,
-    MSG_ID_REQUIRED, MSG_LOGIN_FAILED, MSG_LOGIN_LOCKED, MSG_PASSWORD_SAME_AS_CURRENT, MSG_RESET_CODE_INVALID,
+    MSG_ID_REQUIRED, MSG_LOGIN_FAILED, MSG_LOGIN_LOCKED, MSG_NEW_PASSWORD_CONFIRM_REQUIRED, MSG_NEW_PASSWORD_REQUIRED,
+    MSG_PASSWORD_SAME_AS_CURRENT, MSG_RESET_CODE_INVALID,
     MSG_RESET_CODE_NOT_ALLOWED, MSG_RESET_CODE_REQUIRED, MSG_RESET_LINK_INVALID, MSG_USER_NOT_FOUND,
 )
 from app.extensions import db
@@ -120,10 +121,27 @@ def set_password_by_operator(login_id, password):
     return user
 
 
+def _validate_reset_passwords(new_password, confirm_password):
+    """再設定画面の新しいパスワード欄・確認欄の入力チェック（エラーのリストを返す）
+
+    未入力の欄はそれぞれ専用の文言にする（確認欄が空のときに「一致しません」とは言わない）。
+    両方入力済みなら規則と一致を、新しいパスワードだけ入力済みなら規則（8文字以上・公開パスワード）だけを調べる。
+    """
+    errors = []
+    if not new_password:
+        errors.append(('warning', MSG_NEW_PASSWORD_REQUIRED))
+    if not confirm_password:
+        errors.append(('warning', MSG_NEW_PASSWORD_CONFIRM_REQUIRED))
+    if new_password:
+        errors.extend(validate_operator_password(new_password, confirm_password if confirm_password else None))
+    return errors
+
+
 def request_password_reset(email, new_password, confirm_password):
     """市民のパスワード再設定を申請する（メールアドレス・新しいパスワードを 1 画面で入力）。パスワード再設定 基本フロー2〜3
 
-    入力エラー（メールアドレスの未入力・@ なし、パスワードの規則・確認欄の不一致）は、まとめて ValidationError（'warning'）。
+    入力エラー（メールアドレスの未入力・@ なし、新しいパスワード欄・確認欄の未入力、パスワードの規則・確認欄の不一致）は、
+    まとめて ValidationError（'warning'）。確認欄が空のときは「一致しません」ではなく MSG_NEW_PASSWORD_CONFIRM_REQUIRED。
     それ以外は結果を返さない：メールアドレスが未登録・市民以外・利用停止中・送りすぎ（RESET_MAIL_*）・送信失敗のどれでも、
     呼び出し側は同じ MSG_RESET_MAIL_SENT を表示する（登録の有無が分からないように）。
     新しいパスワードはハッシュにして確認待ち（pending_password_hash）で保存するだけで、ユーザーのパスワードは
@@ -137,7 +155,7 @@ def request_password_reset(email, new_password, confirm_password):
         errors.append(('warning', MSG_EMAIL_REQUIRED))
     elif '@' not in email:
         errors.append(('warning', MSG_EMAIL_NO_AT.format(email=email)))
-    errors.extend(validate_operator_password(new_password, confirm_password))
+    errors.extend(_validate_reset_passwords(new_password, confirm_password))
     if errors:
         raise ValidationError(errors)
 

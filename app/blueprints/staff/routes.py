@@ -74,6 +74,21 @@ def report_detail(report_id):
     return render_template('staff/report_detail.html', report=report)
 
 
+# 行政職員 報告に添付された写真の画像（報告に属さない写真・ファイルがない場合は 404）
+@staff_bp.route('/reports/<int:report_id>/photos/<int:photo_id>')
+@role_required(User.ROLE_STAFF)
+def report_photo_file(report_id, photo_id):
+    photo = report_service.get_photo_file(report_id, photo_id)
+    if photo is None:
+        abort(404)
+    response = send_file(photo.path, mimetype=photo.content_type, max_age=0)
+    # 個人情報を含むため共有キャッシュに残さず、ブラウザにも保存させない。Content-Type の推測もさせない
+    response.cache_control.private = True
+    response.cache_control.no_store = True
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+
 # 行政職員 対応状況の更新（ステータス・緊急度の変更と担当者メモ・判断変更理由を対応履歴に記録する）
 @staff_bp.route('/reports/<int:report_id>/status', methods=['POST'])
 @role_required(User.ROLE_STAFF)

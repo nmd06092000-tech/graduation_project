@@ -1,8 +1,10 @@
 # ステータス変更の唯一の窓口：遷移チェック・対応履歴の記録・報告の取り消し
 # 職員による緊急度の変更も対応履歴に記録するため、ここで行う
+from sqlalchemy import select
+
 from app.constants import (
     MSG_COMMENT_REQUIRED, MSG_GROUP_INVALID_STATUS, MSG_INVALID_STATUS, MSG_INVALID_URGENCY,
-    MSG_URGENCY_REASON_REQUIRED, ReportStatus, Role, Urgency, next_statuses,
+    MSG_REPORT_CANCEL_NOT_ALLOWED, MSG_URGENCY_REASON_REQUIRED, ReportStatus, Role, Urgency, next_statuses,
 )
 from app.extensions import db
 from app.models import DuplicateGroup, Report, ReportStatusHistory, User
@@ -59,7 +61,8 @@ def update_report_status(report_id, to_status, *, actor_id, comment, urgency='',
     緊急度は空なら変更しない。最新の AI 判定と異なる緊急度に変更する場合は判断変更理由が必須。
     存在しない報告は None。
     """
-    report = db.session.get(Report, report_id)
+    # 同じ報告への同時更新（職員どうし・市民の取り消し）で履歴が食い違わないよう、行をロックして最新の状態を読む
+    report = db.session.get(Report, report_id, with_for_update=True, populate_existing=True)
     if report is None:
         return None
     comment = (comment or '').strip()
@@ -96,11 +99,16 @@ def change_group_status(group_id, to_status, *, actor_id):
         return None
     actor = db.session.get(User, actor_id)
 
-    targets = [r for r in group.reports
+    # グループ内の報告の行をロックして最新のステータスを読む（並びは group.reports と同じ。エラー文の ID 順を保つ）
+    reports = db.session.execute(
+        select(Report).where(Report.duplicate_group_id == group.id)
+        .order_by(Report.created_at, Report.id)
+        .with_for_update().execution_options(populate_existing=True)).scalars().all()
+    targets = [r for r in reports
                if r.status not in (ReportStatus.CANCELLED.value, to_status)]
     invalid = [r for r in targets if to_status not in next_statuses(r.status, actor.role)]
     if to_status not in ReportStatus.values():
-        invalid = group.reports
+        invalid = reports
     if invalid:
         raise ServiceError(MSG_GROUP_INVALID_STATUS.format(
             status=ReportStatus.label_of(to_status),
@@ -110,3 +118,29 @@ def change_group_status(group_id, to_status, *, actor_id):
         change_status(report, to_status, actor=actor)
     db.session.commit()
     return group
+
+
+def cancel_by_citizen(report_id, *, citizen_id):
+    """市民が自分の報告を取り消す（未対応の報告のみ）。報告を取り消す 基本フロー
+
+    他人の報告・存在しない報告・範囲外の ID は None（呼び出し側で 404）。
+    すでに取り消し済みなら何もせずその報告を返す（二重送信・再読み込みでも履歴を増やさない）。
+    未対応以外は ServiceError。取り消しでは市民へのお知らせを作らない（change_status の規則）。
+    """
+    if not 0 < report_id <= citizen_notification_service.BIGINT_MAX:
+        return None
+    # 職員の対応更新と同時に走っても、片方だけが成立するよう行をロックして最新のステータスを読む
+    report = db.session.execute(
+        select(Report).where(Report.id == report_id, Report.citizen_id == citizen_id)
+        .with_for_update().execution_options(populate_existing=True)).scalar_one_or_none()
+    if report is None:
+        return None
+    if report.status == ReportStatus.CANCELLED.value:
+        return report
+    if ReportStatus.CANCELLED not in next_statuses(report.status, Role.CITIZEN):
+        raise ServiceError(MSG_REPORT_CANCEL_NOT_ALLOWED.format(
+            report_id=report.id, status=ReportStatus.label_of(report.status)))
+
+    change_status(report, ReportStatus.CANCELLED, actor=db.session.get(User, citizen_id))
+    db.session.commit()
+    return report

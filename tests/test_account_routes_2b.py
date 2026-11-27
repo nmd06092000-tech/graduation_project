@@ -10,6 +10,7 @@ from werkzeug.security import check_password_hash
 from app.constants import (
     MSG_CSRF_EXPIRED, MSG_CURRENT_PASSWORD_WRONG, MSG_DEPARTMENT_INVALID, MSG_DEPARTMENT_REQUIRED, MSG_EMAIL_NO_AT,
     MSG_EMAIL_REQUIRED, MSG_ID_HAS_AT, MSG_ID_TAKEN, MSG_LOGIN_LOCKED, MSG_NAME_REQUIRED, MSG_PASSWORD_CHANGED,
+    MSG_NEW_PASSWORD_CONFIRM_REQUIRED, MSG_NEW_PASSWORD_REQUIRED,
     MSG_PASSWORD_MISMATCH, MSG_PASSWORD_PUBLIC, MSG_PASSWORD_REQUIRED, MSG_PASSWORD_SAME_AS_CURRENT, MSG_PASSWORD_TOO_SHORT,
     MSG_RESET_CODE_INVALID, MSG_RESET_CODE_REQUIRED, MSG_RESET_LINK_INVALID, MSG_RESET_MAIL_SENT, MSG_ROLE_REQUIRED,
 )
@@ -237,7 +238,8 @@ def test_reset_password_limited_to_3_mails_per_hour_with_same_message(client, ci
     ('', NEW_PW, NEW_PW, MSG_EMAIL_REQUIRED),
     ('   ', NEW_PW, NEW_PW, MSG_EMAIL_REQUIRED),
     ('taro.example.com', NEW_PW, NEW_PW, MSG_EMAIL_NO_AT.format(email='taro.example.com')),
-    ('taro@example.com', '', '', MSG_PASSWORD_REQUIRED),
+    ('taro@example.com', '', '', MSG_NEW_PASSWORD_REQUIRED),
+    ('taro@example.com', NEW_PW, '', MSG_NEW_PASSWORD_CONFIRM_REQUIRED),
     ('taro@example.com', 'short', 'short', MSG_PASSWORD_TOO_SHORT.format(length=5)),
     ('taro@example.com', NEW_PW, NEW_PW + 'x', MSG_PASSWORD_MISMATCH),
     ('taro@example.com', 'password123', 'password123', MSG_PASSWORD_PUBLIC),

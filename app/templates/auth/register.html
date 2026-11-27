@@ -29,7 +29,7 @@
                         <div class="mb-3">
                             <label for="postal_code" class="form-label small fw-bold">郵便番号</label>
                             <input type="text" id="postal_code" name="postal_code" class="form-control" placeholder="例）330-9301"
-                                   inputmode="numeric" pattern="[0-9]{3}-?[0-9]{4}" maxlength="8" autocomplete="postal-code"
+                                   inputmode="numeric" pattern="[0-9]{3}-[0-9]{4}" maxlength="8" autocomplete="postal-code"
                                    value="{{ postal_code or '' }}" required>
                         </div>
                         <div class="mb-3">
@@ -99,7 +99,9 @@
       if (!name) nameInput.setCustomValidity('お名前を入力してください。');
       if (!email) emailInput.setCustomValidity('メールアドレスを入力してください。');
       if (!postalCode) postalCodeInput.setCustomValidity('郵便番号を入力してください。');
-      else if (!/^[0-9]{3}-?[0-9]{4}$/.test(postalCode)) postalCodeInput.setCustomValidity('郵便番号を正しく入力してください。（例：330-9301）');
+      // ハイフンなし（7桁）は形式エラーではなく、ハイフンの入力を促す
+      else if (/^[0-9]{7}$/.test(postalCode)) postalCodeInput.setCustomValidity('-を入力してください。');
+      else if (!/^[0-9]{3}-[0-9]{4}$/.test(postalCode)) postalCodeInput.setCustomValidity('郵便番号を正しく入力してください。（例：330-9301）');
       if (!address) addressInput.setCustomValidity('住所を入力してください。');
       if (!password) passwordInput.setCustomValidity('パスワードを入力してください。');
       else if (password.length < 8) passwordInput.setCustomValidity('このテキストは8文字以上で入力してください（現在は' + password.length + '文字です）。');

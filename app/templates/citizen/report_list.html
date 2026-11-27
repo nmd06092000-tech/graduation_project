@@ -33,11 +33,11 @@
                     <!-- 報告一覧 -->
                     <div class="list-group list-group-flush">
                         {% for report in reports %}
-                        <div class="list-group-item p-3 citizen-report-list-item">
+                        <div class="list-group-item p-3 position-relative citizen-report-list-item">
                             <div class="d-flex justify-content-between align-items-center gap-3">
-                                <!-- 報告内容 -->
+                                <!-- 報告内容（タイトルのリンクを行全体に広げて詳細へ） -->
                                 <div>
-                                    <h6 class="fw-bold mb-1">{{ report.title }}</h6>
+                                    <h6 class="fw-bold mb-1"><a href="{{ url_for('citizen.report_detail', report_id=report.id) }}" class="text-reset text-decoration-none stretched-link" aria-label="{{ report.title }}の詳細を見る">{{ report.title }}</a></h6>
                                     <small class="text-muted"><i class="bi bi-geo-alt"></i> {{ report.location }} | {{ report.date }}</small>
                                     <!-- 詳細内容 -->
                                     <p class="mb-0 text-secondary small">{{ report.description }}</p>

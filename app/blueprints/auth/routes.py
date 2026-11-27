@@ -4,7 +4,9 @@ from flask import Blueprint, make_response, render_template, request, redirect, 
 from flask_login import login_user, logout_user, current_user
 from sqlalchemy.exc import IntegrityError
 
-from app.constants import MSG_EMAIL_NO_AT, MSG_PASSWORD_MISMATCH, MSG_RESET_LINK_INVALID, MSG_RESET_MAIL_SENT
+from app.constants import (
+    MSG_EMAIL_NO_AT, MSG_PASSWORD_MISMATCH, MSG_POSTAL_CODE_HYPHEN_REQUIRED, MSG_RESET_LINK_INVALID, MSG_RESET_MAIL_SENT,
+)
 from app.extensions import db
 from app.models import User
 from app.services import ServiceError, ValidationError, auth_service
@@ -99,7 +101,10 @@ def register():
             category = 'warning'
         elif len(name) > 100:
             error = 'お名前は100文字以内で入力してください。'
-        elif not re.fullmatch(r'[0-9]{3}-?[0-9]{4}', postal_code):
+        elif re.fullmatch(r'[0-9]{7}', postal_code):
+            # 7 桁の数字だけ（ハイフンなし）は専用の文言にする
+            error = MSG_POSTAL_CODE_HYPHEN_REQUIRED
+        elif not re.fullmatch(r'[0-9]{3}-[0-9]{4}', postal_code):
             error = '郵便番号を正しく入力してください。（例：330-9301）'
         elif len(address) > 255:
             error = '住所は255文字以内で入力してください。'
@@ -115,9 +120,7 @@ def register():
             return render_template('auth/register.html', name=name, email=email,
                                    postal_code=postal_code, address=address)
 
-        # 郵便番号はハイフンありの形（123-4567）にそろえて保存する
-        postal_code = postal_code.replace('-', '')
-        postal_code = f'{postal_code[:3]}-{postal_code[3:]}'
+        # 郵便番号はここまでの検査でハイフンありの形（123-4567）に確定している
         user = User(login_id=email, name=name, role=User.ROLE_CITIZEN,
                     postal_code=postal_code, address=address)
         user.set_password(password)

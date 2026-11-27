@@ -12,6 +12,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from app.constants import (
     MSG_ACCOUNT_DISABLED, MSG_CURRENT_PASSWORD_REQUIRED, MSG_CURRENT_PASSWORD_WRONG, MSG_EMAIL_NO_AT,
     MSG_EMAIL_REQUIRED, MSG_ID_HAS_AT, MSG_ID_REQUIRED, MSG_LOGIN_LOCKED, MSG_PASSWORD_MISMATCH,
+    MSG_NEW_PASSWORD_CONFIRM_REQUIRED, MSG_NEW_PASSWORD_REQUIRED,
     MSG_PASSWORD_PUBLIC, MSG_PASSWORD_REQUIRED, MSG_PASSWORD_SAME_AS_CURRENT, MSG_PASSWORD_TOO_SHORT, MSG_RESET_CODE_INVALID,
     MSG_RESET_CODE_NOT_ALLOWED, MSG_RESET_CODE_REQUIRED, MSG_RESET_LINK_INVALID,
 )
@@ -125,8 +126,10 @@ def test_request_reset_normalizes_email_case_and_spaces(citizen, outbox):
     ('   ', NEW_PW, NEW_PW, [('warning', MSG_EMAIL_REQUIRED)]),
     (None, NEW_PW, NEW_PW, [('warning', MSG_EMAIL_REQUIRED)]),
     ('taro.example.com', NEW_PW, NEW_PW, [('warning', MSG_EMAIL_NO_AT.format(email='taro.example.com'))]),
-    ('taro@example.com', '', '', [('warning', MSG_PASSWORD_REQUIRED)]),
-    ('taro@example.com', None, None, [('warning', MSG_PASSWORD_REQUIRED)]),
+    ('taro@example.com', '', '', [('warning', MSG_NEW_PASSWORD_REQUIRED), ('warning', MSG_NEW_PASSWORD_CONFIRM_REQUIRED)]),
+    ('taro@example.com', None, None, [('warning', MSG_NEW_PASSWORD_REQUIRED), ('warning', MSG_NEW_PASSWORD_CONFIRM_REQUIRED)]),
+    # 両方空なら 2 件とも出す。確認欄だけ空なら確認欄の文言だけ
+    ('taro@example.com', NEW_PW, '', [('warning', MSG_NEW_PASSWORD_CONFIRM_REQUIRED)]),
     ('taro@example.com', 'short', 'short', [('warning', MSG_PASSWORD_TOO_SHORT.format(length=5))]),
     ('taro@example.com', NEW_PW, NEW_PW + 'x', [('warning', MSG_PASSWORD_MISMATCH)]),
     ('taro@example.com', 'password123', 'password123', [('warning', MSG_PASSWORD_PUBLIC)]),

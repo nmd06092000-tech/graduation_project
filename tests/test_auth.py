@@ -5,7 +5,7 @@ import pytest
 
 from app.constants import (
     MSG_EMAIL_NO_AT, MSG_ID_HAS_AT, MSG_ID_OR_PASSWORD_REQUIRED, MSG_ID_REQUIRED, MSG_LOGIN_FAILED,
-    MSG_PASSWORD_REQUIRED, MSG_PASSWORD_TOO_SHORT,
+    MSG_PASSWORD_REQUIRED, MSG_PASSWORD_TOO_SHORT, MSG_POSTAL_CODE_HYPHEN_REQUIRED,
 )
 from app.extensions import db
 from app.models import User
@@ -317,3 +317,26 @@ def test_register_email_with_at_creates_lowercase_user(client, app):
     # Assert
     assert response.status_code == 302
     assert User.query.filter_by(login_id='hanako@example.com', role=User.ROLE_CITIZEN).count() == 1
+
+
+@pytest.mark.parametrize('postal_code, message', [
+    ('3309301', MSG_POSTAL_CODE_HYPHEN_REQUIRED),
+    ('33-12345', '郵便番号を正しく入力してください。（例：330-9301）'),
+])
+def test_register_postal_code_error_flashes_danger_and_creates_no_user(client, app, postal_code, message):
+    # Act: ハイフンなし 7 桁／形式違い
+    response = client.post('/register', data=_register_form(postal_code=postal_code))
+
+    # Assert: 同じ画面に danger。ユーザーは作られない
+    assert response.status_code == 200
+    assert ('danger', message) in _alerts(response.get_data(as_text=True))
+    assert User.query.count() == 0
+
+
+def test_register_postal_code_with_hyphen_creates_user(client, app):
+    # Act
+    response = client.post('/register', data=_register_form(postal_code='330-9301'))
+
+    # Assert: 登録でき、郵便番号はそのまま保存される
+    assert response.status_code == 302
+    assert User.query.filter_by(login_id='hanako@example.com').one().postal_code == '330-9301'

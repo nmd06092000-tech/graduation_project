@@ -195,9 +195,120 @@
 }
 
 /* =================================
+   県民：報告詳細画面（citizen/report_detail.html）
+================================= */
+.citizen-report-detail-page .report-detail-title {
+    overflow-wrap: anywhere;
+}
+
+/* 項目名 | 値 の 2 列（スマホは responsive.css で 1 列にする） */
+.citizen-report-detail-page .report-detail-row {
+    display: grid;
+    grid-template-columns: 8rem minmax(0, 1fr);
+    gap: 0 1rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid var(--bs-border-color);
+}
+
+.citizen-report-detail-page .report-detail-row:last-child {
+    border-bottom: 0;
+}
+
+.citizen-report-detail-page .report-detail-row dt {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+}
+
+.citizen-report-detail-page .report-detail-row dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+/* 内容は改行を保って表示する（HTML として解釈せず、テキストのまま） */
+.citizen-report-detail-page .report-detail-text {
+    white-space: pre-wrap;
+}
+
+/* 対応状況：左の縦線でつないだ時系列 */
+.citizen-report-detail-page .report-timeline {
+    border-left: 2px solid var(--bs-border-color);
+    margin-left: 0.25rem;
+}
+
+.citizen-report-detail-page .report-timeline-item {
+    position: relative;
+    padding: 0 0 1.25rem 1.25rem;
+}
+
+.citizen-report-detail-page .report-timeline-item:last-child {
+    padding-bottom: 0;
+}
+
+/* 縦線の上の丸印 */
+.citizen-report-detail-page .report-timeline-item::before {
+    content: "";
+    position: absolute;
+    top: 0.45rem;
+    left: -0.4rem;
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    background-color: var(--bs-primary);
+}
+
+.citizen-report-detail-page .report-timeline-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.75rem;
+    margin-bottom: 0.35rem;
+}
+
+.citizen-report-detail-page .report-timeline-text,
+.citizen-report-detail-page .report-timeline-message {
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+}
+
+/* 職員からのメッセージは本文と見分けがつくよう、左に線を付ける */
+.citizen-report-detail-page .report-timeline-message {
+    margin-top: 0.35rem;
+    padding: 0.4rem 0.75rem;
+    border-left: 3px solid var(--bs-primary);
+    background-color: var(--bs-light);
+}
+
+/* =================================
    職員：AIモデル再実行ボタン（staff/ai_analysis.html）
 ================================= */
 /* 送信中（navigation.js がボタンを disabled にした間）だけ「実行中…」を表示する */
 .btn-reanalyze .reanalyze-busy { display: none; }
 .btn-reanalyze:disabled .reanalyze-busy { display: inline; }
 .btn-reanalyze:disabled .reanalyze-idle { display: none; }
+
+/* =================================
+   報告の添付写真（県民：対応状況 / 職員：報告詳細）
+================================= */
+/* サムネイルを幅に応じて並べる（375px では 2 列になる） */
+.report-photo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+    gap: 0.75rem;
+}
+
+.report-photo-link {
+    display: block;
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    overflow: hidden;
+    background-color: var(--bs-light);
+}
+
+/* 写真の縦横比を揃え、はみ出しはトリミングする */
+.report-photo-img {
+    display: block;
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+}

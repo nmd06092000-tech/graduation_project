@@ -1050,3 +1050,37 @@
         font-size: 0.75rem;
     }
 }
+
+
+/* =================================
+   報告詳細画面：スマホ対応
+================================= */
+@media (max-width: 576px) {
+
+    .citizen-report-detail-page {
+        padding: 12px !important;
+        box-sizing: border-box;
+        min-width: 0;
+    }
+
+    .citizen-report-detail-page .card-body {
+        padding: 16px !important;
+    }
+
+    /* タイトルとバッジは縦に並べる */
+    .citizen-report-detail-page .report-detail-head {
+        flex-direction: column;
+    }
+
+    /* 項目名 | 値 を 1 列に */
+    .citizen-report-detail-page .report-detail-row {
+        grid-template-columns: minmax(0, 1fr);
+        gap: 2px 0;
+    }
+
+    /* ボタンは横幅いっぱい */
+    .citizen-report-detail-page .report-detail-actions .btn {
+        width: 100%;
+        min-height: 48px;
+    }
+}

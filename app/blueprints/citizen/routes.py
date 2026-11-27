@@ -7,12 +7,12 @@ from werkzeug.exceptions import RequestEntityTooLarge
 
 from app.constants import (
     MSG_ICON_DELETED, MSG_ICON_NOT_SAVED, MSG_ICON_UPDATED, MSG_PASSWORD_CHANGED, MSG_PROFILE_UPDATED,
-    MSG_UPLOAD_TOO_LARGE,
+    MSG_REPORT_CANCELLED, MSG_UPLOAD_TOO_LARGE,
 )
 from app.models import User
 from app.services import (
-    ServiceError, ValidationError, auth_service, citizen_notification_service, report_service, storage_service,
-    user_service,
+    ServiceError, ValidationError, auth_service, citizen_notification_service, report_service, status_service,
+    storage_service, user_service,
 )
 from app.services.report_service import InappropriatePhotoError
 from app.utils.decorators import role_required
@@ -158,6 +158,46 @@ def report_complete(report_id):
 def report_list():
     reports = report_service.list_by_citizen(current_user.id)
     return render_template('citizen/report_list.html', reports=reports)
+
+
+# 市民対応状況画面（本人の報告の内容・対応状況の履歴。未対応なら取り消しボタンを出す）
+@citizen_bp.route('/reports/<int:report_id>')
+@role_required(User.ROLE_CITIZEN)
+def report_detail(report_id):
+    report = report_service.get_for_citizen(report_id, current_user.id)
+    if report is None:
+        abort(404)
+    return render_template('citizen/report_detail.html', report=report)
+
+
+# 本人の報告に添付された写真の画像（他人の報告・報告に属さない写真・ファイルがない場合は 404）
+@citizen_bp.route('/reports/<int:report_id>/photos/<int:photo_id>')
+@role_required(User.ROLE_CITIZEN)
+def report_photo_file(report_id, photo_id):
+    photo = report_service.get_photo_file(report_id, photo_id, citizen_id=current_user.id)
+    if photo is None:
+        abort(404)
+    response = send_file(photo.path, mimetype=photo.content_type, max_age=0)
+    # 個人情報を含むため共有キャッシュに残さず、ブラウザにも保存させない。Content-Type の推測もさせない
+    response.cache_control.private = True
+    response.cache_control.no_store = True
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
+
+
+# 報告の取り消し（成功・エラーとも対応状況画面へ redirect する）
+@citizen_bp.route('/reports/<int:report_id>/cancel', methods=['POST'])
+@role_required(User.ROLE_CITIZEN)
+def report_cancel(report_id):
+    try:
+        report = status_service.cancel_by_citizen(report_id, citizen_id=current_user.id)
+    except ServiceError as e:
+        flash(str(e), 'danger')
+        return redirect(url_for('citizen.report_detail', report_id=report_id))
+    if report is None:
+        abort(404)
+    flash(MSG_REPORT_CANCELLED.format(report_id=report.id, title=report.title), 'success')
+    return redirect(url_for('citizen.report_detail', report_id=report.id))
 
 
 # 市民お知らせ画面（本人のお知らせを新しい順に表示する。既読にするのは下の2つの POST だけ）

@@ -129,14 +129,23 @@
                                 </div>
                             </div>
 
-                            {% if report.image_url %}
                             <div>
                                 <small class="text-muted d-block mb-1">添付写真</small>
-                                <div class="border rounded p-2 text-center bg-light">
-                                    <img src="{{ report.image_url }}" class="img-fluid rounded" alt="現場写真" style="max-height: 300px;">
+                                {% if report.photos %}
+                                <div class="report-photo-grid">
+                                    {% for photo in report.photos %}
+                                    {% set photo_url = url_for('staff.report_photo_file', report_id=report.id, photo_id=photo.id) %}
+                                    {# 拡大は新しいタブの原寸表示（市民画面と同じ） #}
+                                    <a href="{{ photo_url }}" class="report-photo-link" target="_blank" rel="noopener noreferrer">
+                                        <img src="{{ photo_url }}" alt="添付写真{{ photo.number }}" loading="lazy" class="report-photo-img">
+                                        <span class="visually-hidden">（新しいタブで拡大表示）</span>
+                                    </a>
+                                    {% endfor %}
                                 </div>
+                                {% else %}
+                                <p class="text-muted small mb-0">添付写真はありません</p>
+                                {% endif %}
                             </div>
-                            {% endif %}
                         </div>
                     </div>
 

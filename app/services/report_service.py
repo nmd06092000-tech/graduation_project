@@ -1,9 +1,11 @@
 # 報告の作成（写真保存 → AI判定 → 重複チェック）、市民別一覧、職員向け検索・絞り込み
 import math
 import re
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal
 from itertools import groupby
+from pathlib import Path
 from time import monotonic
 
 from flask import current_app
@@ -54,6 +56,13 @@ RECENT_REPORT_LIMIT = 3
 
 class InappropriatePhotoError(ServiceError):
     """写真撮影 代替フロー4c-1：報告に使えない写真（報告画面に戻す）"""
+
+
+@dataclass(frozen=True)
+class PhotoFile:
+    """配信する報告写真（保存先の絶対パスと Content-Type）"""
+    path: Path
+    content_type: str
 
 
 def capture_photo(file_storage, *, latitude=None, longitude=None, previous=None):
@@ -466,6 +475,73 @@ def get_complete_info(report_id, user_id):
     return {'id': report.id, 'title': report.title, 'urgency': Urgency.label_of(report.urgency)}
 
 
+def get_for_citizen(report_id, user_id):
+    """市民向けの報告の対応状況（報告内容・現在のステータス・対応状況の履歴・取り消せるか）。対応状況を表示する
+
+    本人の報告でなければ（存在しない・他人の・範囲外の ID を含む）None。
+    履歴には職員の内部メモ（comment）・緊急度の理由・職員名を含めず、公開メッセージ（public_message）だけを出す。
+    """
+    if not 0 < report_id <= citizen_notification_service.BIGINT_MAX:
+        return None
+    report = db.session.execute(
+        select(Report).where(Report.id == report_id, Report.citizen_id == user_id)
+        .options(selectinload(Report.category), selectinload(Report.department), selectinload(Report.histories),
+                 selectinload(Report.photos))
+    ).scalar_one_or_none()
+    if report is None:
+        return None
+    return {
+        'id': report.id,
+        'title': report.title,
+        'description': report.description,
+        'location': report.address,
+        'date': format_datetime(report.created_at),
+        'status_code': report.status,
+        'status': ReportStatus.label_of(report.status),
+        'photos': _photo_rows(report),
+        'category': report.category.name if report.category else '-',
+        # 緊急度が未設定なのは AI の判定が失敗したとき（新規報告完了画面と同じく職員が後で判定する）
+        'urgency': Urgency.label_of(report.urgency, AiAnalysisStatus.FAILED.label),
+        'department': report.department.name if report.department else None,
+        'can_cancel': ReportStatus.CANCELLED in next_statuses(report.status, Role.CITIZEN),
+        'histories': [_citizen_history_row(h) for h in report.histories if _is_citizen_visible(h)],
+    }
+
+
+def get_photo_file(report_id, photo_id, *, citizen_id=None):
+    """報告に添付された写真の配信情報を返す（写真は instance/uploads/ から権限チェック付きで配信する）
+
+    citizen_id を指定すると、その市民の報告の写真だけを対象にする（職員は指定しない）。
+    報告に属さない写真・他人の報告・範囲外の ID・ファイルがない場合は None。DB は更新しない。
+    """
+    max_id = citizen_notification_service.BIGINT_MAX
+    if not (0 < report_id <= max_id and 0 < photo_id <= max_id):
+        return None
+    stmt = select(ReportPhoto).where(ReportPhoto.id == photo_id, ReportPhoto.report_id == report_id)
+    if citizen_id is not None:
+        stmt = stmt.join(Report, Report.id == ReportPhoto.report_id).where(Report.citizen_id == citizen_id)
+    photo = db.session.execute(stmt).scalar_one_or_none()
+    if photo is None:
+        return None
+    try:
+        found = storage_service.exists(photo.file_path)
+        path = storage_service.path_of(photo.file_path) if found else None
+    except ValueError:
+        # DB の file_path がアップロードフォルダの外を指している（改ざん・不整合）。パスはログに出さない
+        current_app.logger.warning('報告写真のパスが不正です photo=%s report=%s', photo.id, report_id)
+        return None
+    if path is None:
+        # DB に記録があるのにファイルがない（手動削除・バックアップ漏れなど）
+        current_app.logger.warning('報告写真のファイルが見つかりません photo=%s report=%s', photo.id, report_id)
+        return None
+    return PhotoFile(path=path, content_type=storage_service.content_type_of(photo.file_path))
+
+
+# 報告詳細に渡す添付写真（1 から始まる番号つき。報告に紐づく順）
+def _photo_rows(report):
+    return [{'id': photo.id, 'number': number} for number, photo in enumerate(report.photos, start=1)]
+
+
 # 撮影写真を AI で確認する（写真撮影 4b-1・4c-1）。AI を使わない設定・AI の失敗時は確認せずに進める
 def _check_photo(image):
     try:
@@ -618,11 +694,14 @@ def list_for_staff(search='', report_id=None):
 def get_for_staff(report_id):
     """職員向けの報告詳細（報告内容・AI判定・対応履歴・変更できるステータス）。詳細・対応更新画面 基本フロー1
 
-    存在しない場合は None。
+    存在しない場合（範囲外の ID を含む）は None。
     """
+    if not 0 < report_id <= citizen_notification_service.BIGINT_MAX:
+        return None
     report = db.session.get(Report, report_id, options=[
         selectinload(Report.category),
         selectinload(Report.department),
+        selectinload(Report.photos),
         selectinload(Report.ai_analyses).selectinload(AiAnalysis.department),
         selectinload(Report.histories).selectinload(ReportStatusHistory.changed_by),
     ])
@@ -663,8 +742,8 @@ def get_for_staff(report_id):
         'ai_error_type': ai_error_type,
         'ai_error_message': ai_error_message,
         'ai_error_date': format_datetime(failed_ai.created_at) if failed_ai else None,
-        # TODO: 写真は instance/uploads/ から権限チェック付きのルートで配信する（storage_service と配信ルートが未実装）
-        'image_url': '',
+        # 添付写真（画面は report_photo_file の URL を組み立てて表示する）
+        'photos': _photo_rows(report),
         'history': [_history_row(h) for h in report.histories],
     }
 
@@ -796,6 +875,33 @@ def _history_row(history):
         'action': ' / '.join(actions),
         'comment': history.comment or '',
         'urgency_reason': history.urgency_reason or '',
+    }
+
+
+# 市民に見せる履歴か（新規受付・ステータスの変更・公開メッセージつき）。職員のコメントだけ・緊急度だけの変更は見せない
+def _is_citizen_visible(history):
+    return (history.from_status is None or history.from_status != history.to_status
+            or bool(history.public_message))
+
+
+# 市民向けの対応状況の1行。内部メモ・緊急度の理由・職員名は含めない
+def _citizen_history_row(history):
+    if history.from_status is None:
+        text = '報告を受け付けました'
+    elif history.to_status == ReportStatus.CANCELLED.value:
+        text = '報告を取り消しました'
+    elif history.from_status == history.to_status:
+        # ステータスは変わらず、公開メッセージだけを伝える行
+        text = '職員からのメッセージ'
+    else:
+        text = (f'対応状況が「{ReportStatus.label_of(history.from_status)}」から'
+                f'「{ReportStatus.label_of(history.to_status)}」に変更されました')
+    return {
+        'date': format_datetime(history.created_at),
+        'status_code': history.to_status,
+        'status': ReportStatus.label_of(history.to_status),
+        'text': text,
+        'message': history.public_message or '',
     }
 
 

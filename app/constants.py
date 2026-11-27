@@ -276,6 +276,11 @@ MSG_ICON_REQUIRED = '画像ファイルを選択してください。'
 MSG_ICON_UPDATED = 'プロフィールアイコンを更新しました。'
 MSG_ICON_DELETED = 'プロフィールアイコンを削除しました。'
 
+# 市民の対応状況・報告の取り消し（設計書にない新規の文言。計画 A20261126-111436 で承認済み）
+MSG_REPORT_CANCELLED = '報告 #{report_id}「{title}」を取り消しました。'
+MSG_REPORT_CANCEL_NOT_ALLOWED = ('報告 #{report_id} は「{status}」のため取り消せません。'
+                                 '取り消しできるのは「未対応」の報告だけです。')
+
 # 市民のお知らせ（設計書にない新規の文言。計画 A20261118-123834 で承認済み）
 # 一覧に出す1行の文言（message）と、開いたときに表示する詳細（detail）。職員名・内部メモ・緊急度の理由は含めない
 # 報告を受け付けたとき
@@ -307,6 +312,11 @@ MSG_ACCOUNT_DISABLED = 'このアカウントは利用停止されています'
 MSG_LOGIN_LOCKED = 'ログインに連続して失敗したため、アカウントを一時的にロックしました。{minutes}分後にもう一度お試しください。'
 # 設計書にない入力チェック・業務エラー（パスワード確認・flask コマンドによるアカウント操作）
 MSG_PASSWORD_MISMATCH = 'パスワードが一致しません。'
+# 以下 3 つは Excel にない文言（2026-11-27 に利用者が決めた文言）：市民のパスワード再設定の新しいパスワード欄・確認欄の未入力、
+# アカウント作成の郵便番号（7 桁の数字でハイフンなし）
+MSG_NEW_PASSWORD_REQUIRED = '新しいパスワードを入力してください。'
+MSG_NEW_PASSWORD_CONFIRM_REQUIRED = '新しいパスワード（確認用）を入力してください。'
+MSG_POSTAL_CODE_HYPHEN_REQUIRED = '-を入力してください。'
 MSG_ID_TAKEN = 'この{label}は既に登録されています。'
 MSG_USER_NOT_FOUND = '「{login_id}」のアカウントが見つかりません。'
 MSG_NO_ADMIN_LEFT = '有効な管理者アカウントが他に残らないため、実行できません。先に create-admin で管理者を作成してください。'

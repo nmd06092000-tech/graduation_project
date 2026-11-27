@@ -81,13 +81,16 @@ def test_get_for_staff_not_found(app):
     assert report_service.get_for_staff(999) is None
 
 
-# 最新の判定が失敗なら信頼度は未判定（None）
+# 最新の判定が失敗でも、信頼度は直近の成功判定の値を表示し、エラー枠（種別・メッセージ）も出す
 def test_get_for_staff_ai_failed(make_report, road):
     report = make_report()
     _analysis(report, road, '0.92')
     _analysis(report, road, None, status=AiAnalysisStatus.FAILED.value)
 
-    assert report_service.get_for_staff(report.id)['ai_confidence'] is None
+    detail = report_service.get_for_staff(report.id)
+
+    assert detail['ai_confidence'] == '92%'
+    assert detail['ai_error_type'] and detail['ai_error_message']
 
 
 # AI分析画面：判定ログの一覧とタイトル検索
